@@ -333,8 +333,8 @@ export default class GameSceneHard extends Phaser.Scene {
                        "2. Grammar: How grammatically correct the text is, with specific examples if errors exist.\n" +
                        "3. Coherence: How logically structured and understandable the text is.\n\n" +
                        "First, provide a **one-word summary** of the overall quality of the response (e.g., Excellent, Good, Needs Improvement, Poor).\n" +
-                       "Then, provide numeric scores (1-10) for each category. Each score must be **clearly labeled**, followed by a **very short** (5-7 words max) explanation on the same line.\n" +
-                       "If the grammar score is below 9, include **examples of specific grammar mistakes** from the text. Show the incorrect phrase, followed by the correct version."
+                       "Then, provide numeric scores (1-5) for each category. Each score must be **clearly labeled**, followed by a **very short** (5-7 words max) explanation on the same line.\n" +
+                       "If the grammar score is below 5, include **examples of specific grammar mistakes** from the text. Show the incorrect phrase, followed by the correct version."
         },
         {
             "role": "user",
@@ -349,11 +349,11 @@ export default class GameSceneHard extends Phaser.Scene {
                         Provide output in this strict format:  
                         
                         Overall Rating: [One-word summary]  
-                        Relevance Score: X/10 - [Short reason]  
-                        Grammar Score: X/10 - [Short reason]  
-                        Coherence Score: X/10 - [Short reason]  
+                        Relevance Score: X/5 - [Short reason]  
+                        Grammar Score: X/5 - [Short reason]  
+                        Coherence Score: X/5 - [Short reason]  
                         
-                        If Grammar Score < 9, list grammar mistakes in this format:  
+                        If Grammar Score < 5, list grammar mistakes in this format:  
                         - Incorrect: "[Exact incorrect phrase]" → Correct: "[Corrected version]"  
                         
                         Only return the labeled scores and grammar corrections if applicable. Do not include explanations beyond the given format. Be sure to give at least one specific example if there are grammar errors. You can even just quote it.`
@@ -580,7 +580,7 @@ export default class GameSceneHard extends Phaser.Scene {
         this.input.on('drag', (pointer, gameObject, dragX) => {
             if (gameObject === this.levelSliderHandle) {
                 gameObject.x = Phaser.Math.Clamp(dragX, levelSliderMinX, levelSliderMaxX);
-                const newLevel = Math.round(Phaser.Math.Linear(1, 5, (gameObject.x - levelSliderMinX) / (levelSliderMaxX - levelSliderMinX)));
+                const newLevel = Math.round(Phaser.Math.Linear(1, 3, (gameObject.x - levelSliderMinX) / (levelSliderMaxX - levelSliderMinX)));
     
                 if (newLevel !== this.levelValue) {
                     this.levelValue = newLevel;
@@ -761,11 +761,26 @@ export default class GameSceneHard extends Phaser.Scene {
 
     updatePromptBasedOnLevel() {
         const promptLevels = {
-            1: ["Describe a simple object in the room.", "What color is the sky?"],
-            2: ["Describe a unique object in a room.", "What does the main character hear?"],
-            3: ["Write about something unexpected happening.", "Describe a significant change in the environment."],
-            4: ["What is the weather like in this scene?", "Describe a turning point in the story."],
-            5: ["Describe an abstract concept metaphorically.", "Write about a philosophical debate between two characters."]
+            1: [
+                "What do you want to have for dinner today?", 
+                "Why do polar bears not eat penguins?",
+                "What is the difference between a chair and a stool?",
+                "Write a two-line poem that rhymes.",
+                "Write a haiku.",
+                ],
+            2: [
+                "What did young you want to do when you grew up?",
+                "Who was Thomas Edison?",
+                "Describe what you see around you right now.",
+                "Who is your favorite musical artist and why? ",
+                "Write a coherent sentence where three consecutive words start with the same letter."
+                ],
+            3: [
+                "Who was your first love and what happened between you?",
+                "What is an interest rate?",
+                "Describe your living room.",
+                "Write a very short story about a woman and her pet lion."
+            ],
         };
     
         // ✅ Select a Prompt Based on the Level

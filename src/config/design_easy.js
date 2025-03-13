@@ -1,7 +1,7 @@
 export const COLORS_TEXT = {
-    BACKGROUND: '#1e2b3a', // Navy blue background
-    BUTTONFILL: '#00b4d8', // Bright teal
-    BUTTONOVERLAY: '#48cae4', // Light teal highlight
+    BACKGROUND: '#081026', // Navy blue background
+    BUTTONFILL: "#D12390", //'#262B8C', // Bright teal
+    BUTTONOVERLAY: '#e056fd', // Light teal highlight
     PURPLE: '#3a506b', // Slate blue-gray
     LIGHTPINK: '#ffd166', // Warm yellow/gold
     TURQUOISE: '#06d6a0', // Mint green
@@ -18,15 +18,15 @@ export const COLORS_TEXT = {
 };
 
 export const COLORS_HEX = {
-    BACKGROUND: 0x1e2b3a, // Navy blue background
-    BUTTONFILL: 0x00b4d8, // Bright teal
-    BUTTONOVERLAY: 0x48cae4, // Light teal highlight
+    BACKGROUND: 0x081026, // Navy blue background
+    BUTTONFILL: 0xD12390, // Bright teal
+    BUTTONOVERLAY: 0xe056fd, // Light teal highlight
     PURPLE: 0x3a506b, // Slate blue-gray
     LIGHTPINK: 0xffd166, // Warm yellow/gold
     TURQUOISE: 0x06d6a0, // Mint green
     PERIWINKLE: 0x118ab2, // Ocean blue
     PINK: 0xef476f, // Coral pink
-    MIDPURPLE: 0x3d5a80, // Steel blue
+    MIDPURPLE: 0xEF3DF2, // Steel blue
     YELLOW: 0xffd60a, // Bright yellow
     ERROR: 0xe63946, // Cherry red
     WHITE: 0xFFFFFF,
