@@ -972,16 +972,19 @@ export default class GameSceneHard extends Phaser.Scene {
                 this.userInput += event.key;
             } else if (event.key === "Backspace") {
                 this.userInput = this.userInput.slice(0, -1);
-            } else if (event.key === "Enter") {
-                if (!this.userInput.trim()) {
-                    console.warn("Skipping evaluation: No input provided.");
-                    return;
-                } else {
-                    // ✅ Check for AI-suggested word match
+            } 
+            else if (event.key === "Enter") {
 
-                    this.checkAndExplodeWord();
-                    this.onDoneButtonClick();
-                }                
+                this.userInput += "\n";
+            //     if (!this.userInput.trim()) {
+            //         console.warn("Skipping evaluation: No input provided.");
+            //         return;
+            //     } else {
+            //         // ✅ Check for AI-suggested word match
+
+            //         this.checkAndExplodeWord();
+            //         this.onDoneButtonClick();
+            //     }                
 
             }
         
