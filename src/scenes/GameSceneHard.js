@@ -10,6 +10,7 @@ export default class GameSceneHard extends Phaser.Scene {
         this.levelValue = 1;
         this.baseFontSize = 22;
         this.failCounter = 0;
+        this.autocompleteText = null; 
         
     }
 
@@ -265,10 +266,6 @@ export default class GameSceneHard extends Phaser.Scene {
         //this.updatePromptBasedOnLevel();
     }
 
-    clearInputTextBox() {
-        this.userInput = '';
-        this.inputText.setText('_');
-    }
 
     onResetRuttonClick() {
         console.log("Reset button clicked! Clearing text...");
@@ -841,32 +838,30 @@ export default class GameSceneHard extends Phaser.Scene {
     }
     
     
-    
-
+    // Updated checkAndExplodeWord method with improved positioning
     checkAndExplodeWord() {
         console.log("check and explode word");
-        console.log(this.aiSuggestedWords);
         if (!this.aiSuggestedWords || this.aiSuggestedWords.length === 0) {
             return;
         }
-        console.log("check and explode word");
+        
         let words = this.userInput.trim().split(" ");
         let lastWord = words[words.length - 1];
-    
+
         if (this.aiSuggestedWords.includes(lastWord)) {
             console.log(`Exploding word: ${lastWord}`);
-    
-            // ✅ Find explosion position (last word in input box)
+            
+            // Calculate a better position for the explosion
             let wordX = this.inputText.x + this.inputText.displayWidth - 20;
             let wordY = this.inputText.y + this.inputText.displayHeight - 20;
-    
-            // ✅ Trigger explosion effect
+            
+            // Trigger explosion effect
             this.createExplosionEffect(lastWord, wordX, wordY);
-    
-            // ✅ Shake screen
+            
+            // Shake screen
             this.shakeScreen();
-    
-            // ✅ Remove last word from input
+            
+            // Remove last word from input
             this.userInput = words.slice(0, -1).join(" ") + " ";
             this.updateCursor();
 
@@ -875,172 +870,211 @@ export default class GameSceneHard extends Phaser.Scene {
             this.updateFailsCounter();
         }
     }
+
     
+   // Fix for the createInputTextBox method
+   createInputTextBox() {
+    const textBoxWidth = this.uiBoxWidth;
+    const textBoxHeight = 240;
+    const padding = 30; // margin in text box
     
-    createInputTextBox() {
-        const textBoxWidth = this.uiBoxWidth;
-        const textBoxHeight = 240;
-        const padding = 30;//margin in text box
+    // Ensure prompt is updated before rendering
+    this.updatePromptBasedOnLevel();
     
-        // ✅ Ensure prompt is updated before rendering
-        this.updatePromptBasedOnLevel();
-    
-        // ✅ Display the prompt above the input box
-        if (this.promptText) {
-            this.promptText.destroy();
-        }
-
-        
-        this.promptText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY - textBoxHeight / 2 - 25, // Positioned slightly above text box
-            this.currentPrompt || "Loading prompt...",
-            {
-                fontFamily: 'Nunito',
-                fontSize: `${this.baseFontSize}px`,
-                fontStyle: 'italic',
-                fill: COLORS_TEXT.WHITE,
-                wordWrap: { width: textBoxWidth - 30 },
-                align: 'center'
-            }
-        ).setOrigin(0.5, 1);
-    
-        // ✅ Ensure text box exists and has rounded corners
-        if (this.inputTextBorder) {
-            this.inputTextBorder.destroy();
-        }
-        this.inputTextBorder = this.add.graphics();
-        this.inputTextBorder.fillStyle(0xffffff, 1);
-        this.inputTextBorder.fillRoundedRect(
-            this.cameras.main.centerX - textBoxWidth / 2,
-            this.cameras.main.centerY - textBoxHeight / 2,
-            textBoxWidth,
-            textBoxHeight,
-            CORNER_RADIUS
-        );
-        this.inputTextBorder.lineStyle(OUTLINE_WIDTH, COLORS_HEX.MIDPURPLE, 1);
-        this.inputTextBorder.strokeRoundedRect(
-            this.cameras.main.centerX - textBoxWidth / 2,
-            this.cameras.main.centerY - textBoxHeight / 2,
-            textBoxWidth,
-            textBoxHeight,
-            CORNER_RADIUS
-        );
-    
-        this.add.existing(this.inputTextBorder);
-    
-        // ✅ Ensure text input object exists
-        if (this.inputText) {
-            this.inputText.destroy();
-        }
-        this.userInput = "";
-        this.cursorVisible = true;
-    
-        this.inputText = this.add.text(
-            this.cameras.main.centerX - textBoxWidth / 2 + padding,
-            this.cameras.main.centerY - textBoxHeight / 2 + padding,
-            "_",
-            {
-                fontFamily: "Nunito",
-                fontSize: "20px",
-                fill: "#000",
-                wordWrap: { width: textBoxWidth - padding * 2 },
-                align: "left"
-            }
-        ).setOrigin(0, 0);
-        
-        
-        this.input.keyboard.on("keydown", (event) => {
-            this.inputActive=true;
-
-            if(this.activeTimeout) {
-                clearTimeout(this.activeTimeout);
-            }
-
-            // Set timeout to revert to inactive state after 3 seconds
-            this.activeTimeout = setTimeout(() => {
-                this.inputActive = false;
-            }, 3000);
-
-            if (event.key === " ") {
-                if (!this.userInput.trim()) return;
-                this.userInput += " ";
-                // ✅ Check for AI-suggested word match
-                this.checkAndExplodeWord();
-                this.generateAISuggestions(this.userInput.trim());
-            } else if (event.key.length === 1) {
-                this.userInput += event.key;
-            } else if (event.key === "Backspace") {
-                this.userInput = this.userInput.slice(0, -1);
-            } 
-            else if (event.key === "Enter") {
-
-                this.userInput += "\n";
-            //     if (!this.userInput.trim()) {
-            //         console.warn("Skipping evaluation: No input provided.");
-            //         return;
-            //     } else {
-            //         // ✅ Check for AI-suggested word match
-
-            //         this.checkAndExplodeWord();
-            //         this.onDoneButtonClick();
-            //     }                
-
-            }
-        
-        
-        
-            this.updateCursor();
-        });
-        
-          
-    
-
-        // Modify cursor timer to have different speeds
-        this.time.addEvent({
-            delay: 500,
-            loop: true,
-            callback: () => {
-                this.cursorVisible = !this.cursorVisible;
-                
-                // If this.time exists and we can modify it (for faster blinking)
-                if (this.inputActive) {
-                    // We can't directly modify the timer delay, so we'll use a visual trick
-                    // by forcing more frequent updates when active
-                    setTimeout(() => {
-                        if (this.inputActive) {
-                            this.cursorVisible = !this.cursorVisible;
-                            this.updateCursor();
-                        }
-                    }, 250); // Half-cycle for faster blink
-                }
-                
-                this.updateCursor();
-            }
-        });
-
-        // Make the input box interactive
-        this.inputTextBorder.setInteractive(
-            new Phaser.Geom.Rectangle(
-                this.cameras.main.centerX - this.uiBoxWidth / 2,
-                this.cameras.main.centerY - 240 / 2,
-                this.uiBoxWidth,
-                240
-            ),
-            Phaser.Geom.Rectangle.Contains
-        );
-
-        // Add click/tap effect
-        this.inputTextBorder.on('pointerdown', (pointer) => {
-            // Create ripple effect at click position
-            this.createInputBoxClickEffect(pointer.x, pointer.y);
-            
-            // Also focus the input (handled by your existing code)
-        });
-
-        
+    // Display the prompt above the input box
+    if (this.promptText) {
+        this.promptText.destroy();
     }
     
+    this.promptText = this.add.text(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY - textBoxHeight / 2 - 25,
+        this.currentPrompt || "Loading prompt...",
+        {
+            fontFamily: 'Nunito',
+            fontSize: `${this.baseFontSize}px`,
+            fontStyle: 'italic',
+            fill: COLORS_TEXT.WHITE,
+            wordWrap: { width: textBoxWidth - 30 },
+            align: 'center'
+        }
+    ).setOrigin(0.5, 1);
+    
+    // Ensure text box exists and has rounded corners
+    if (this.inputTextBorder) {
+        this.inputTextBorder.destroy();
+    }
+    this.inputTextBorder = this.add.graphics();
+    this.inputTextBorder.fillStyle(0xffffff, 1);
+    this.inputTextBorder.fillRoundedRect(
+        this.cameras.main.centerX - textBoxWidth / 2,
+        this.cameras.main.centerY - textBoxHeight / 2,
+        textBoxWidth,
+        textBoxHeight,
+        CORNER_RADIUS
+    );
+    this.inputTextBorder.lineStyle(OUTLINE_WIDTH, COLORS_HEX.MIDPURPLE, 1);
+    this.inputTextBorder.strokeRoundedRect(
+        this.cameras.main.centerX - textBoxWidth / 2,
+        this.cameras.main.centerY - textBoxHeight / 2,
+        textBoxWidth,
+        textBoxHeight,
+        CORNER_RADIUS
+    );
+    
+    this.add.existing(this.inputTextBorder);
+    
+    // Clear existing text objects
+    if (this.inputText) {
+        this.inputText.destroy();
+    }
+    if (this.autocompleteText) {
+        this.autocompleteText.destroy();
+    }
+    
+    this.userInput = "";
+    this.cursorVisible = true;
+    
+    // Create the main input text (black)
+    this.inputText = this.add.text(
+        this.cameras.main.centerX - textBoxWidth / 2 + padding,
+        this.cameras.main.centerY - textBoxHeight / 2 + padding,
+        "_",
+        {
+            fontFamily: "Nunito",
+            fontSize: "20px",
+            fill: "#000",
+            wordWrap: { width: textBoxWidth - padding * 2 },
+            align: "left"
+        }
+    ).setOrigin(0, 0);
+    
+    // Create the autocomplete text (red)
+    this.autocompleteText = this.add.text(
+        this.cameras.main.centerX - textBoxWidth / 2 + padding,
+        this.cameras.main.centerY - textBoxHeight / 2 + padding,
+        "",
+        {
+            fontFamily: "Nunito",
+            fontSize: "20px",
+            fill: "#ff0000", // Red color
+            wordWrap: { width: textBoxWidth - padding * 2 },
+            align: "left"
+        }
+    ).setOrigin(0, 0);
+    
+    // Set very high depth for both text objects to ensure visibility
+    this.inputText.setDepth(25);
+    this.autocompleteText.setDepth(25);
+    
+    // Force visibility
+    this.inputText.setVisible(true);
+    this.autocompleteText.setVisible(true);
+    
+    // Keyboard event handler
+    this.input.keyboard.removeAllListeners('keydown'); // Prevent duplicate handlers
+    this.input.keyboard.on("keydown", (event) => {
+        this.inputActive = true;
+
+        if(this.activeTimeout) {
+            clearTimeout(this.activeTimeout);
+        }
+
+        // Set timeout to revert to inactive state after 3 seconds
+        this.activeTimeout = setTimeout(() => {
+            this.inputActive = false;
+        }, 3000);
+
+        if (event.key === " ") {
+            if (!this.userInput.trim()) return;
+            this.userInput += " ";
+            // Check for AI-suggested word match
+            this.checkAndExplodeWord();
+            this.generateAISuggestions(this.userInput.trim());
+        } else if (event.key === "Tab") {
+            // Accept autocomplete suggestion
+            event.preventDefault(); // Prevent default tab behavior
+            const autocomplete = this.generateAutocomplete();
+            if (autocomplete) {
+                this.userInput += autocomplete;
+                
+                // If the autocomplete ended a word, add a space
+                if (!this.userInput.endsWith(" ")) {
+                    this.userInput += " ";
+                }
+                
+                this.generateAISuggestions(this.userInput.trim());
+            }
+        } else if (event.key.length === 1) {
+            this.userInput += event.key;
+        } else if (event.key === "Backspace") {
+            this.userInput = this.userInput.slice(0, -1);
+        } else if (event.key === "Enter") {
+            this.userInput += "\n";
+            // Check for AI-suggested word match
+            this.checkAndExplodeWord();
+            this.generateAISuggestions(this.userInput.trim());
+        }
+        
+        this.updateCursor();
+    });
+    
+    // Cursor blinking timer
+    if (this.cursorTimer) {
+        this.cursorTimer.remove();
+    }
+    this.cursorTimer = this.time.addEvent({
+        delay: 500,
+        loop: true,
+        callback: () => {
+            this.cursorVisible = !this.cursorVisible;
+            
+            // If active, blink faster
+            if (this.inputActive) {
+                setTimeout(() => {
+                    if (this.inputActive) {
+                        this.cursorVisible = !this.cursorVisible;
+                        this.updateCursor();
+                    }
+                }, 250); // Half-cycle for faster blink
+            }
+            
+            this.updateCursor();
+        }
+    });
+
+    // Initialize with cursor and autocomplete
+    this.updateCursor();
+
+    // Make the input box interactive
+    this.inputTextBorder.setInteractive(
+        new Phaser.Geom.Rectangle(
+            this.cameras.main.centerX - this.uiBoxWidth / 2,
+            this.cameras.main.centerY - 240 / 2,
+            this.uiBoxWidth,
+            240
+        ),
+        Phaser.Geom.Rectangle.Contains
+    );
+
+    // Add click/tap effect
+    this.inputTextBorder.on('pointerdown', (pointer) => {
+        // Create ripple effect at click position
+        this.createInputBoxClickEffect(pointer.x, pointer.y);
+    });
+}
+
+    
+    // Fixed clearInputTextBox method
+    clearInputTextBox() {
+        this.userInput = '';
+        if (this.inputText) {
+            this.inputText.setText('_');
+        }
+        if (this.autocompleteText) {
+            this.autocompleteText.setText('');
+        }
+    }
 
     // New method to create the click effect
     createInputBoxClickEffect(x, y) {
@@ -1088,21 +1122,80 @@ export default class GameSceneHard extends Phaser.Scene {
             }
         });
     }
+
+    generateAutocomplete() {
+        if (!this.aiSuggestedWords || this.aiSuggestedWords.length === 0) {
+            return "";
+        }
+        
+        // If last character is space or enter, show first suggestion
+        const lastChar = this.userInput.slice(-1);
+        if (lastChar === " " || lastChar === "\n") {
+            return this.aiSuggestedWords[0];
+        }
+        
+        // If user is typing a word, try to autocomplete it
+        const words = this.userInput.split(" ");
+        const currentWord = words[words.length - 1].toLowerCase();
+        
+        // If current word is empty, don't autocomplete
+        if (!currentWord) {
+            return "";
+        }
+        
+        // Find a matching word from suggestions
+        for (const suggestion of this.aiSuggestedWords) {
+            if (suggestion.toLowerCase().startsWith(currentWord)) {
+                // Return only the part that would complete the word
+                return suggestion.slice(currentWord.length);
+            }
+        }
+        
+        return "";
+    }
+    
     
     // === Helper Function to Update Text with Blinking Cursor ===
     updateCursor() {
-        if (!this.inputText) return;
+        if (!this.inputText || !this.autocompleteText) return;
         
-        // Use different cursor styles based on activity state
+        // Generate autocomplete suggestion
+        let autocomplete = this.generateAutocomplete();
+        
+        // Update the main input text with cursor
         if (this.inputActive) {
             // Active state - block cursor
-            this.inputText.setText(this.userInput + (this.cursorVisible ? "▌" : " "));
+            this.inputText.setText(this.userInput + (this.cursorVisible ? "_" : " "));
         } else {
             // Default state - underscore cursor
             this.inputText.setText(this.userInput + (this.cursorVisible ? "_" : ""));
         }
+        
+        // Force a proper re-render of the text
+        this.inputText.updateText();
+        
+        // Use the raw text width without the cursor for more accurate positioning
+        const rawTextWidth = this.inputText.width - (this.cursorVisible ? 10 : 0);
+        
+        // Position autocomplete text immediately after input text content (not including cursor)
+        this.autocompleteText.setPosition(
+            this.inputText.x + rawTextWidth,
+            this.inputText.y
+        );
+        
+        // Update the autocomplete text
+        this.autocompleteText.setText(autocomplete || "");
+        
+        // Force redraw of autocomplete text
+        this.autocompleteText.updateText();
+        
+        // Ensure both text objects are visible and at the correct depth
+        this.inputText.setVisible(true).setDepth(25);
+        this.autocompleteText.setVisible(true).setDepth(25);
     }
-    
+     
+
+   
 
     showSuggestions(words) {
         // Clear any existing word objects
@@ -1112,6 +1205,7 @@ export default class GameSceneHard extends Phaser.Scene {
         this.currentWordObjects = [];
         
         // Get words (limit to topK value)
+        // Make sure words is an array before proceeding
         words = Array.isArray(words) ? words.slice(0, this.topKValue) : [];
         if (words.length === 0) return;
         
@@ -1194,7 +1288,9 @@ export default class GameSceneHard extends Phaser.Scene {
     
 
 
+    // Improved createExplosionEffect to ensure it's visible above the text box
     createExplosionEffect(word, x, y) {
+        // Create the explosion text with higher depth to appear above input box
         const explosion = this.add.text(x, y, word, {
             fontFamily: 'Nunito',
             fontSize: '20px', 
@@ -1202,13 +1298,18 @@ export default class GameSceneHard extends Phaser.Scene {
             fontStyle: 'bold'
         }).setOrigin(0.5);
         
+        // Set a very high depth to ensure it's on top of everything
+        explosion.setDepth(100);
+        
+        // Make the explosion animation more dramatic
         this.tweens.add({
             targets: explosion,
-            scale: { from: 1, to: 4 }, //how big is the explosion?
-            alpha: { from: 9, to: 0 }, //transparency of exploding word
-            angle: { from: 0, to: 360 }, //rotation
+            scale: { from: 1, to: 4 }, // How big is the explosion?
+            alpha: { from: 1, to: 0 }, // Start fully visible and fade out
+            angle: { from: 0, to: 360 }, // Rotation
+            y: { from: y, to: y - 50 }, // Move upward for visibility
             duration: 900,
-            ease: 'Back.easeOut', //'Cubic.easeOut', //how fast does it go?
+            ease: 'Back.easeOut',
             onComplete: () => explosion.destroy()
         });
     }
@@ -1259,6 +1360,18 @@ export default class GameSceneHard extends Phaser.Scene {
         });
       }
 
+    // Method to ensure all text elements are properly visible
+    ensureTextVisibility() {
+        if (this.inputText) {
+            this.inputText.setVisible(true);
+            this.inputText.setDepth(20);
+        }
+        if (this.autocompleteText) {
+            this.autocompleteText.setVisible(true);
+            this.autocompleteText.setDepth(20);
+        }
+    }
+
       
     // Add this to your create() method after creating all elements
     ensureProperLayering() {
@@ -1297,6 +1410,22 @@ export default class GameSceneHard extends Phaser.Scene {
         }
         if (this.resetButton) {
             this.resetButton.setDepth(10);
+        }
+    }
+
+    // Helper method to debug text visibility issues (can be removed in production)
+    debugTextVisibility() {
+        console.log("Debug Text Visibility:");
+        if (this.inputText) {
+            console.log(`Input Text - visible: ${this.inputText.visible}, depth: ${this.inputText.depth}, text: "${this.inputText.text}"`);
+        } else {
+            console.log("Input Text not created");
+        }
+        
+        if (this.autocompleteText) {
+            console.log(`Autocomplete Text - visible: ${this.autocompleteText.visible}, depth: ${this.autocompleteText.depth}, text: "${this.autocompleteText.text}"`);
+        } else {
+            console.log("Autocomplete Text not created");
         }
     }
 
@@ -1350,7 +1479,13 @@ export default class GameSceneHard extends Phaser.Scene {
 
         // Ensure all elements are properly visible
         this.ensureProperLayering();
+        this.ensureTextVisibility(); // Add this new call
+        this.updateCursor()
 
+        // Debug text visibility after a short delay (to let everything initialize)
+        this.time.delayedCall(500, () => {
+            this.debugTextVisibility();
+        });
 
     }
 
