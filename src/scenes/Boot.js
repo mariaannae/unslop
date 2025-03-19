@@ -26,7 +26,7 @@ export default class Boot extends Phaser.Scene
 
         document.head.appendChild(fontStyle);
 
-
+        
         WebFont.load({
             google: {
                 families: [

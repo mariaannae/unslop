@@ -306,6 +306,8 @@ export default class GameSceneHard extends Phaser.Scene {
     
     
     async evaluateText(userInput) {
+
+
         console.log("Evaluating user input:", userInput);
     
         if (!this.llmEngine) {
@@ -358,26 +360,37 @@ export default class GameSceneHard extends Phaser.Scene {
     ];
 
     
-        try {
-            const response = await this.llmEngine.chat.completions.create({
-                messages: messages,
-                model: "Qwen2.5-0.5B-Instruct-q0f32-MLC",
-                max_tokens: 250,
-                temperature: 0.3
+        //try {
+            // Make the API call to OpenAI
+            const response = await fetch("https://openai-proxy.nonslop.workers.dev", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    prompt: messages,
+                    //max_tokens: 250,
+                    //temperature: 0.3
+                })
             });
-    
-            let aiResponse = response.choices[0].message.content.trim();
-            console.log("AI Evaluation:", aiResponse);
+
+            if (!response.ok) {
+                throw new Error(`OpenAI API error: ${response.statusText}`);
+            }
+            console.log(response);
+        
+            //let aiResponse = response.choices[0].message.content.trim();
+            //console.log("AI Evaluation:", aiResponse);
     
             // ✅ Ensure text is visible
             this.updateOutputText(aiResponse);
             this.outputTextBox.setAlpha(1);
             this.outputText.setAlpha(1);
     
-        } catch (error) {
-            console.error("Error in LLM evaluation:", error);
-            this.updateOutputText("Failed to generate evaluation.");
-        }
+        // } catch (error) {
+        //     console.error("Error in LLM evaluation:", error);
+        //     this.updateOutputText("Failed to generate evaluation.");
+        // }
     }
 
     

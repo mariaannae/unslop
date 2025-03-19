@@ -6,6 +6,10 @@ import Preloader from "./scenes/Preloader.js";
 import GameSceneEasy from "./scenes/GameSceneEasy.js";
 
 
+
+
+
+
 const config = {
     type: Phaser.AUTO,
     width: 800,
