@@ -335,99 +335,98 @@ export default class GameSceneEasy extends Phaser.Scene {
 
     }
 
-    async sendPrompt(prompt) {
-        const url = "https://api.openai.com/v1/chat/completions"; // OpenAI Chat Completions endpoint
-        const apiKey = "your-openai-api-key"; // Replace with your OpenAI API key
-
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": env.NONSLOP_OPENAI_KEY, // Add the API key in the Authorization header
-                },
-                body: JSON.stringify({
-                    model: "gpt-4o-mini", // Specify the model (e.g., gpt-4 or gpt-3.5-turbo)
-                    messages: prompt,
-                    max_tokens: 500, // Adjust the max tokens as needed
-                    //temperature: 0.7, // Adjust the temperature for creativity
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error(`OpenAI API error: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log("OpenAI Response:", data);
-
-            // Return the response content
-            return data.choices[0].message.content;
-        } catch (error) {
-            console.error("Error sending prompt to OpenAI:", error);
-            throw error; // Re-throw the error for further handling
-        }
-    }
 
 
 
     
 
-async evaluateText(userInput) {
-    console.log("Evaluating user input:", userInput);
+    async evaluateText(userInput) {
 
-    if (!this.llmEngine) {
-        console.error("LLM engine is not initialized.");
-        this.updateOutputText("Error: LLM not available.");
-        return;
-    }
 
-    // ✅ Show "Evaluating..." While Waiting for Response
-    this.updateOutputText("Evaluating...");
-
-    // ✅ Ensure currentPrompt is set (fallback to generic)
-    const promptForEvaluation = this.currentPrompt || "No specific prompt was provided.";
-
-    // **Updated Chat Prompt Format**
-    const messages =
-        
-            `User was given the prompt: "${promptForEvaluation}"  
-            Here is their response: "${userInput}"  
-            
-            Evaluate the response based on:  
-            - Relevance to the given prompt.  
-            - Grammar correctness.  
-            - Coherence and logical flow.  
-            
-            Provide output in this strict format:  
-            
-            Overall Rating: [One-word summary]  
-            Relevance Score: X/5 - [Short reason]  
-            Grammar Score: X/5 - [Short reason]  
-            Coherence Score: X/5 - [Short reason]  
-            
-            If Grammar Score < 5, list grammar mistakes in this format:  
-            - Incorrect: "[Exact incorrect phrase]" → Correct: "[Corrected version]"  
-            
-            Only return the labeled scores and grammar corrections if applicable. Do not include explanations beyond the given format. Be sure to give at least one specific example if there are grammar errors. You can even just quote it.`;
-
-    try{
-        const response = await this.sendPrompt(messages);
-        let responseText = response.output[0].choices[0].tokens[0].trim()
-        if (responseText.startsWith(messages)) {
-            responseText = responseText.slice(promptText.length).trim();
+        console.log("Evaluating user input:", userInput);
+    
+        if (!this.llmEngine) {
+            console.error("LLM engine is not initialized.");
+            this.updateOutputText("Error: LLM not available.");
+            return;
         }
-        this.updateOutputText(responseText);
-        console.log(responseText);
-        return responseText
-    } catch (error) {
-        console.error("Error evaluating text:", error);
+
+        // ✅ Show "Evaluating..." While Waiting for Response
+        this.updateOutputText("Evaluating...");
+    
+        // ✅ Ensure currentPrompt is set (fallback to generic)
+        const promptForEvaluation = this.currentPrompt || "No specific prompt was provided.";
+    
+        // **Updated Chat Prompt Format**
+        // **Updated Chat Prompt Format**
+    const messages = [
+        {
+            "role": "system",
+            "content": "You are an expert writing evaluator. Your job is to assess user-generated text based on three key criteria:\n" +
+                       "1. Relevance: How well the text stays on topic for the given prompt.\n" +
+                       "2. Grammar: How grammatically correct the text is, with specific examples if errors exist.\n" +
+                       "3. Coherence: How logically structured and understandable the text is.\n\n" +
+                       "First, provide a **one-word summary** of the overall quality of the response (e.g., Excellent, Good, Needs Improvement, Poor).\n" +
+                       "Then, provide numeric scores (1-5) for each category. Each score must be **clearly labeled**, followed by a **very short** (5-7 words max) explanation on the same line.\n" +
+                       "If the grammar score is below 5, include **examples of specific grammar mistakes** from the text. Show the incorrect phrase, followed by the correct version."
+        },
+        {
+            "role": "user",
+            "content": `User was given the prompt: "${promptForEvaluation}"  
+                        Here is their response: "${userInput}"  
+                        
+                        Evaluate the response based on:  
+                        - Relevance to the given prompt.  
+                        - Grammar correctness.  
+                        - Coherence and logical flow.  
+                        
+                        Provide output in this strict format:  
+                        
+                        Overall Rating: [One-word summary]  
+                        Relevance Score: X/5 - [Short reason]  
+                        Grammar Score: X/5 - [Short reason]  
+                        Coherence Score: X/5 - [Short reason]  
+                        
+                        If Grammar Score < 5, list grammar mistakes in this format:  
+                        - Incorrect: "[Exact incorrect phrase]" → Correct: "[Corrected version]"  
+                        
+                        Only return the labeled scores and grammar corrections if applicable. Do not include explanations beyond the given format. Be sure to give at least one specific example if there are grammar errors. You can even just quote it.`
+        }
+    ];
+
+
+        //try {
+            // Make the API call to OpenAI
+            const response = await fetch("https://openai-proxy.nonslop.workers.dev", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    prompt: messages,
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`OpenAI API error: ${response.statusText}`);
+            }
+            
+            const responseData = await response.json();
+            console.log(responseData)
+        
+            let aiResponse = responseData.content.trim();
+            console.log("AI Evaluation:", aiResponse);
+    
+            // ✅ Ensure text is visible
+            this.updateOutputText(aiResponse);
+            this.outputTextBox.setAlpha(1);
+            this.outputText.setAlpha(1);
+    
+        // } catch (error) {
+        //     console.error("Error in LLM evaluation:", error);
+        //     this.updateOutputText("Failed to generate evaluation.");
+        // }
     }
-
-
-
-
-}
 
 //     const url = "https://api.runpod.ai/v2/z1v9biqp7gwfak/run";
 

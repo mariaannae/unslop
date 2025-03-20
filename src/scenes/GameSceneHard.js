@@ -359,7 +359,7 @@ export default class GameSceneHard extends Phaser.Scene {
         }
     ];
 
-    
+
         //try {
             // Make the API call to OpenAI
             const response = await fetch("https://openai-proxy.nonslop.workers.dev", {
@@ -369,18 +369,18 @@ export default class GameSceneHard extends Phaser.Scene {
                 },
                 body: JSON.stringify({
                     prompt: messages,
-                    //max_tokens: 250,
-                    //temperature: 0.3
                 })
             });
 
             if (!response.ok) {
                 throw new Error(`OpenAI API error: ${response.statusText}`);
             }
-            console.log(response);
+            
+            const responseData = await response.json();
+            console.log(responseData)
         
-            //let aiResponse = response.choices[0].message.content.trim();
-            //console.log("AI Evaluation:", aiResponse);
+            let aiResponse = responseData.content.trim();
+            console.log("AI Evaluation:", aiResponse);
     
             // ✅ Ensure text is visible
             this.updateOutputText(aiResponse);
