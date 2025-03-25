@@ -3,3 +3,7 @@ ssh.txt
 src/scenes/GameSceneEasy copy.js
 
 env.js
+
+src/config/tokenizer.json
+src/config/temp.py
+../.DS_Store

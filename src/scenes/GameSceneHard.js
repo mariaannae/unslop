@@ -1,5 +1,5 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_hard.js";
-
+import { stopwords } from "../config/stopwords.js";
 
 export default class GameSceneHard extends Phaser.Scene {
     constructor() {
@@ -307,14 +307,7 @@ export default class GameSceneHard extends Phaser.Scene {
     
     async evaluateText(userInput) {
 
-
         console.log("Evaluating user input:", userInput);
-    
-        if (!this.llmEngine) {
-            console.error("LLM engine is not initialized.");
-            this.updateOutputText("Error: LLM not available.");
-            return;
-        }
 
         // ✅ Show "Evaluating..." While Waiting for Response
         this.updateOutputText("Evaluating...");
@@ -1426,22 +1419,6 @@ export default class GameSceneHard extends Phaser.Scene {
         }
     }
 
-    // Helper method to debug text visibility issues (can be removed in production)
-    debugTextVisibility() {
-        console.log("Debug Text Visibility:");
-        if (this.inputText) {
-            console.log(`Input Text - visible: ${this.inputText.visible}, depth: ${this.inputText.depth}, text: "${this.inputText.text}"`);
-        } else {
-            console.log("Input Text not created");
-        }
-        
-        if (this.autocompleteText) {
-            console.log(`Autocomplete Text - visible: ${this.autocompleteText.visible}, depth: ${this.autocompleteText.depth}, text: "${this.autocompleteText.text}"`);
-        } else {
-            console.log("Autocomplete Text not created");
-        }
-    }
-
     async create() {
         //this.add.image(400, 300, 'background'); // Example background
         //this.cameras.main.setBackgroundColor('#13091e');
@@ -1495,10 +1472,6 @@ export default class GameSceneHard extends Phaser.Scene {
         this.ensureTextVisibility(); // Add this new call
         this.updateCursor()
 
-        // Debug text visibility after a short delay (to let everything initialize)
-        this.time.delayedCall(500, () => {
-            this.debugTextVisibility();
-        });
 
     }
 
@@ -1547,7 +1520,7 @@ export default class GameSceneHard extends Phaser.Scene {
                 n: 1,
                 max_tokens: 1,
                 logprobs: true,
-                top_logprobs: this.topKValue,
+                top_logprobs: 5,
             });
     
             if (!reply.choices || reply.choices.length === 0 || !reply.choices[0].logprobs) {
@@ -1556,7 +1529,20 @@ export default class GameSceneHard extends Phaser.Scene {
             }
     
             let options = reply.choices[0].logprobs.content[0].top_logprobs;
-            let suggestedWords = options.map(choice => choice.token.trim());
+            console.log("options: ", options);
+            
+            options.sort((a, b) => b.logprob - a.logprob);
+            console.log("Sorted Options:", options);
+
+            const filteredOptions = options
+                .filter(choice => !stopwords.includes(choice.token.trim().toLowerCase()))
+                .slice(0, this.topKValue);  // pick top-K after filtering
+
+            console.log("filtered Options:", filteredOptions);
+
+            let suggestedWords = filteredOptions
+                .map(choice => choice.token.trim())
+    
     
             console.log("AI Suggested Words:", suggestedWords);
 

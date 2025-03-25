@@ -1,5 +1,5 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_easy.js";
-
+import { stopwords } from "../config/stopwords.js";
 
 export default class GameSceneEasy extends Phaser.Scene {
     constructor() {
@@ -98,15 +98,15 @@ export default class GameSceneEasy extends Phaser.Scene {
 
         // Get the word count from the input text
         const wordsInInput = this.userInput.trim().split(/\s+/).filter(word => word.length > 0).length;
-        const percentage = (this.failCount / wordsInInput * 100).toFixed(2);
+        const percentage = 100-(this.failCount / wordsInInput * 100).toFixed(2);
         
         // Calculate score using the formula: (words_in_input - fails) * 10 - fails^10
-        const score = (wordsInInput - this.failCount) * 10 - (this.failCount * 10);
-        console.log("wordinput: ", wordsInInput);
+        //const score = (wordsInInput - this.failCount) * 10 - (this.failCount * 10);
+        //console.log("wordinput: ", wordsInInput);
 
 
         if (this.failsText) {
-            this.failsText.setText(`SCORE: ${score} or ${percentage}%`);
+            this.failsText.setText(`SCORE: -${this.failCount} (${percentage}%)`);
             this.tweens.add({
                 targets: this.scoreDisplay,
                 scaleX: { from: 1, to: 1.2 },
@@ -345,11 +345,6 @@ export default class GameSceneEasy extends Phaser.Scene {
 
         console.log("Evaluating user input:", userInput);
     
-        if (!this.llmEngine) {
-            console.error("LLM engine is not initialized.");
-            this.updateOutputText("Error: LLM not available.");
-            return;
-        }
 
         // ✅ Show "Evaluating..." While Waiting for Response
         this.updateOutputText("Evaluating...");
@@ -1578,16 +1573,29 @@ export default class GameSceneEasy extends Phaser.Scene {
                 n: 1,
                 max_tokens: 1,
                 logprobs: true,
-                top_logprobs: this.topKValue,
+                top_logprobs: 5, //this.topKValue,
+                //logit_bias: stopword_bias, not implemented for this model
             });
     
             if (!reply.choices || reply.choices.length === 0 || !reply.choices[0].logprobs) {
                 console.warn("AI response is missing expected properties.");
                 return;
             }
-    
+
             let options = reply.choices[0].logprobs.content[0].top_logprobs;
-            let suggestedWords = options.map(choice => choice.token.trim());
+            console.log("options: ", options);
+            
+            options.sort((a, b) => b.logprob - a.logprob);
+            console.log("Sorted Options:", options);
+
+            const filteredOptions = options
+                .filter(choice => !stopwords.includes(choice.token.trim().toLowerCase()))
+                .slice(0, this.topKValue);  // pick top-K after filtering
+
+            console.log("filtered Options:", filteredOptions);
+
+            let suggestedWords = filteredOptions
+                .map(choice => choice.token.trim())
     
             console.log("AI Suggested Words:", suggestedWords);
 
