@@ -1,9 +1,25 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_hard.js";
 import { stopwords } from "../config/stopwords.js";
+import { db, currentUserId } from "../config/firebase.js";
+import { collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+
+
+// Function to save interaction
+async function saveInteraction(interaction) {
+    try {
+      const docRef = await addDoc(collection(db, "userInteractions"), {
+        userId: currentUserId || "unknown",
+        interaction});
+      console.log("Firebase document written with ID: ", docRef.id);
+    } catch (e) {
+      console.error("Error adding document to Firebase: ", e);
+    }
+  }
 
 export default class GameSceneHard extends Phaser.Scene {
     constructor() {
         super({ key: 'GameSceneHard' });
+        this.mode = 'hard';
         this.llmEngine = null;
         this.userInput = '';
         this.inputText = null; 
@@ -158,7 +174,9 @@ export default class GameSceneHard extends Phaser.Scene {
         });
     }
     
-    
+    onFeedbackClick(){
+        this.scene.start('FeedbackScene', {mode: this.mode, llmEngine: this.llmEngine});
+    }
 
     createButton(label, callback, centerX, centerY) {
 
@@ -265,7 +283,7 @@ export default class GameSceneHard extends Phaser.Scene {
         // ✅ Select a new prompt before evaluation
         //this.updatePromptBasedOnLevel();
     }
-
+    
 
     onResetRuttonClick() {
         console.log("Reset button clicked! Clearing text...");
@@ -281,28 +299,7 @@ export default class GameSceneHard extends Phaser.Scene {
         // ✅ Select a new prompt before evaluation
         this.updatePromptBasedOnLevel();
     }
-    
-    onDoneButtonClick() {
-        console.log("Done button clicked! Evaluating text...");
-        
-        if (typeof this.createOutputTextBox !== "function") {
-            console.error("Error: createOutputTextBox() is not defined.");
-            return;
-        }
 
-    
-        // ✅ Ensure Output Box Exists BEFORE Calling LLM
-        if (!this.outputTextBox) {
-            this.createOutputTextBox();
-        }
-    
-        // ✅ Update the text to "Evaluating..." before making the request
-        this.outputText.setText("Evaluating...");
-    
-        // ✅ Call LLM Function (evaluateText)
-        this.evaluateText(this.userInput);
-
-    }
     
     
     async evaluateText(userInput) {
@@ -380,10 +377,23 @@ export default class GameSceneHard extends Phaser.Scene {
             this.outputTextBox.setAlpha(1);
             this.outputText.setAlpha(1);
     
-        // } catch (error) {
-        //     console.error("Error in LLM evaluation:", error);
-        //     this.updateOutputText("Failed to generate evaluation.");
-        // }
+             // Example interaction data structure
+             const interaction = {
+                timestamp: Date.now(),
+                prompt: this.currentPrompt,
+                suggestedWords: [],
+                chosenWord: "",
+                submittedText: userInput,
+                aiEvaluation: aiResponse,
+                done: true,
+                k: this.topKValue,
+                level: this.levelValue,
+                failCount: this.failCounter,
+                mode: this.mode
+            };
+
+            saveInteraction(interaction); // save interaction to Firebase
+
     }
 
     
@@ -846,7 +856,6 @@ export default class GameSceneHard extends Phaser.Scene {
     
     // Updated checkAndExplodeWord method with improved positioning
     checkAndExplodeWord() {
-        console.log("check and explode word");
         if (!this.aiSuggestedWords || this.aiSuggestedWords.length === 0) {
             return;
         }
@@ -875,6 +884,22 @@ export default class GameSceneHard extends Phaser.Scene {
             this.failCounter++;
             this.updateFailsCounter();
         }
+        // Example interaction data structure
+        const interaction = {
+            timestamp: Date.now(),
+            prompt: this.currentPrompt,
+            suggestedWords: this.aiSuggestedWords,
+            chosenWord: lastWord,
+            submittedText: this.userInput,
+            aiEvaluation: "",
+            done: false,
+            k: this.topKValue,
+            level: this.levelValue,
+            failCount: this.failCounter,
+            mode: this.mode
+        };
+
+        saveInteraction(interaction); // save interaction to Firebase
     }
 
     
@@ -1331,6 +1356,12 @@ export default class GameSceneHard extends Phaser.Scene {
             console.log("llmEngine successfully received in GameSceneHard.");
         }
         this.llmEngine = data.llmEngine || null;
+
+        // Reset key scene elements to ensure proper initialization when returning from other scenes
+        this.promptTextBox = null;
+        this.promptText = null;
+        this.outputTextBox = null;
+        this.outputText = null;
     }
 
     createBackgroundPattern() {
@@ -1417,6 +1448,9 @@ export default class GameSceneHard extends Phaser.Scene {
         if (this.resetButton) {
             this.resetButton.setDepth(10);
         }
+        if (this.feedbackButton) {
+            this.feedbackButton.setDepth(10);
+        }
     }
 
     async create() {
@@ -1459,6 +1493,21 @@ export default class GameSceneHard extends Phaser.Scene {
 
         this.doneButton = this.createButton("DONE", () => this.onDoneButtonClick(), buttonCenterX, buttonCenterY);
         this.resetButton = this.createButton("RESET", () => this.onResetRuttonClick(), buttonCenterX - 120, buttonCenterY);
+
+        // Calculate position for bottom-right corner button
+        const padding = 20;
+        const newButtonX = this.cameras.main.width - buttonWidth / 2 - padding;
+        const newButtonY = this.cameras.main.height - buttonHeight / 2 - padding;
+
+        // Create your new button
+        this.feedbackButton = this.createButton(
+            "feedback", 
+            () => this.onFeedbackClick(), 
+            newButtonX, 
+            newButtonY
+        );
+
+
 
         this.createFailsCounter();
 
@@ -1529,16 +1578,12 @@ export default class GameSceneHard extends Phaser.Scene {
             }
     
             let options = reply.choices[0].logprobs.content[0].top_logprobs;
-            console.log("options: ", options);
             
             options.sort((a, b) => b.logprob - a.logprob);
-            console.log("Sorted Options:", options);
 
             const filteredOptions = options
                 .filter(choice => !stopwords.includes(choice.token.trim().toLowerCase()))
                 .slice(0, this.topKValue);  // pick top-K after filtering
-
-            console.log("filtered Options:", filteredOptions);
 
             let suggestedWords = filteredOptions
                 .map(choice => choice.token.trim())

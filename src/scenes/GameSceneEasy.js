@@ -1,9 +1,25 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_easy.js";
 import { stopwords } from "../config/stopwords.js";
+import { db, currentUserId } from "../config/firebase.js";
+import { collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+
+
+// Function to save interaction
+async function saveInteraction(interaction) {
+    try {
+      const docRef = await addDoc(collection(db, "userInteractions"), {
+        userId: currentUserId || "unknown",
+        interaction});
+      console.log("Firebase document written with ID: ", docRef.id);
+    } catch (e) {
+      console.error("Error adding document to Firebase: ", e);
+    }
+  }
 
 export default class GameSceneEasy extends Phaser.Scene {
     constructor() {
         super({ key: 'GameSceneEasy' });
+        this.mode = 'easy';
         this.llmEngine = null;
         this.userInput = '';
         this.inputText = null; 
@@ -13,6 +29,7 @@ export default class GameSceneEasy extends Phaser.Scene {
         this.autocompleteText = null; 
         
     }
+
 
     // Method to create the fails counter
     createFailsCounter() {
@@ -177,6 +194,10 @@ export default class GameSceneEasy extends Phaser.Scene {
             ease: 'Sine.InOut'
         });
     }
+
+    onFeedbackClick(){
+        this.scene.start('FeedbackScene', {mode: this.mode, llmEngine: this.llmEngine});
+    }
     
     
 
@@ -312,33 +333,7 @@ export default class GameSceneEasy extends Phaser.Scene {
         // ✅ Select a new prompt before evaluation
         this.updatePromptBasedOnLevel();
     }
-    
-    onDoneButtonClick() {
-        console.log("Done button clicked! Evaluating text...");
         
-        if (typeof this.createOutputTextBox !== "function") {
-            console.error("Error: createOutputTextBox() is not defined.");
-            return;
-        }
-
-    
-        // ✅ Ensure Output Box Exists BEFORE Calling LLM
-        if (!this.outputTextBox) {
-            this.createOutputTextBox();
-        }
-    
-        // ✅ Update the text to "Evaluating..." before making the request
-        this.outputText.setText("Evaluating...");
-    
-        // ✅ Call LLM Function (evaluateText)
-        this.evaluateText(this.userInput);
-
-    }
-
-
-
-
-    
 
     async evaluateText(userInput) {
 
@@ -416,39 +411,28 @@ export default class GameSceneEasy extends Phaser.Scene {
             this.updateOutputText(aiResponse);
             this.outputTextBox.setAlpha(1);
             this.outputText.setAlpha(1);
-    
-        // } catch (error) {
-        //     console.error("Error in LLM evaluation:", error);
-        //     this.updateOutputText("Failed to generate evaluation.");
-        // }
+            
+             // Example interaction data structure
+            const interaction = {
+                timestamp: Date.now(),
+                prompt: this.currentPrompt,
+                suggestedWords: [],
+                chosenWord: "",
+                submittedText: userInput,
+                aiEvaluation: aiResponse,
+                done: true,
+                k: this.topKValue,
+                level: this.levelValue,
+                failCount: this.failCount,
+                mode: this.mode
+            };
+
+            saveInteraction(interaction); // save interaction to Firebase
+
+
+
     }
 
-//     const url = "https://api.runpod.ai/v2/z1v9biqp7gwfak/run";
-
-//     const requestConfig = {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/json",
-//         "Authorization": "rpa_QFHLZM20EVS41PROR6UGWVPK6STGGYYZ81FUMH87v3efbs"
-//       },
-//       body: JSON.stringify({"input":{messages}})
-//     };
-  
-//     try {
-//       const response = await fetch(url, requestConfig);
-      
-//       if (!response.ok) {
-//         throw new Error(`HTTP error! status: ${response.status}`);
-//       }
-      
-//       const data = await response.json();
-//       console.log(data);
-//       return data;
-//     } catch (error) {
-//       console.error('Error:', error);
-//       throw error;
-//     }
-// }
 
 
     updateOutputText(responseText) {
@@ -779,8 +763,8 @@ export default class GameSceneEasy extends Phaser.Scene {
 
     
         // ✅ Ensure Prompt Box Appears Above Other UI Elements
-        this.promptTextBox.setDepth(12);
-        this.promptText.setDepth(13);
+        this.promptTextBox.setDepth(102);
+        this.promptText.setDepth(103);
     
     
         this.updatePromptBasedOnLevel();
@@ -901,8 +885,8 @@ export default class GameSceneEasy extends Phaser.Scene {
         );
     
         // ✅ Ensure Prompt Box and Text Are Layered Properly
-        this.promptTextBox.setDepth(12);
-        this.promptText.setDepth(13);
+        this.promptTextBox.setDepth(102);
+        this.promptText.setDepth(103);
     }
     
     
@@ -936,6 +920,22 @@ export default class GameSceneEasy extends Phaser.Scene {
             this.failCount++;
             this.updateFailsCounter();
         }
+         // Example interaction data structure
+         const interaction = {
+            timestamp: Date.now(),
+            prompt: this.currentPrompt,
+            suggestedWords: this.aiSuggestedWords,
+            chosenWord: lastWord,
+            submittedText: this.userInput,
+            aiEvaluation: "",
+            done: false,
+            k: this.topKValue,
+            level: this.levelValue,
+            failCount: this.failCount,
+            mode: this.mode
+        };
+
+        saveInteraction(interaction); // save interaction to Firebase
     }
     // Method to generate autocomplete suggestion
     generateAutocomplete() {
@@ -977,25 +977,8 @@ export default class GameSceneEasy extends Phaser.Scene {
         // Ensure prompt is updated before rendering
         this.updatePromptBasedOnLevel();
         
-        // Display the prompt above the input box
-        if (this.promptText) {
-            this.promptText.destroy();
-        }
-        
-        this.promptText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY - textBoxHeight / 2 - 25,
-            this.currentPrompt || "Loading prompt...",
-            {
-                fontFamily: 'Nunito',
-                fontSize: `${this.baseFontSize}px`,
-                fontStyle: 'italic',
-                fill: COLORS_TEXT.WHITE,
-                wordWrap: { width: textBoxWidth - 30 },
-                align: 'center'
-            }
-        ).setOrigin(0.5, 1);
-        
+
+
         // Ensure text box exists and has rounded corners
         if (this.inputTextBorder) {
             this.inputTextBorder.destroy();
@@ -1368,12 +1351,26 @@ export default class GameSceneEasy extends Phaser.Scene {
             console.log("llmEngine successfully received in GameSceneEasy.");
         }
         this.llmEngine = data.llmEngine || null;
+        
+        // Reset key scene elements to ensure proper initialization when returning from other scenes
+        this.promptTextBox = null;
+        this.promptText = null;
+        this.outputTextBox = null;
+        this.outputText = null;
     }
 
     createBackgroundPattern() {
-        // Create pattern texture
-        const pattern = this.textures.createCanvas('patternCanvas', 100, 100);
-        const ctx = pattern.getContext();
+        const patternKey = 'patternCanvas';
+
+        if (!this.textures.exists(patternKey)) {
+            const pattern = this.textures.createCanvas(patternKey, 100, 100);
+            const ctx = pattern.getContext();
+    
+            if (!ctx) {
+                console.error(`Failed to create canvas texture: ${patternKey}`);
+                return;
+            }
+        
         
         // Draw pattern base with dark navy blue
         ctx.fillStyle = '#1a2639'; // Dark navy blue background
@@ -1405,6 +1402,7 @@ export default class GameSceneEasy extends Phaser.Scene {
         }
         
         pattern.refresh();
+        }
         
         // Add pattern as background
         const bg = this.add.tileSprite(0, 0, this.cameras.main.width, this.cameras.main.height, 'patternCanvas')
@@ -1460,6 +1458,9 @@ export default class GameSceneEasy extends Phaser.Scene {
         if (this.resetButton) {
             this.resetButton.setDepth(10);
         }
+        if (this.feedbackButton) {
+            this.feedbackButton.setDepth(10);
+        }
     }
 
     // Add this to your create method for debugging if needed
@@ -1475,15 +1476,9 @@ export default class GameSceneEasy extends Phaser.Scene {
     }
 
     async create() {
-        //this.add.image(400, 300, 'background'); // Example background
-        //this.cameras.main.setBackgroundColor('#13091e');
         this.cameras.main.scrollY = 0; // ✅ Ensures the camera starts at the top
-
-        //this.createBackgroundEffect();
         this.createBackgroundPattern();
 
-        const screenWidth = this.cameras.main.width;
-        const screenHeight = this.cameras.main.height;
         const margin = 100;
         const titleSize = '120px';
         const numerictitleSize = parseInt(titleSize);
@@ -1491,9 +1486,14 @@ export default class GameSceneEasy extends Phaser.Scene {
 
         
         this.createMenuBar();
-        if (!this.promptTextBox) {  // ✅ Prevent duplicate calls
-            this.createPromptTextBox();
+        
+        // Clear existing prompt box if it exists
+        if (this.promptTextBox) {
+            console.log("clearing prompt box");
+            this.promptTextBox.clear();
         }
+        // Always recreate the prompt text box
+        this.createPromptTextBox();
         
         
         // Create a white rectangle as the input box
@@ -1514,6 +1514,23 @@ export default class GameSceneEasy extends Phaser.Scene {
 
         this.doneButton = this.createButton("DONE", () => this.onDoneButtonClick(), buttonCenterX, buttonCenterY);
         this.resetButton = this.createButton("RESET", () => this.onResetRuttonClick(), buttonCenterX - 120, buttonCenterY);
+        // Calculate position for bottom-right corner button
+        const padding = 20;
+        const newButtonX = this.cameras.main.width - buttonWidth / 2 - padding;
+        const newButtonY = this.cameras.main.height - buttonHeight / 2 - padding;
+
+        // Create your new button
+        this.feedbackButton = this.createButton(
+            "feedback", 
+            () => this.onFeedbackClick(), 
+            newButtonX, 
+            newButtonY
+        );
+
+
+
+
+
 
         this.createFailsCounter();
 

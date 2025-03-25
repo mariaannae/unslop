@@ -4,6 +4,7 @@ import GameSceneHard from "./scenes/GameSceneHard.js";
 import Boot from "./scenes/Boot.js";
 import Preloader from "./scenes/Preloader.js";
 import GameSceneEasy from "./scenes/GameSceneEasy.js";
+import FeedbackScene from "./scenes/FeedbackScene.js";
 
 
 
@@ -14,7 +15,7 @@ const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    scene: [Boot, Preloader, GameSceneHard, GameSceneEasy],
+    scene: [Boot, Preloader, GameSceneHard, GameSceneEasy, FeedbackScene],
     physics: { default: 'arcade', arcade: { debug: false } },
 
     // Increase rendering resolution
