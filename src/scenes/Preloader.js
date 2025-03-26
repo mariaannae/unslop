@@ -1,4 +1,5 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS} from "../config/design_hard.js";
+import { getUserEnvironmentInfo,saveInteraction } from "../config/firebase.js";
 
 const loadWebLLM = async () => {
     const WebLLM = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm');
@@ -9,11 +10,13 @@ export default class Preloader extends Phaser.Scene {
     constructor() {
         super('Preloader');
         this.progressBar = null;
-        this.playButton = null;
+        this.playButtons = null;
         this.progress = 0; // Track progress state
         this.llmLoaded = false;
         this.loadingText = null;
         this.stopWords = [];
+        this.outputTextBox = null;
+        this.errorText = null;
     }
 
     init() {
@@ -65,6 +68,77 @@ export default class Preloader extends Phaser.Scene {
         });
     }
 
+        createOutputTextBox(text) {
+            console.log("Creating output text box...");
+            this.uiBoxWidth = this.cameras.main.width * (5 / 6);
+            const outputBoxWidth = this.uiBoxWidth;
+            const lineHeight = 24;
+            const numLines = 17;
+            const padding = 30;
+            const outputBoxHeight = numLines * lineHeight + padding * 2;
+            
+           
+            const outputBoxY = this.errorText.y + outputBoxHeight/2 + 70;// - outputBoxHeight - 10;
+            console.log("Using default position:", outputBoxY);
+        
+            // ✅ Remove existing box if it exists (prevents duplicate rendering)
+            if (this.outputTextBox) {
+                this.outputTextBox.destroy();
+            }
+        
+            // ✅ Create new output box with rounded corners
+            this.outputTextBox = this.add.graphics();
+            this.outputTextBox.fillStyle(COLORS_HEX.BACKGROUND, 1);
+            this.outputTextBox.fillRoundedRect(
+                this.cameras.main.centerX - outputBoxWidth / 2,
+                outputBoxY - outputBoxHeight / 2,
+                outputBoxWidth,
+                outputBoxHeight,
+                CORNER_RADIUS
+            );
+            this.outputTextBox.lineStyle(OUTLINE_WIDTH, COLORS_HEX.BLUE, 1);
+            this.outputTextBox.strokeRoundedRect(
+                this.cameras.main.centerX - outputBoxWidth / 2,
+                outputBoxY - outputBoxHeight / 2,
+                outputBoxWidth,
+                outputBoxHeight,
+                CORNER_RADIUS
+            );
+            this.add.existing(this.outputTextBox); // Ensure it is added to the scene
+        
+            // ✅ Remove existing text if it exists (prevents duplicates)
+            if (this.outputText) {
+                this.outputText.destroy();
+            }
+        
+            // ✅ Create output text inside the box
+            this.outputText = this.add.text(
+                this.cameras.main.centerX - outputBoxWidth / 2 + padding,
+                outputBoxY - outputBoxHeight / 2 + padding,
+                text,
+                {
+                    fontFamily: 'Nunito',
+                    fontSize: `${lineHeight}px`,
+                    fill: '#ffffff',
+                    wordWrap: { width: outputBoxWidth - padding * 2 },
+                    align: 'left',
+                    lineSpacing: 5
+                }
+            ).setOrigin(0, 0);
+        
+            // ✅ Slide-in Animation
+            this.tweens.add({
+                targets: [this.outputTextBox, this.outputText],
+                alpha: 1,
+                duration: 500,
+                ease: 'Sine.InOut'
+            });
+            // ✅ Force Phaser to recognize this object
+            this.add.existing(this.outputTextBox);
+            this.outputTextBox.setDepth(100);
+            this.outputText.setDepth(101);
+        }
+
 
     async create() {
         const screenWidth = this.cameras.main.width;
@@ -74,7 +148,7 @@ export default class Preloader extends Phaser.Scene {
 
         //window.addEventListener("resize", () => this.resizeUI());
 
-        
+        saveInteraction("creating preloader", "preloader");
 
 
         //const titleSize = Math.max(this.cameras.main.width * 0.1, 80); // Dynamic font size (10% of screen width, min 80px)
@@ -159,16 +233,26 @@ export default class Preloader extends Phaser.Scene {
         this.drawProgressBar(this.progress, progressBarLeftX, progressBarY, progressBarWidth);
 
 
+        const offset = 150;
         // === WebGPU Support Check ===
         if (!navigator.gpu) {
-            const errorText = this.add.text(screenWidth / 2, margin + 50 + offset, "WebGPU is required but not supported.", {
+            this.errorText = this.add.text(screenWidth / 2, margin + 50 + offset, "WebGPU is required but not enabled/supported.", {
                 fontFamily: 'Nunito',
                 fontSize: "50px",
                 fontWeight: "500",
                 fill: "#ff0000"
             });
-            errorText.setOrigin(0.5, 0);
-            console.error("WebGPU is required but not supported.");
+            this.errorText.setOrigin(0.5, 0);
+            console.error("WebGPU is required but not enabled/supported.");
+            //return;
+
+            
+            const { os, browser, userAgent } = getUserEnvironmentInfo();
+            if (browser === 'Safari') {
+                const text = "Safari does not natively support WebGPU. We recommend using Chrome for the best experience. You may be to enable WebGPU for Safari as follows:\n\n1. Go to 'Safari' > 'Preferences'.\n2. Click on the 'Advanced' tab.\n3. Check the box next to 'Show Develop menu in menu bar'.\n4. Close the Preferences window.\n5. Click on 'Develop' in the menu bar.\n6. Click on 'Feature Flags'.\n7. Check the box next to 'WebGPU'.\n\nAfter enabling WebGPU, please reload the page.";
+                this.createOutputTextBox(text)
+            }
+            saveInteraction("WebGPU load failure", "preloader");
             return;
         }
 
@@ -230,6 +314,8 @@ export default class Preloader extends Phaser.Scene {
                 fill: COLORS_TEXT.ERROR,
             });
             errorText.setOrigin(0.5, 0);
+            const errormsg = "Failed to initialize WebLLM:" + error;
+            saveInteraction(errormsg, "preloader");
         }
     }
 
@@ -241,7 +327,7 @@ export default class Preloader extends Phaser.Scene {
         const margin = 100;
         const offset = 220;
         if (this.progress >= 1 && this.llmLoaded) {
-
+            saveInteraction("LLM successfully loaded", "preloader");
             // Show Play Button Only When Both Are Ready
             this.showPlayButtons(screenWidth / 2, margin + offset * 1.4 + 100, llmEngine);
         }

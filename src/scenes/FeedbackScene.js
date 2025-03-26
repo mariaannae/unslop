@@ -1,20 +1,7 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_hard.js";
-import { stopwords } from "../config/stopwords.js";
-import { db, currentUserId } from "../config/firebase.js";
-import { collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+import { saveInteraction } from "../config/firebase.js";
 
 
-// Function to save interaction
-async function saveInteraction(interaction) {
-    try {
-      const docRef = await addDoc(collection(db, "feedback"), {
-        userId: currentUserId || "unknown",
-        interaction});
-      console.log("Firebase document written with ID: ", docRef.id);
-    } catch (e) {
-      console.error("Error adding document to Firebase: ", e);
-    }
-  }
 
 export default class FeedbackScene extends Phaser.Scene {
     constructor() {
@@ -137,12 +124,9 @@ export default class FeedbackScene extends Phaser.Scene {
     onDoneButtonClick() {
         console.log("Logging feedback...");
         
-        const interaction = {
-            timestamp: Date.now(),
-            feedback: this.userInput
-        }
+        const interaction = this.userInput;
 
-        saveInteraction(interaction);
+        saveInteraction(interaction, 'feedback');
         if (this.mode === "easy") {
             this.scene.start('GameSceneEasy', { llmEngine: this.llmEngine });
         }

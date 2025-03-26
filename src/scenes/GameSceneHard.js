@@ -1,20 +1,9 @@
 import { COLORS_HEX, COLORS_TEXT, OUTLINE_WIDTH, BUTTON_OUTLINE_WIDTH, CORNER_RADIUS, BUTTON_CORNER_RADIUS, buttonHeight, buttonSpacing, buttonWidth} from "../config/design_hard.js";
 import { stopwords } from "../config/stopwords.js";
-import { db, currentUserId } from "../config/firebase.js";
-import { collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+import {saveInteraction } from "../config/firebase.js";
 
 
-// Function to save interaction
-async function saveInteraction(interaction) {
-    try {
-      const docRef = await addDoc(collection(db, "userInteractions"), {
-        userId: currentUserId || "unknown",
-        interaction});
-      console.log("Firebase document written with ID: ", docRef.id);
-    } catch (e) {
-      console.error("Error adding document to Firebase: ", e);
-    }
-  }
+
 
 export default class GameSceneHard extends Phaser.Scene {
     constructor() {
@@ -379,7 +368,6 @@ export default class GameSceneHard extends Phaser.Scene {
     
              // Example interaction data structure
              const interaction = {
-                timestamp: Date.now(),
                 prompt: this.currentPrompt,
                 suggestedWords: [],
                 chosenWord: "",
@@ -392,7 +380,7 @@ export default class GameSceneHard extends Phaser.Scene {
                 mode: this.mode
             };
 
-            saveInteraction(interaction); // save interaction to Firebase
+            saveInteraction( interaction, "userInteractions"); // save interaction to Firebase
 
     }
 
@@ -886,7 +874,6 @@ export default class GameSceneHard extends Phaser.Scene {
         }
         // Example interaction data structure
         const interaction = {
-            timestamp: Date.now(),
             prompt: this.currentPrompt,
             suggestedWords: this.aiSuggestedWords,
             chosenWord: lastWord,
@@ -899,7 +886,7 @@ export default class GameSceneHard extends Phaser.Scene {
             mode: this.mode
         };
 
-        saveInteraction(interaction); // save interaction to Firebase
+        saveInteraction(interaction, "userInteractions"); // save interaction to Firebase
     }
 
     

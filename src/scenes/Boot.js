@@ -1,3 +1,5 @@
+import { waitForAuth } from "../config/firebase.js";
+
 export default class Boot extends Phaser.Scene
 {
     constructor ()
@@ -41,7 +43,7 @@ export default class Boot extends Phaser.Scene
         });
     }
 
-    create ()
+    async create ()
     {
         console.log("Waiting for fonts to fully load...");
 
@@ -53,6 +55,17 @@ export default class Boot extends Phaser.Scene
             console.error("Error loading fonts:", err);
             this.scene.start("Preloader"); // Start anyway if there's an error
         });
+
+        // ✅ Check if Firebase auth is ready
+        try {
+            const userId = await waitForAuth();
+            console.log("Auth complete, userId:", userId);
+            this.scene.start('Preloader');
+        } catch (error) {
+            console.error("Auth failed:", error);
+            // Still proceed to preloader
+            this.scene.start('Preloader');
+        };
     
 
     }
