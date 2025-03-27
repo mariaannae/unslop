@@ -247,7 +247,7 @@ export default class Preloader extends Phaser.Scene {
             
             const { os, browser, userAgent } = getUserEnvironmentInfo();
             if (browser === 'Safari') {
-                const text = "Safari does not natively support WebGPU. We recommend using Chrome for the best experience. You may be to enable WebGPU for Safari as follows:\n\n1. Go to 'Safari' > 'Preferences'.\n2. Click on the 'Advanced' tab.\n3. Check the box next to 'Show Develop menu in menu bar'.\n4. Close the Preferences window.\n5. Click on 'Develop' in the menu bar.\n6. Click on 'Feature Flags'.\n7. Check the box next to 'WebGPU'.\n\nAfter enabling WebGPU, please reload the page.";
+                const text = "Safari does not natively support WebGPU. We recommend using Chrome for the best experience. You may be able to enable WebGPU for Safari as follows:\n\n1. Go to 'Safari' > 'Preferences'.\n2. Click on the 'Advanced' tab.\n3. Check the box next to 'Show Develop menu in menu bar'.\n4. Close the Preferences window.\n5. Click on 'Develop' in the menu bar.\n6. Click on 'Feature Flags'.\n7. Check the box next to 'WebGPU'.\n\nAfter enabling WebGPU, please reload the page.";
                 this.createOutputTextBox(text)
             }
             else {

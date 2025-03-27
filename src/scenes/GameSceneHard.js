@@ -306,13 +306,7 @@ export default class GameSceneHard extends Phaser.Scene {
     const messages = [
         {
             "role": "system",
-            "content": "You are an expert writing evaluator. Your job is to assess user-generated text based on three key criteria:\n" +
-                       "1. Relevance: How well the text stays on topic for the given prompt.\n" +
-                       "2. Grammar: How grammatically correct the text is, with specific examples if errors exist.\n" +
-                       "3. Coherence: How logically structured and understandable the text is.\n\n" +
-                       "First, provide a **one-word summary** of the overall quality of the response (e.g., Excellent, Good, Needs Improvement, Poor).\n" +
-                       "Then, provide numeric scores (1-5) for each category. Each score must be **clearly labeled**, followed by a **very short** (5-7 words max) explanation on the same line.\n" +
-                       "If the grammar score is below 5, include **examples of specific grammar mistakes** from the text. Show the incorrect phrase, followed by the correct version."
+            "content": "You are an expert writing evaluator. Your job is to assess user-generated text based on three key criteria:\n"
         },
         {
             "role": "user",
@@ -321,8 +315,8 @@ export default class GameSceneHard extends Phaser.Scene {
                         
                         Evaluate the response based on:  
                         - Relevance to the given prompt.  
-                        - Grammar correctness.  
-                        - Coherence and logical flow.  
+                        - Grammatical correctness. Please consider only technical correctness and not stylistic choices.
+                        - General coherence. Does this writing make sense?
                         
                         Provide output in this strict format:  
                         
