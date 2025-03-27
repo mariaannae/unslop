@@ -403,18 +403,15 @@ export default class GameSceneEasy extends Phaser.Scene {
              // Example interaction data structure
             const interaction = {
                 prompt: this.currentPrompt,
-                suggestedWords: [],
-                chosenWord: "",
                 submittedText: userInput,
                 aiEvaluation: aiResponse,
-                done: true,
                 k: this.topKValue,
                 level: this.levelValue,
                 failCount: this.failCount,
                 mode: this.mode
             };
 
-            saveInteraction(interaction, "userInteractions"); // save interaction to Firebase
+            saveInteraction(interaction, "userSubmissions"); // save interaction to Firebase
 
 
 
@@ -799,22 +796,24 @@ export default class GameSceneEasy extends Phaser.Scene {
         const promptLevels = {
             1: [
                 "What do you want to have for dinner today?", 
-                "Why do polar bears not eat penguins?",
-                "What is the difference between a chair and a stool?",
-                "Write a two-line poem that rhymes.",
-                "Write a haiku.",
-                ],
-            2: [
-                "What did young you want to do when you grew up?",
-                "Who was Thomas Edison?",
                 "Describe what you see around you right now.",
                 "Who is your favorite musical artist and why? ",
-                "Write a coherent sentence where three consecutive words start with the same letter."
+                "Describe your living room.",
+                "Describe the sky right now.",
+                ],
+            2: [
+                "Why do polar bears not eat penguins?",
+                "What is the difference between a chair and a stool?",
+                "What did young you want to do when you grew up?",
+                "Who was Thomas Edison?",
+                "What is an interest rate?",
                 ],
             3: [
-                "Who was your first love and what happened between you?",
-                "What is an interest rate?",
-                "Describe your living room.",
+                "Write a two-line poem that rhymes.",
+                "Write a haiku.",
+                "What do you think beauty is?",
+                "What makes something art or not?",
+                "Write a coherent sentence where three consecutive words start with the same letter.",
                 "Write a very short story about a woman and her pet lion."
             ],
         };
@@ -913,8 +912,6 @@ export default class GameSceneEasy extends Phaser.Scene {
             suggestedWords: this.aiSuggestedWords,
             chosenWord: lastWord,
             submittedText: this.userInput,
-            aiEvaluation: "",
-            done: false,
             k: this.topKValue,
             level: this.levelValue,
             failCount: this.failCount,

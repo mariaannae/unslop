@@ -69,7 +69,6 @@ export default class Preloader extends Phaser.Scene {
     }
 
         createOutputTextBox(text) {
-            console.log("Creating output text box...");
             this.uiBoxWidth = this.cameras.main.width * (5 / 6);
             const outputBoxWidth = this.uiBoxWidth;
             const lineHeight = 24;
@@ -79,7 +78,6 @@ export default class Preloader extends Phaser.Scene {
             
            
             const outputBoxY = this.errorText.y + outputBoxHeight/2 + 70;// - outputBoxHeight - 10;
-            console.log("Using default position:", outputBoxY);
         
             // ✅ Remove existing box if it exists (prevents duplicate rendering)
             if (this.outputTextBox) {
@@ -251,6 +249,10 @@ export default class Preloader extends Phaser.Scene {
             if (browser === 'Safari') {
                 const text = "Safari does not natively support WebGPU. We recommend using Chrome for the best experience. You may be to enable WebGPU for Safari as follows:\n\n1. Go to 'Safari' > 'Preferences'.\n2. Click on the 'Advanced' tab.\n3. Check the box next to 'Show Develop menu in menu bar'.\n4. Close the Preferences window.\n5. Click on 'Develop' in the menu bar.\n6. Click on 'Feature Flags'.\n7. Check the box next to 'WebGPU'.\n\nAfter enabling WebGPU, please reload the page.";
                 this.createOutputTextBox(text)
+            }
+            else {
+                const text = "Your browser does not support WebGPU, or WebGPU is not enabled. Please enable WebGPU if possible, or try another browser. We recommend using Chrome for the best experience.";
+                this.createOutputTextBox(text);
             }
             saveInteraction("WebGPU load failure", "preloader");
             return;

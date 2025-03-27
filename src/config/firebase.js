@@ -46,7 +46,7 @@ const authReady = new Promise((resolve, reject) => {
   onAuthStateChanged(auth, (user) => {
       if (user) {
           currentUserId = user.uid;
-          console.log("Firebase authenticated with UID:", user.uid);
+          console.log("Firebase authenticated");
           resolve(user.uid);
       }
   }, (error) => {
