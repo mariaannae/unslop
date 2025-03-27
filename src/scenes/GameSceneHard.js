@@ -328,7 +328,7 @@ export default class GameSceneHard extends Phaser.Scene {
                         If Grammar Score < 5, list grammar mistakes in this format:  
                         - Incorrect: "[Exact incorrect phrase]" → Correct: "[Corrected version]"  
                         
-                        Only return the labeled scores and grammar corrections if applicable. Do not include explanations beyond the given format. Be sure to give at least one specific example if there are grammar errors. You can even just quote it.`
+                        Only return the labeled scores and grammar corrections if applicable. Do not include explanations beyond the given format. Do not perform a plagiarism check. Be sure to give at least one specific example if there are grammar errors. You can even just quote it.`
         }
     ];
 
