@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Keyboard Shift Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #debug-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 10000;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="debug-info">
+        <div>Keyboard Detection Test</div>
+        <div id="viewport-info">Waiting...</div>
+        <div id="keyboard-status">Keyboard: Hidden</div>
+        <div id="canvas-shift">Canvas Shift: 0px</div>
+    </div>
+
+    <script src="phaser.js"></script>
+    <script type="module">
+        // Import the game configuration
+        import { config } from './src/main.js';
+        
+        // Override the parent container
+        config.parent = 'game-container';
+        
+        // Create the game
+        const game = new Phaser.Game(config);
+        
+        // Debug info elements
+        const viewportInfo = document.getElementById('viewport-info');
+        const keyboardStatus = document.getElementById('keyboard-status');
+        const canvasShiftInfo = document.getElementById('canvas-shift');
+        
+        // Monitor viewport changes
+        function updateDebugInfo() {
+            const info = {
+                windowHeight: window.innerHeight,
+                windowWidth: window.innerWidth,
+                visualViewport: window.visualViewport ? {
+                    height: window.visualViewport.height,
+                    width: window.visualViewport.width,
+                    scale: window.visualViewport.scale
+                } : 'Not supported'
+            };
+            
+            viewportInfo.innerHTML = `
+                Window: ${info.windowWidth}x${info.windowHeight}<br>
+                ${window.visualViewport ? 
+                    `Viewport: ${info.visualViewport.width}x${info.visualViewport.height}<br>
+                     Scale: ${info.visualViewport.scale.toFixed(2)}` : 
+                    'VisualViewport not supported'}
+            `;
+            
+            // Check if keyboard is likely visible
+            if (window.visualViewport) {
+                const keyboardHeight = window.innerHeight - window.visualViewport.height;
+                if (keyboardHeight > 50) {
+                    keyboardStatus.textContent = `Keyboard: Visible (${Math.round(keyboardHeight)}px)`;
+                } else {
+                    keyboardStatus.textContent = 'Keyboard: Hidden';
+                }
+            }
+            
+            // Check canvas transform
+            const canvas = game.canvas;
+            if (canvas) {
+                const transform = window.getComputedStyle(canvas).transform;
+                if (transform && transform !== 'none') {
+                    const match = transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+                    if (match) {
+                        canvasShiftInfo.textContent = `Canvas Shift: ${match[1]}px`;
+                    }
+                } else {
+                    canvasShiftInfo.textContent = 'Canvas Shift: 0px';
+                }
+            }
+        }
+        
+        // Set up monitoring
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateDebugInfo);
+            window.visualViewport.addEventListener('scroll', updateDebugInfo);
+        }
+        window.addEventListener('resize', updateDebugInfo);
+        
+        // Initial update
+        updateDebugInfo();
+        
+        // Update periodically
+        setInterval(updateDebugInfo, 500);
+    </script>
+</body>
+</html>

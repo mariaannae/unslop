@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Detection Info</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .info-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .label {
+            font-weight: bold;
+            color: #333;
+        }
+        .value {
+            color: #666;
+        }
+        .true {
+            color: #0a0;
+            font-weight: bold;
+        }
+        .false {
+            color: #a00;
+            font-weight: bold;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+        .suggestion {
+            background: #ffe;
+            padding: 15px;
+            border-left: 4px solid #fa0;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mobile Detection Debug Information</h1>
+    
+    <div class="info-box">
+        <h2>Browser Information</h2>
+        <div class="info-row">
+            <span class="label">User Agent:</span>
+            <span class="value" id="ua"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Window Size:</span>
+            <span class="value" id="windowSize"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Screen Size:</span>
+            <span class="value" id="screenSize"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Max Touch Points:</span>
+            <span class="value" id="touchPoints"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Has Touch Events:</span>
+            <span class="value" id="hasTouch"></span>
+        </div>
+    </div>
+    
+    <div class="info-box">
+        <h2>Detection Results</h2>
+        <div class="info-row">
+            <span class="label">Is Mobile UA:</span>
+            <span class="value" id="isMobileUA"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Has Touch Capability:</span>
+            <span class="value" id="hasTouchCapability"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Is Small Screen:</span>
+            <span class="value" id="isSmallScreen"></span>
+        </div>
+        <div class="info-row">
+            <span class="label">Final Mobile Detection:</span>
+            <span class="value" id="finalDetection"></span>
+        </div>
+    </div>
+    
+    <div class="suggestion">
+        <h3>Current Behavior</h3>
+        <p>The mobile detection returns <strong id="currentResult"></strong> because:</p>
+        <ul id="reasons"></ul>
+        <p>This means you will see the <strong id="backgroundType"></strong> background.</p>
+    </div>
+    
+    <div class="info-box">
+        <h2>Test Different Scenarios</h2>
+        <button onclick="simulateMobile()">Simulate Mobile Device</button>
+        <button onclick="resetToNormal()">Reset to Normal</button>
+    </div>
+    
+    <script type="module">
+        import { isMobileDevice } from './src/config/dimensions.js';
+        
+        function updateInfo() {
+            // Browser info
+            document.getElementById('ua').textContent = navigator.userAgent.substring(0, 100) + '...';
+            document.getElementById('windowSize').textContent = `${window.innerWidth} x ${window.innerHeight}`;
+            document.getElementById('screenSize').textContent = `${screen.width} x ${screen.height}`;
+            document.getElementById('touchPoints').textContent = navigator.maxTouchPoints || 0;
+            document.getElementById('hasTouch').textContent = 'ontouchstart' in window;
+            document.getElementById('hasTouch').className = 'value ' + ('ontouchstart' in window ? 'true' : 'false');
+            
+            // Detection logic (matching isMobileDevice function)
+            const ua = navigator.userAgent.toLowerCase();
+            const touchPoints = navigator.maxTouchPoints || 'ontouchstart' in window;
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(ua);
+            const hasTouch = touchPoints > 0 || 'ontouchstart' in window;
+            const isSmallScreen = width <= 900 || height <= 600;
+            
+            // Update detection results
+            document.getElementById('isMobileUA').textContent = isMobileUA;
+            document.getElementById('isMobileUA').className = 'value ' + (isMobileUA ? 'true' : 'false');
+            
+            document.getElementById('hasTouchCapability').textContent = hasTouch;
+            document.getElementById('hasTouchCapability').className = 'value ' + (hasTouch ? 'true' : 'false');
+            
+            document.getElementById('isSmallScreen').textContent = isSmallScreen;
+            document.getElementById('isSmallScreen').className = 'value ' + (isSmallScreen ? 'true' : 'false');
+            
+            // Final result
+            const result = isMobileDevice();
+            document.getElementById('finalDetection').textContent = result;
+            document.getElementById('finalDetection').className = 'value ' + (result ? 'true' : 'false');
+            document.getElementById('currentResult').textContent = result ? 'TRUE' : 'FALSE';
+            document.getElementById('backgroundType').textContent = result ? 'mobile' : 'desktop gradient';
+            
+            // Explain why
+            const reasons = document.getElementById('reasons');
+            reasons.innerHTML = '';
+            
+            if (result) {
+                if (isMobileUA) {
+                    const li = document.createElement('li');
+                    li.textContent = 'Mobile user agent detected';
+                    reasons.appendChild(li);
+                }
+                if (hasTouch && isSmallScreen) {
+                    const li = document.createElement('li');
+                    li.textContent = 'Has touch capability AND small screen size';
+                    reasons.appendChild(li);
+                }
+            } else {
+                const li = document.createElement('li');
+                if (!isMobileUA) {
+                    li.textContent = 'No mobile user agent detected';
+                    reasons.appendChild(li);
+                }
+                if (!hasTouch || !isSmallScreen) {
+                    const li2 = document.createElement('li');
+                    if (!hasTouch) {
+                        li2.textContent = 'No touch capability detected';
+                    } else {
+                        li2.textContent = 'Screen size is not small enough (needs both width <= 900 AND height <= 600)';
+                    }
+                    reasons.appendChild(li2);
+                }
+            }
+        }
+        
+        // Initial update
+        updateInfo();
+        
+        // Update on resize
+        window.addEventListener('resize', updateInfo);
+        
+        // Make functions global for buttons
+        window.simulateMobile = function() {
+            // Override navigator properties
+            Object.defineProperty(navigator, 'userAgent', {
+                get: function() { return 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'; },
+                configurable: true
+            });
+            Object.defineProperty(navigator, 'maxTouchPoints', {
+                get: function() { return 5; },
+                configurable: true
+            });
+            window.ontouchstart = function() {};
+            updateInfo();
+        };
+        
+        window.resetToNormal = function() {
+            location.reload();
+        };
+    </script>
+</body>
+</html>

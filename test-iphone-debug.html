@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>iPhone Background Debug</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow-x: hidden;
+        }
+        #debug-info {
+            padding: 20px;
+            background: rgba(0,0,0,0.8);
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            font-size: 12px;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        .info-row {
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .label {
+            color: #0af;
+            font-weight: bold;
+        }
+        .value {
+            color: #fff;
+        }
+        .true {
+            color: #0f0;
+        }
+        .false {
+            color: #f00;
+        }
+        .error {
+            color: #f00;
+            background: rgba(255,0,0,0.2);
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug-info"></div>
+    <div id="game-container"></div>
+    
+    <script src="phaser.js"></script>
+    <script type="module">
+        // Debug info container
+        const debugDiv = document.getElementById('debug-info');
+        const logs = [];
+        
+        function log(label, value, isError = false) {
+            const row = document.createElement('div');
+            row.className = isError ? 'error' : 'info-row';
+            
+            if (typeof value === 'boolean') {
+                row.innerHTML = `<span class="label">${label}:</span> <span class="value ${value}">${value}</span>`;
+            } else {
+                row.innerHTML = `<span class="label">${label}:</span> <span class="value">${value}</span>`;
+            }
+            
+            debugDiv.appendChild(row);
+            logs.push({ label, value, isError });
+        }
+        
+        // Import the detection function
+        import { isMobileDevice } from './src/config/dimensions.js';
+        
+        // Log all detection info
+        log('User Agent', navigator.userAgent);
+        log('Screen Size', `${screen.width} x ${screen.height}`);
+        log('Window Size', `${window.innerWidth} x ${window.innerHeight}`);
+        log('Device Pixel Ratio', window.devicePixelRatio);
+        log('Max Touch Points', navigator.maxTouchPoints);
+        log('Has Touch Events', 'ontouchstart' in window);
+        
+        // Test mobile detection
+        const isMobile = isMobileDevice();
+        log('isMobileDevice() Result', isMobile);
+        
+        // Test scene that creates backgrounds
+        class TestScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'TestScene' });
+            }
+            
+            preload() {
+                log('=== PRELOAD START ===', '');
+                
+                // Try to load background images
+                this.load.setPath('assets/backgrounds');
+                
+                // Load both easy and hard backgrounds
+                for (let level = 1; level <= 3; level++) {
+                    const easyKey = `easy_lvl_${level}`;
+                    const hardKey = `hard_lvl_${level}`;
+                    
+                    this.load.image(easyKey, `${easyKey}.png`);
+                    this.load.image(hardKey, `${hardKey}.png`);
+                    
+                    log(`Loading ${easyKey}`, 'queued');
+                    log(`Loading ${hardKey}`, 'queued');
+                }
+                
+                // Add load event handlers
+                this.load.on('filecomplete', (key, type, data) => {
+                    log(`Loaded: ${key}`, 'success');
+                });
+                
+                this.load.on('loaderror', (file) => {
+                    log(`Failed to load: ${file.key}`, file.url, true);
+                });
+            }
+            
+            create() {
+                log('=== CREATE START ===', '');
+                
+                // Log scene info
+                log('Canvas Size', `${this.sys.game.canvas.width} x ${this.sys.game.canvas.height}`);
+                log('Camera Size', `${this.cameras.main.width} x ${this.cameras.main.height}`);
+                
+                // Clear camera background
+                this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+                log('Camera BG Cleared', 'true');
+                
+                // Try to create a background manually
+                const bgKey = 'easy_lvl_1';
+                
+                if (this.textures.exists(bgKey)) {
+                    log(`Texture ${bgKey} exists`, true);
+                    
+                    try {
+                        // Create background image
+                        const bg = this.add.image(
+                            this.cameras.main.centerX,
+                            this.cameras.main.centerY,
+                            bgKey
+                        );
+                        
+                        bg.setOrigin(0.5, 0.5);
+                        bg.setDepth(-100);
+                        
+                        // Scale to cover
+                        const scaleX = this.cameras.main.width / bg.width;
+                        const scaleY = this.cameras.main.height / bg.height;
+                        const scale = Math.max(scaleX, scaleY) * 1.1;
+                        bg.setScale(scale);
+                        
+                        log('Background Created', {
+                            position: `${bg.x}, ${bg.y}`,
+                            scale: bg.scale,
+                            depth: bg.depth,
+                            visible: bg.visible,
+                            alpha: bg.alpha
+                        });
+                        
+                        // Add debug text on top
+                        this.add.text(
+                            this.cameras.main.centerX,
+                            this.cameras.main.height - 100,
+                            'Background should be visible',
+                            {
+                                fontSize: '24px',
+                                color: '#ffffff',
+                                stroke: '#000000',
+                                strokeThickness: 4,
+                                align: 'center'
+                            }
+                        ).setOrigin(0.5);
+                        
+                    } catch (error) {
+                        log('Error creating background', error.message, true);
+                    }
+                } else {
+                    log(`Texture ${bgKey} NOT found`, 'Check assets path', true);
+                    
+                    // List all available textures
+                    const textures = Object.keys(this.textures.list).filter(k => 
+                        k.includes('lvl') || k.includes('background')
+                    );
+                    log('Available textures', textures.join(', ') || 'none');
+                }
+                
+                // Try the createBackground function
+                try {
+                    log('=== TESTING createBackground ===', '');
+                    
+                    // Import and test
+                    import('../src/backgrounds/createBackground.js').then(module => {
+                        const { createBackground } = module;
+                        
+                        // Override console.log temporarily to capture logs
+                        const originalLog = console.log;
+                        console.log = (...args) => {
+                            originalLog(...args);
+                            if (args[0] && args[0].includes('[BG')) {
+                                log('BG Log', args.join(' '));
+                            }
+                        };
+                        
+                        // Test createBackground
+                        const bgConfig = { effect: 'easy', color: 0x000033 };
+                        createBackground(this, bgConfig, 1, 0);
+                        
+                        // Restore console.log
+                        setTimeout(() => {
+                            console.log = originalLog;
+                        }, 1000);
+                        
+                        log('createBackground called', 'Check logs above');
+                    }).catch(error => {
+                        log('Failed to import createBackground', error.message, true);
+                    });
+                } catch (error) {
+                    log('Error with createBackground', error.message, true);
+                }
+                
+                // Check display list
+                log('Display List Count', this.children.list.length);
+                
+                // Log background objects
+                const bgs = this.children.list.filter(child => 
+                    child.depth < 0 || (child.texture && child.texture.key && child.texture.key.includes('lvl'))
+                );
+                log('Background Objects', bgs.length);
+                
+                bgs.forEach((bg, i) => {
+                    log(`BG ${i}`, {
+                        type: bg.type,
+                        texture: bg.texture?.key || 'N/A',
+                        depth: bg.depth,
+                        visible: bg.visible
+                    });
+                });
+            }
+        }
+        
+        // Create game config
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'game-container',
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: '#ff0000', // Red background to make it obvious if no image loads
+            scene: TestScene
+        };
+        
+        // Create game
+        const game = new Phaser.Game(config);
+        
+        // Log game creation
+        log('Game Created', true);
+    </script>
+</body>
+</html>

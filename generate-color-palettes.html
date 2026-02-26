@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Palette Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .palette-container {
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .palette-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #444;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            display: block;
+        }
+        .download-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 10px;
+            cursor: pointer;
+            border: none;
+            font-size: 16px;
+        }
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #e8f4f8;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Nonslop Color Palette Generator</h1>
+    <div class="status">Click "Generate Palettes" to create PNG images of each color palette</div>
+    
+    <button id="generateBtn" class="download-btn" style="display: block; margin: 20px auto;">Generate Palettes</button>
+    
+    <div id="palettes"></div>
+
+    <script>
+        // Color palette definitions from design.js
+        const hexToString = (hex) => {
+            if (hex === undefined || hex === null) {
+                console.warn('Undefined or null color value passed to hexToString');
+                return '#000000';
+            }
+            return '#' + hex.toString(16).padStart(6, '0');
+        };
+
+        const BASIC_COLORS = {
+            BACKGROUND: 0x0a0c36,
+            BACKGROUND_DARKEST: 0x00060f,
+            BACKGROUND_LESS_DARK: 0x101551,
+            BOX_OUTLINE: 0x00ffff,
+            BOX_FILL: 0x00060f,
+            BACKGROUND_MID: 0x242987,
+            BACKGROUND_ALT: 0x00292a,
+            ACCENT: 0x9e0e77,
+            HIGHLIGHT: 0xdaff77,
+            TEXT: 0xebfff7,
+            GREEN: 0xb4ffae,
+            BUTTON: {
+                FILL: 0x9e0e77,
+                OVERLAY: 0xb91255
+            }
+        };
+
+        const BASIC_TEXT_COLORS = {
+            PRIMARY: hexToString(0xebfff7),
+            SECONDARY: hexToString(0x00e5ff),
+            HIGHLIGHT: hexToString(0xfbf056),
+            ACCENT: hexToString(0xf8ac3a),
+            SUCCESS: hexToString(0xbfff95),
+            ERROR: hexToString(0xd71a27),
+            DARKEST: hexToString(0x00060f)
+        };
+
+        const EASY_COLORS = {
+            BACKGROUND: 0x001620,
+            BOX_OUTLINE: 0x9e0e77,
+            BOX_FILL: 0x00060f,
+            BACKGROUND_ALT: 0x002435,
+            BACKGROUND_MID: 0x004565,
+            ACCENT: 0x00e5ff,
+            HIGHLIGHT: 0xfbf056,
+            TEXT: 0xebfff7,
+            WARNING: 0xf8ac3a,
+            BUTTON: {
+                FILL: 0x9e0e77,
+                OVERLAY: 0xb91255
+            }
+        };
+
+        const EASY_TEXT_COLORS = {
+            PRIMARY: hexToString(0xebfff7),
+            SECONDARY: hexToString(0xcdffda),
+            HIGHLIGHT: hexToString(0xfbf056),
+            ACCENT: hexToString(0xdaff77),
+            SUCCESS: hexToString(0x00cc00),
+            ERROR: hexToString(0xd71a27),
+            TITLE: hexToString(0xfbf056)
+        };
+
+        const HARD_COLORS = {
+            BACKGROUND: 0x200025,
+            BACKGROUND_ALT: 0x400045,
+            BACKGROUND_MID: 0x800085,
+            BOX_OUTLINE: 0x00e5ff,
+            BOX_FILL: 0x00060f,
+            ACCENT: 0x7a0782,
+            HIGHLIGHT: 0x600065,
+            ERROR: 0xd71a27,
+            TEXT: 0xebfff7,
+            WARNING: 0xf8ac3a,
+            BUTTON: {
+                FILL: 0x9e0e77,
+                OVERLAY: 0xb91255
+            },
+            SLIDER: {
+                HANDLE: 0xf8ac3a
+            }
+        };
+
+        const HARD_TEXT_COLORS = {
+            PRIMARY: hexToString(0xebfff7),
+            SECONDARY: hexToString(0x00060f),
+            ACCENT: hexToString(0x9e0e77),
+            HIGHLIGHT: hexToString(0xdaff77),
+            ERROR: hexToString(0xd71a27),
+            BACKGROUND: hexToString(0x03062D),
+            TITLE: hexToString(0xfbf056)
+        };
+
+        const palettes = [
+            { name: 'BASIC', colors: BASIC_COLORS, textColors: BASIC_TEXT_COLORS },
+            { name: 'EASY', colors: EASY_COLORS, textColors: EASY_TEXT_COLORS },
+            { name: 'HARD', colors: HARD_COLORS, textColors: HARD_TEXT_COLORS }
+        ];
+
+        function flattenObject(obj, prefix = '') {
+            let result = [];
+            for (const [key, value] of Object.entries(obj)) {
+                const newKey = prefix ? `${prefix}.${key}` : key;
+                if (typeof value === 'object' && value !== null && !value.toString().startsWith('#')) {
+                    result = result.concat(flattenObject(value, newKey));
+                } else {
+                    result.push({ name: newKey, value: value });
+                }
+            }
+            return result;
+        }
+
+        function createPaletteCanvas(palette) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Flatten both color objects
+            const mainColors = flattenObject(palette.colors, 'COLORS');
+            const textColors = flattenObject(palette.textColors, 'TEXT_COLORS');
+            const allColors = [...mainColors, ...textColors];
+            
+            // Canvas dimensions
+            const colorBoxSize = 60;
+            const padding = 20;
+            const textAreaWidth = 250;
+            const rowHeight = colorBoxSize + 10;
+            const canvasWidth = colorBoxSize + textAreaWidth + padding * 3;
+            const canvasHeight = (allColors.length * rowHeight) + padding * 2;
+            
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            // White background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // Title
+            ctx.fillStyle = '#333333';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText(`${palette.name} Palette`, padding, padding + 20);
+            
+            // Draw colors
+            allColors.forEach((colorObj, index) => {
+                const y = padding + 40 + (index * rowHeight);
+                
+                // Convert color value to hex string
+                let colorHex;
+                if (typeof colorObj.value === 'number') {
+                    colorHex = hexToString(colorObj.value);
+                } else {
+                    colorHex = colorObj.value;
+                }
+                
+                // Draw color box
+                ctx.fillStyle = colorHex;
+                ctx.fillRect(padding, y, colorBoxSize, colorBoxSize);
+                ctx.strokeStyle = '#333333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(padding, y, colorBoxSize, colorBoxSize);
+                
+                // Draw color name
+                ctx.fillStyle = '#333333';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(colorObj.name, padding + colorBoxSize + 15, y + 25);
+                
+                // Draw hex code
+                ctx.font = '12px monospace';
+                ctx.fillStyle = '#666666';
+                ctx.fillText(colorHex.toUpperCase(), padding + colorBoxSize + 15, y + 45);
+            });
+            
+            return canvas;
+        }
+
+        function generatePalettes() {
+            const container = document.getElementById('palettes');
+            container.innerHTML = '';
+            
+            palettes.forEach(palette => {
+                const paletteDiv = document.createElement('div');
+                paletteDiv.className = 'palette-container';
+                
+                const title = document.createElement('div');
+                title.className = 'palette-title';
+                title.textContent = `${palette.name} Palette`;
+                paletteDiv.appendChild(title);
+                
+                const canvas = createPaletteCanvas(palette);
+                paletteDiv.appendChild(canvas);
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'download-btn';
+                downloadBtn.textContent = `Download ${palette.name} Palette`;
+                downloadBtn.onclick = function() {
+                    const link = document.createElement('a');
+                    link.download = `${palette.name.toLowerCase()}_palette.png`;
+                    link.href = canvas.toDataURL();
+                    link.click();
+                };
+                paletteDiv.appendChild(downloadBtn);
+                
+                container.appendChild(paletteDiv);
+            });
+            
+            document.querySelector('.status').textContent = 'Palettes generated! Click the download buttons to save as PNG files.';
+        }
+
+        document.getElementById('generateBtn').addEventListener('click', generatePalettes);
+    </script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test LLM Suggestions - Fixed Version</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-left: 3px solid #4CAF50;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .loading {
+            color: #999;
+            font-style: italic;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test LLM Suggestions with Cache Busting - Fixed Version</h1>
+    
+    <div class="test-section">
+        <h2>Test Setup</h2>
+        <p>Context: "The sun was shining brightly in the"</p>
+        <button onclick="runMultipleTests()">Run 5 Sequential Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script type="module">
+        import { CreateWebWorkerMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+        
+        let engine = null;
+        let testCount = 0;
+        
+        window.clearResults = function() {
+            document.getElementById('results').innerHTML = '';
+            testCount = 0;
+        };
+        
+        async function initEngine() {
+            if (!engine) {
+                addResult("Initializing engine...", "loading");
+                engine = await CreateWebWorkerMLCEngine(
+                    new Worker(
+                        new URL("https://esm.run/@mlc-ai/web-llm/lib/web-llm.min.js", import.meta.url),
+                        { type: "module" }
+                    ),
+                    "SmolLM2-360M-Instruct-q4f16_1-MLC",
+                    {
+                        initProgressCallback: (progress) => {
+                            console.log("Loading:", progress.text);
+                        }
+                    }
+                );
+                addResult("Engine initialized!", "success");
+            }
+            return engine;
+        }
+        
+        function addResult(message, type = "result") {
+            const resultsDiv = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type === "loading" ? "loading" : "result";
+            div.innerHTML = message;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function generateSuggestionsFixed(context) {
+            const engine = await initEngine();
+            
+            // Generate unique identifiers for this request
+            const conversationId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Much larger temperature variation
+            const baseTemp = 0.2;
+            const tempVariation = Math.random() * 0.4 - 0.2;
+            const finalTemp = Math.max(0.1, Math.min(1.5, baseTemp + tempVariation));
+            
+            // Add invisible characters for cache busting
+            const invisibleChars = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+            const randomInvisible = invisibleChars[Math.floor(Math.random() * invisibleChars.length)];
+            const randomPosition = Math.floor(Math.random() * 3);
+            
+            let modifiedContext = context;
+            if (randomPosition === 0) {
+                modifiedContext = randomInvisible + context;
+            } else if (randomPosition === 1 && context.length > 10) {
+                const mid = Math.floor(context.length / 2);
+                modifiedContext = context.slice(0, mid) + randomInvisible + context.slice(mid);
+            } else {
+                modifiedContext = context + randomInvisible;
+            }
+            
+            // Add unique suffix
+            const cacheBuster = ` [${uniqueId}]`;
+            modifiedContext = modifiedContext + cacheBuster;
+            
+            // Create messages with unique formatting
+            const messages = [
+                {
+                    role: "system", 
+                    content: `[SESSION: ${conversationId}] You are a text completion assistant. Complete the following text with exactly ONE word. Session ID: ${uniqueId}. Random value: ${Math.random()}`
+                },
+                {
+                    role: "user",
+                    content: `Complete this text with the next word: "${modifiedContext}"\nProvide only one word. [REQ: ${uniqueId}]`
+                }
+            ];
+            
+            const response = await engine.chat.completions.create({
+                messages: messages,
+                max_tokens: 1,
+                n: 1,
+                top_logprobs: 5,
+                logprobs: true,
+                temperature: finalTemp,
+                stream: false,
+                seed: Math.floor(Math.random() * 10000000),
+                presence_penalty: Math.random() * 0.2,
+                frequency_penalty: Math.random() * 0.2,
+                top_p: 0.9 + Math.random() * 0.1
+            });
+            
+            return {
+                response: response,
+                params: {
+                    temperature: finalTemp,
+                    conversationId: conversationId,
+                    uniqueId: uniqueId
+                }
+            };
+        }
+        
+        window.runMultipleTests = async function() {
+            const context = "The sun was shining brightly in the";
+            clearResults();
+            
+            for (let i = 0; i < 5; i++) {
+                testCount++;
+                addResult(`<h3>Test ${testCount}</h3>`);
+                
+                try {
+                    const result = await generateSuggestionsFixed(context);
+                    const logprobs = result.response.choices[0].logprobs.content[0].top_logprobs;
+                    const suggestions = logprobs.map(item => item.token);
+                    
+                    addResult(`
+                        <strong>Parameters:</strong><br>
+                        Temperature: ${result.params.temperature.toFixed(3)}<br>
+                        Conversation ID: ${result.params.conversationId}<br>
+                        Unique ID: ${result.params.uniqueId}<br>
+                        <strong>Suggestions:</strong> ${JSON.stringify(suggestions)}<br>
+                        <details>
+                            <summary>Full Response</summary>
+                            <pre>${JSON.stringify(result.response, null, 2)}</pre>
+                        </details>
+                    `);
+                    
+                    // Add a small delay between tests
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (error) {
+                    addResult(`Error: ${error.message}`, "error");
+                }
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Overlay Test</title>
+    <script src="phaser.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border: 1px solid #fff;
+            color: #fff;
+            font-family: monospace;
+        }
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>Current Streak: <span id="streak">0</span></div>
+        <div>Overlay Opacity: <span id="opacity">0.7</span></div>
+        <div>Overlay Count: <span id="count">0</span></div>
+        <button onclick="increaseStreak()">Increase Streak</button>
+        <button onclick="resetStreak()">Reset Streak</button>
+        <button onclick="updateBackground()">Update Background</button>
+    </div>
+
+    <script type="module">
+        import { createBackground } from './src/backgrounds/createBackground.js';
+        import { EASY_COLORS_HEX, HARD_COLORS_HEX, THEMES } from './src/config/design.js';
+
+        let currentStreak = 0;
+        let testScene;
+
+        class TestScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'TestScene' });
+                this.wordStreak = 0;
+                this.levelValue = 1;
+                this.mode = 'easy';
+            }
+
+            preload() {
+                // Load mobile backgrounds
+                this.load.setPath('assets/backgrounds');
+                for (let level = 1; level <= 3; level++) {
+                    this.load.image(`easy_lvl_${level}`, `easy_lvl_${level}.png`);
+                    this.load.image(`hard_lvl_${level}`, `hard_lvl_${level}.png`);
+                }
+            }
+
+            create() {
+                testScene = this;
+                
+                // Clear camera background
+                this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+                
+                // Create initial background
+                this.updateBackgroundForLevel();
+                
+                // Count overlays in display list
+                this.countOverlays();
+            }
+
+            updateBackgroundForLevel() {
+                console.log("[TEST] updateBackgroundForLevel called");
+                console.log("[TEST] Current streak:", this.wordStreak);
+                
+                // Clean up existing background elements first
+                if (this.background) {
+                    console.log("[TEST] Destroying existing background");
+                    
+                    // IMPORTANT: Clean up the overlay BEFORE destroying the background
+                    if (this.background.overlay) {
+                        console.log("[TEST] Destroying existing overlay");
+                        this.background.overlay.destroy();
+                        this.background.overlay = null;
+                    }
+                    
+                    // Also clean up any tint overlay if it exists
+                    if (this.background.tintOverlay) {
+                        console.log("[TEST] Destroying existing tint overlay");
+                        this.background.tintOverlay.destroy();
+                        this.background.tintOverlay = null;
+                    }
+                    
+                    this.background.destroy();
+                }
+                
+                // Create new background
+                const bgConfig = THEMES[this.mode]?.background;
+                createBackground(this, bgConfig, this.levelValue, this.wordStreak);
+                
+                // Count overlays after creation
+                this.time.delayedCall(100, () => this.countOverlays());
+            }
+
+            countOverlays() {
+                // Count rectangles that could be overlays
+                let overlayCount = 0;
+                let overlayInfo = [];
+                
+                this.children.list.forEach((child, index) => {
+                    if (child.type === 'Rectangle' && child.depth >= -99 && child.depth <= -90) {
+                        overlayCount++;
+                        overlayInfo.push({
+                            index: index,
+                            depth: child.depth,
+                            alpha: child.alpha,
+                            color: child.fillColor
+                        });
+                    }
+                });
+                
+                console.log("[TEST] Overlay count:", overlayCount);
+                console.log("[TEST] Overlay info:", overlayInfo);
+                
+                // Update UI
+                document.getElementById('count').textContent = overlayCount;
+                
+                // Calculate expected opacity
+                const streakIntensity = this.getStreakIntensity(this.wordStreak);
+                const baseOpacity = 0.7;
+                const opacityReduction = streakIntensity * 0.15;
+                const expectedOpacity = Math.max(0.1, baseOpacity - opacityReduction);
+                document.getElementById('opacity').textContent = expectedOpacity.toFixed(2);
+            }
+
+            getStreakIntensity(streak) {
+                if (streak <= 0) return 0;
+                const effectiveStreak = Math.min(16, streak);
+                const intensity = 1 + (effectiveStreak * 0.15) + (Math.sqrt(effectiveStreak) * 0.1);
+                return Math.min(4, intensity);
+            }
+        }
+
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            scene: TestScene,
+            backgroundColor: '#000000'
+        };
+
+        const game = new Phaser.Game(config);
+
+        // Global functions for buttons
+        window.increaseStreak = function() {
+            currentStreak++;
+            testScene.wordStreak = currentStreak;
+            document.getElementById('streak').textContent = currentStreak;
+        };
+
+        window.resetStreak = function() {
+            currentStreak = 0;
+            testScene.wordStreak = 0;
+            document.getElementById('streak').textContent = 0;
+        };
+
+        window.updateBackground = function() {
+            if (testScene) {
+                testScene.updateBackgroundForLevel();
+            }
+        };
+    </script>
+</body>
+</html>

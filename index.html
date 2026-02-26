@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+        <!-- Open Graph Meta Tags -->
+        <meta property="og:title" content="NONSLOP - Would you like to play a game?" />
+        <meta property="og:description" content="Test your skills and earn unique badges in this minimalist puzzle game. How far can you go?" />
+        <meta property="og:url" content="https://nonslop.app" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="NONSLOP" />
+        <!-- Twitter Card Meta Tags -->
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="NONSLOP - Would you like to play a game?" />
+        <meta name="twitter:description" content="Test your skills and earn unique badges in this minimalist puzzle game. How far can you go?" />
+        <title>NONSLOP</title>
+        <style>
+     
+            
+            /* Reset CSS: Please avoid making changes here unless you know what you're doing :) */
+            *,
+            *::before,
+            *::after {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html, body {
+                width: 100vw;
+                height: 100vh;
+                min-height: 100vh;
+                margin: 0;
+                padding: 0;
+            }
+
+            #game-container {
+                width: 100%;
+                height: 100%;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                /* Background removed to allow mobile background images to show through */
+            }
+
+            canvas {
+                /* Let Phaser handle all canvas sizing and positioning */
+                display: block;
+            }
+    
+            body {
+                line-height: 1;
+                font-family: 'barcade3d', Arial, sans-serif;
+                background-color: #000000;
+                /* Black background for areas outside the canvas */
+            }
+    
+            ol, ul {
+                list-style: none;
+            }
+    
+            img, video {
+                max-width: 100%;
+                height: auto;
+                display: block;
+                object-fit: contain;
+            }
+            
+            /* Ensure SVG images maintain their aspect ratio */
+            svg, img[src$=".svg"] {
+                width: 100%;
+                height: 100%;
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+                aspect-ratio: attr(width) / attr(height);
+                transform-origin: center;
+            }
+    
+            a {
+                text-decoration: none;
+                color: inherit;
+            }
+            
+            /* Fix cursor styling */
+            #game-container, canvas {
+                cursor: default !important;
+            }
+            
+        </style>
+    </head>
+    <body>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/webfont/1.6.28/webfontloader.js"></script>
+        
+        <div id="game-container"></div>
+        <script src="./phaser.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/phaser3-rex-plugins/dist/rexbbcodetextplugin.min.js"></script>
+        <script type="module" src="./src/main.js"></script>
+    </body>
+    </html>

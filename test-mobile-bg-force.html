@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mobile Background Test - Force Mobile</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <!-- Override navigator to simulate mobile -->
+    <script>
+        // Store original values
+        const originalUA = navigator.userAgent;
+        const originalMaxTouchPoints = navigator.maxTouchPoints;
+        
+        // Override navigator properties to simulate mobile
+        Object.defineProperty(navigator, 'userAgent', {
+            get: function() { return 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'; }
+        });
+        
+        Object.defineProperty(navigator, 'maxTouchPoints', {
+            get: function() { return 5; }
+        });
+        
+        // Add touch event support
+        window.ontouchstart = function() {};
+        
+        console.log('Simulating mobile environment:');
+        console.log('User Agent:', navigator.userAgent);
+        console.log('Max Touch Points:', navigator.maxTouchPoints);
+        console.log('Has ontouchstart:', 'ontouchstart' in window);
+    </script>
+    
+    <script src="phaser.js"></script>
+    <script src="plugins/rexbbcodetextplugin.min.js"></script>
+    <script type="module" src="src/main.js"></script>
+    
+    <script>
+        // After the game loads, we'll navigate directly to the LeaderboardScene for testing
+        window.addEventListener('load', () => {
+            // Wait a bit for the game to initialize
+            setTimeout(() => {
+                // Get the Phaser game instance
+                const game = window.game;
+                if (game && game.scene) {
+                    console.log('Navigating to LeaderboardScene for testing...');
+                    
+                    // Start the LeaderboardScene with test data
+                    game.scene.start('LeaderboardScene', {
+                        mode: 'easy',
+                        levelValue: 1,
+                        score: 100
+                    });
+                    
+                    console.log('LeaderboardScene started');
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
