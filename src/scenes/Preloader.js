@@ -185,22 +185,21 @@ export default class Preloader extends Phaser.Scene {
         this.load.setPath('assets/backgrounds');
         this.load.image('preloader-mobile-bg', 'background_0.png');
         
-        // Load game backgrounds for mobile (easy and hard modes, levels 1-3)
+        // Load game backgrounds for mobile (levels 1-3)
         for (let level = 1; level <= 3; level++) {
-            this.load.image(`easy_lvl_${level}`, `easy_lvl_${level}.png`);
             this.load.image(`hard_lvl_${level}`, `hard_lvl_${level}.png`);
         }
         
         this.load.setPath('assets');
         this.load.image('gh-qr-code', 'gh-qr-code.png');
-        this.load.image('nonslop-qr-code', 'nonslop-qr-code.png'); // Load for badge generation
+        this.load.image('unslop-qr-code', 'unslop-qr-code.png'); // Load for badge generation
         this.load.image('settings', 'settings.png');
 
         // Load badge images with scores
         this.load.setPath('assets/badges');
-        // Preload all badgeNum 1-12, both modes, and all available score files
+        // Preload all badgeNum 1-12 and all available score files
         const badgeNums = Array.from({ length: 12 }, (_, i) => i + 1); // 1-12 inclusive
-        const modes = ['easy', 'hard'];
+        const modes = ['hard']; // Only hard mode now
         // Dynamically find all badge files in assets/badges
         const badgeFiles = (typeof require !== "undefined")
           ? require('fs').readdirSync('assets/badges')
@@ -779,7 +778,7 @@ export default class Preloader extends Phaser.Scene {
                 
                 // Force a small additional delay before starting the next scene on mobile
                 this.time.delayedCall(50, () => {
-                    this.scene.start('InstructionScene', { llmEngine: this.llmEngine });
+                    this.scene.start('BaseGameScene', { levelValue: 1 });
                 });
             });
         } else {
@@ -787,7 +786,7 @@ export default class Preloader extends Phaser.Scene {
             this.time.delayedCall(100, () => {
                 // Clean up before transitioning
                 this.cleanupScene();
-                this.scene.start('InstructionScene', { llmEngine: this.llmEngine });
+                this.scene.start('BaseGameScene', { levelValue: 1 });
             });
         }
     }
@@ -1130,7 +1129,7 @@ export default class Preloader extends Phaser.Scene {
             }
             
             // Create the title text
-            titleText = this.add.text(screenWidth / 2, y, "(NONSLOP)", titleStyle);
+            titleText = this.add.text(screenWidth / 2, y, "(unslop)", titleStyle);
             titleText.setOrigin(0.5, 0);
             titleText.x = -600 * this.uiScale; // Start off-screen
             
@@ -1205,7 +1204,7 @@ export default class Preloader extends Phaser.Scene {
             const tempTitleStyle = { ...titleStyle };
             tempTitleStyle.fontFamily = 'VT323, monospace'; // Fallback font
             
-            titleText = this.add.text(screenWidth / 2, y, "(NONSLOP)", tempTitleStyle);
+            titleText = this.add.text(screenWidth / 2, y, "(unslop)", tempTitleStyle);
             titleText.setOrigin(0.5, 0);
             titleText.x = targetX; // Position in center immediately
             

@@ -1,4 +1,4 @@
-import { THEMES, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT, DESIGN } from "../config/design.js";
+import { THEME, COLORS_HEX, COLORS_TEXT, DESIGN } from "../config/design.js";
 import { createBackground } from "../backgrounds/createBackground.js";
 import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle } from "../config/textStyles.js";
@@ -54,18 +54,11 @@ export default class GameOverScene extends Phaser.Scene {
   }
 
   init(data) {
-    this.mode = data.mode || 'easy';
     this.levelValue = data.levelValue || 1;
     this.score = data.score || 0;
     this.userResponse = data.userResponse || data.userInput || ''; // Receive user text
-
-    if (this.mode === "easy") {
-      this.COLORS_HEX = EASY_COLORS_HEX;
-      this.COLORS_TEXT = EASY_COLORS_TEXT;
-    } else {
-      this.COLORS_HEX = HARD_COLORS_HEX;
-      this.COLORS_TEXT = HARD_COLORS_TEXT;
-    }
+    this.COLORS_HEX = COLORS_HEX;
+    this.COLORS_TEXT = COLORS_TEXT;
   }
 
   async getBadgeTextureKey() {
@@ -139,11 +132,7 @@ export default class GameOverScene extends Phaser.Scene {
     this.deviceType = detectDeviceType();
 
     // Background
-    if (this.mode === "easy") {
-      createBackground(this, THEMES.easy.background, this.levelValue);
-    } else {
-      createBackground(this, THEMES.hard.background, this.levelValue);
-    }
+    createBackground(this, THEME.background, this.levelValue);
 
     // Heading - using consistent scaling patterns from Preloader
     const titleY = this.scalingManager.heightPercent(SCENE_LAYOUT.titleTopOffset.percent);
@@ -349,7 +338,7 @@ export default class GameOverScene extends Phaser.Scene {
                 </style>
               </head>
               <body>
-                <img src="${badgeDataURL}" alt="Nonslop Badge">
+                <img src="${badgeDataURL}" alt="unslop Badge">
                 <div class="instructions">
                   <p>To save to Photos:</p>
                   <p>1. <span class="highlight">Press and hold</span> the image above</p>
@@ -375,10 +364,10 @@ export default class GameOverScene extends Phaser.Scene {
                 const blob = await response.blob();
                 
                 // Try sharing without canShare check (some browsers don't implement it)
-                const file = new File([blob], `nonslop-badge-${this.score}.png`, { type: 'image/png' });
+                const file = new File([blob], `unslop-badge-${this.score}.png`, { type: 'image/png' });
                 const shareData = {
                   files: [file],
-                  title: 'My Nonslop Badge',
+                  title: 'My unslop Badge',
                   text: `I scored ${this.score} on ${this.mode} mode!`
                 };
                 
@@ -401,7 +390,7 @@ export default class GameOverScene extends Phaser.Scene {
             // Desktop approach: Use download with data URL
             const a = document.createElement('a');
             a.href = badgeDataURL;
-            a.download = `nonslop-badge-${this.score}.png`;
+            a.download = `unslop-badge-${this.score}.png`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -483,7 +472,7 @@ export default class GameOverScene extends Phaser.Scene {
                 </style>
               </head>
               <body>
-                <img src="${badgeDataURL}" alt="Nonslop Badge">
+                <img src="${badgeDataURL}" alt="unslop Badge">
                 <div class="instructions">
                   <p>To copy this image:</p>
                   <p>1. <span class="highlight">Press and hold</span> the image above</p>
@@ -508,12 +497,12 @@ export default class GameOverScene extends Phaser.Scene {
                 // Convert data URL to blob
                 const response = await fetch(badgeDataURL);
                 const blob = await response.blob();
-                const file = new File([blob], `nonslop-badge-${this.score}.png`, { type: 'image/png' });
+                const file = new File([blob], `unslop-badge-${this.score}.png`, { type: 'image/png' });
                 
                 // Try sharing without canShare check (some browsers don't implement it)
                 const shareData = {
                   files: [file],
-                  title: 'My Nonslop Badge',
+                  title: 'My unslop Badge',
                   text: `I scored ${this.score} on ${this.mode} mode!`
                 };
                 
@@ -599,7 +588,7 @@ export default class GameOverScene extends Phaser.Scene {
     const playAgainBottomEdge = playAgainY + buttonHeight / 2;
 
     // Social share buttons - positioned at bottom of screen
-    const gameAddress = "nonslop.app";
+    const gameAddress = "unslop.app";
     const socialPlatforms = [
       { 
         key: "facebook", 
@@ -674,7 +663,7 @@ export default class GameOverScene extends Phaser.Scene {
       
       // Get badge info
       const badgeDataURL = BadgeGenerator.toDataURL(this, this.badgeTextureKey);
-      const shareText = `Would you like to play a game? Try NONSLOP 🎮`;
+      const shareText = `Would you like to play a game? Try unslop 🎮`;
       const shareUrl = gameAddress;
       
       // Special handling for email
@@ -691,10 +680,10 @@ export default class GameOverScene extends Phaser.Scene {
           // Convert data URL to blob
           const response = await fetch(badgeDataURL);
           const blob = await response.blob();
-          const file = new File([blob], `nonslop-badge-${this.score}.png`, { type: 'image/png' });
+          const file = new File([blob], `unslop-badge-${this.score}.png`, { type: 'image/png' });
           
           const shareData = {
-            title: 'My Nonslop Badge',
+            title: 'My unslop Badge',
             text: shareText,
             url: shareUrl,
             files: [file]
@@ -707,7 +696,7 @@ export default class GameOverScene extends Phaser.Scene {
           } else {
             // Try without files
             await navigator.share({
-              title: 'My Nonslop Badge',
+              title: 'My unslop Badge',
               text: shareText,
               url: shareUrl
             });

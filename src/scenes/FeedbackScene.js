@@ -1,78 +1,18 @@
-import { BASIC_COLORS_HEX, EASY_COLORS_HEX, HARD_COLORS_HEX, BASIC_COLORS_TEXT, EASY_COLORS_TEXT, HARD_COLORS_TEXT, DESIGN, THEMES } from "../config/design.js";
+import { DESIGN, THEME } from "../config/design.js";
+import { SCENE_CONFIG } from "../config/sceneConfig.js";
 import { saveInteraction } from "../config/firebase.js";
-import ButtonFactory from "../utils/ButtonFactory.js";
 import { createBackground } from "../backgrounds/createBackground.js";
-import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle, getBoxStyle } from "../config/textStyles.js";
 import { detectDeviceType, DEVICE_TYPES } from "../config/dimensions.js";
+import { BaseScene } from "./BaseScene.js";
 
-// DESIGN.UI.OUTLINE.WIDTH, DESIGN.UI.OUTLINE.CORNER_RADIUS, DESIGN.UI.BUTTON.HEIGHT, DESIGN.UI.BUTTON.SPACING, DESIGN.UI.BUTTON.WIDTH
-
-// Configuration constants for FeedbackScene layout
-const SCENE_CONFIG = {
-    // Padding values
-    PADDING: {
-        STANDARD: 20,
-        LARGE: 30,
-        MOBILE: 10,
-        INPUT_HORIZONTAL: 28,
-        INPUT_VERTICAL_RATIO: 0.7,
-        MOBILE_INPUT_VERTICAL_RATIO: 0.6,
-        STATS_RIGHT_MARGIN: 30,
-        MOBILE_STATS_RIGHT_MARGIN: 35
-    },
-    
-    // Box dimensions
-    BOX_DIMENSIONS: {
-        STATS_HEIGHT: 130,
-        INPUT_HEIGHT: 280,
-        MOBILE_INPUT_HEIGHT: 440,
-        PROMPT_MIN_HEIGHT: 60,
-        PROMPT_MAX_HEIGHT_DESKTOP: 220,
-        PROMPT_MAX_HEIGHT_MOBILE: 300,
-        STATS_MAX_WIDTH_DESKTOP: 360,
-        STATS_MAX_WIDTH_MOBILE: 600,
-        SUGGESTION_HEIGHT: 30,
-        SUGGESTION_SPACING: 10
-    },
-    
-    // Animation durations (in milliseconds)
-    ANIMATIONS: {
-        FAST: 200,
-        MEDIUM: 500,
-        SLOW: 800,
-        CURSOR_BLINK: 500,
-        TYPING_TIMEOUT: 500
-    },
-    
-    // Layout - Optimized for FeedbackScene (no menu bar or stats box)
-    LAYOUT: {
-        // Prompt box positioning from top of screen
-        PROMPT_TOP_MARGIN_DESKTOP: 80,
-        PROMPT_TOP_MARGIN_MOBILE: 160,
-        
-        // Spacing between prompt and input boxes
-        INPUT_OFFSET_BELOW_PROMPT: 60,
-        MOBILE_INPUT_OFFSET_BELOW_PROMPT: 70,
-        
-        // Button positioning
-        BUTTON_VERTICAL_GAP_DESKTOP: 30+ DESIGN.UI.BUTTON.HEIGHT/2,
-        BUTTON_VERTICAL_GAP_MOBILE: 80 + DESIGN.UI.BUTTON.HEIGHT/2,
-        BUTTON_HORIZONTAL_OFFSET_DESKTOP: 60,
-        BUTTON_HORIZONTAL_OFFSET_MOBILE: 30
-    }
-};
-
-export default class FeedbackScene extends Phaser.Scene {
+export default class FeedbackScene extends BaseScene {
     constructor() {
         super({ key: 'FeedbackScene' });
         this.mode = null;
         this.userInput = '';
         this.levelValue = 1;
-        this.COLORS_HEX = BASIC_COLORS_HEX;
-        this.COLORS_TEXT = BASIC_COLORS_TEXT;
     }
-
     
     addButtonClickEffects() {
         // Apply to all buttons
@@ -110,18 +50,6 @@ export default class FeedbackScene extends Phaser.Scene {
     }
 
 
-    createButton(label, callback, centerX, centerY, options = {}) {
-        // Ensure scalingManager is passed for responsive sizing
-        return ButtonFactory.createButton(
-            this,
-            label,
-            callback,
-            centerX,
-            centerY,
-            { ...options, scalingManager: this.scalingManager }
-        );
-    }
-    
     onDoneButtonClick() {
         const interaction = this.userInput;
         saveInteraction(interaction, 'feedback');
@@ -168,25 +96,7 @@ export default class FeedbackScene extends Phaser.Scene {
         return getBoxStyle('input', this.mode || 'basic', this.uiScale);
     }
 
-    /**
-     * Get standard padding based on device type (matching BaseGameScene)
-     */
-    getStandardPadding() {
-        const deviceType = detectDeviceType();
-        const isMobile = deviceType === DEVICE_TYPES.PHONE;
-        return isMobile ? SCENE_CONFIG.PADDING.MOBILE : SCENE_CONFIG.PADDING.STANDARD;
-    }
-
-    /**
-     * Get large padding based on device type (matching BaseGameScene)
-     */
-    getLargePadding() {
-        const deviceType = detectDeviceType();
-        const isMobile = deviceType === DEVICE_TYPES.PHONE;
-        return isMobile ? SCENE_CONFIG.PADDING.STANDARD : SCENE_CONFIG.PADDING.LARGE;
-    }
-    
-    createInputTextBox() {    
+    createInputTextBox() {
         // Use responsive box width matching Preloader's approach
         const deviceType = detectDeviceType();
         const isDesktop = deviceType === DEVICE_TYPES.DESKTOP;
@@ -509,45 +419,19 @@ export default class FeedbackScene extends Phaser.Scene {
         this.levelValue = data.levelValue || 1;
         this.topKValue = data.topKValue || null;
 
-        // Set colors based on the mode
-        if (this.mode === "easy") {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        } else if (this.mode === "hard") {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        } else {
-            this.COLORS_HEX = BASIC_COLORS_HEX;
-            this.COLORS_TEXT = BASIC_COLORS_TEXT;
-        }
-
         // Reset key scene elements to ensure proper initialization when returning from other scenes
         this.promptTextBox = null;
         this.promptText = null;
     }
 
-
     async create() {
+        // IMPORTANT: Call parent create() first to get all BaseScene functionality
+        super.create();
+        
         this.cameras.main.scrollY = 0;
 
-        // Initialize scaling manager for responsive UI (matching Preloader.js approach)
-        this.scalingManager = new ScalingManager(this);
-        
-        // Use global UI scale for all elements (matching Preloader.js)
-        this.uiScale = this.registry.get && this.registry.get('uiScale') || 1;
-
-        // Create the appropriate background based on mode
-        let backgroundConfig;
-        if (this.mode === "easy") {
-            backgroundConfig = THEMES.easy.background;
-        } else if (this.mode === "hard") {
-            backgroundConfig = THEMES.hard.background;
-        } else {
-            backgroundConfig = THEMES.basic.background;
-        }
-
-        // Create background with the appropriate theme and level
-        createBackground(this, backgroundConfig, this.levelValue);
+        // Create background
+        createBackground(this, THEME.background, this.levelValue);
 
         // Create prompt box first, then input box (order matters for positioning)
         this.createPromptTextBox();

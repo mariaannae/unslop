@@ -1,25 +1,22 @@
-import { DESIGN, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT, THEMES } from "../config/design.js";
+import { DESIGN, COLORS_HEX, COLORS_TEXT, THEME } from "../config/design.js";
 import { saveHighScore } from "../config/firebase.js";
-import ButtonFactory from "../utils/ButtonFactory.js";
 import SceneTransitionManager from "../utils/SceneTransitionManager.js";
 import { createBackground } from "../backgrounds/createBackground.js";
-import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle, getBoxStyle } from "../config/textStyles.js";
 import { detectDeviceType } from "../config/dimensions.js";
+import { BaseScene } from "./BaseScene.js";
 
-export default class UsernameScene extends Phaser.Scene {
+export default class UsernameScene extends BaseScene {
     constructor() {
         super({ key: 'UsernameScene' });
         this.username = '';
         this.scoreData = null;
-        this.mode = 'easy';
         this.cursorVisible = true;
         this.cursorTimer = null;
     }
 
     init(data) {
         console.log("UsernameScene init called with data:", JSON.stringify(data));
-        this.mode = data.mode || 'easy';
         this.scoreData = data.scoreData || null;
         this.username = data.username || '';
         this.levelValue = data.levelValue || 1;
@@ -27,26 +24,14 @@ export default class UsernameScene extends Phaser.Scene {
         console.log("UsernameScene initialized with mode:", this.mode);
         console.log("UsernameScene score data:", this.scoreData);
         console.log("UsernameScene levelValue:", this.levelValue);
-
-        // Set colors based on mode
-        if (this.mode === "easy") {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        } else {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        }
     }
 
     create() {
-        // Use global UI scale for all elements - ensure consistency
-        this.uiScale = this.registry.get('uiScale') || 1;
+        // IMPORTANT: Call parent create() first to get all BaseScene functionality
+        super.create();
 
         // Create background
         this.createBackgroundEffect();
-
-        // Initialize scaling manager for responsive UI
-        this.scalingManager = new ScalingManager(this);
 
         // Create title and explanation
         this.createTitle();
@@ -65,8 +50,8 @@ export default class UsernameScene extends Phaser.Scene {
     }
 
     createBackgroundEffect() {
-        // Get the appropriate background configuration based on mode
-        const themeConfig = this.mode === 'easy' ? THEMES.easy : THEMES.hard;
+        // Get the background configuration
+        const themeConfig = THEME;
         
         // Ensure levelValue is properly set - fallback to 1 if not provided
         const levelValue = this.levelValue || 1;
@@ -378,18 +363,6 @@ export default class UsernameScene extends Phaser.Scene {
             button.on('pointerout', () => button.setScale(1));
             button.on('pointercancel', () => button.setScale(1));
         });
-    }
-
-    createButton(label, callback, centerX, centerY, options = {}) {
-        // Ensure scalingManager is passed for responsive sizing
-        return ButtonFactory.createButton(
-            this,
-            label,
-            callback,
-            centerX,
-            centerY,
-            { ...options, scalingManager: this.scalingManager }
-        );
     }
 
     showCongratulations() {

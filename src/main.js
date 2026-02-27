@@ -56,8 +56,7 @@ import BaseGameScene from "./scenes/BaseGameScene.js";
 import Boot from "./scenes/Boot.js";
 import Preloader from "./scenes/Preloader.js";
 import FeedbackScene from "./scenes/FeedbackScene.js";
-import InstructionScene from "./scenes/InstructionsScene.js";  
-import LevelScene from "./scenes/LevelScene.js";
+import InstructionScene from "./scenes/InstructionsScene.js";
 import DoneScene from "./scenes/DoneScene.js";
 import LeaderboardScene from "./scenes/LeaderboardScene.js";
 import UsernameScene from "./scenes/UsernameScene.js";
@@ -77,7 +76,6 @@ const config = {
         Boot, 
         Preloader, 
         InstructionScene, 
-        LevelScene, 
         BaseGameScene, 
         DoneScene, 
         FeedbackScene, 
@@ -225,7 +223,7 @@ window.addEventListener('resize', () => {
 
 // Desktop-specific: fullscreen handling
 if (!isMobile) {
-    // F11 or custom fullscreen toggle
+    // Combined desktop keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'F11') {
             e.preventDefault();
@@ -234,12 +232,7 @@ if (!isMobile) {
             } else {
                 game.scale.startFullscreen();
             }
-        }
-    });
-    
-    // ESC key handling for menus/pause
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+        } else if (e.key === 'Escape') {
             game.events.emit('toggle-pause');
         }
     });

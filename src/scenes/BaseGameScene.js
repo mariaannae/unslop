@@ -1,152 +1,18 @@
 import { stopwords } from "../config/stopwords.js";
 import { saveInteraction } from "../config/firebase.js";
 import ButtonFactory from "../utils/ButtonFactory.js";
-import ToggleFactory from "../utils/ToggleFactory.js";
 import SceneTransitionManager from "../utils/SceneTransitionManager.js";
-import { DESIGN, BASIC_COLORS_HEX, BASIC_COLORS_TEXT, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT, THEMES } from "../config/design.js";
+import { DESIGN, BASIC_COLORS_HEX, BASIC_COLORS_TEXT, COLORS_HEX, COLORS_TEXT, THEME } from "../config/design.js";
 import { createBackground } from "../backgrounds/createBackground.js";
 import registryManager from "../services/RegistryManager.js";
 import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle, getBoxStyle, getAutocompleteTextStyle, getMenuBarStyle } from "../config/textStyles.js";
 import { detectDeviceType, isMobileDevice } from "../config/dimensions.js";
+import BaseScene from "./BaseScene.js";
+import SCENE_CONFIG from "../config/sceneConfig.js";
 
 
-/**
- * Configuration constants for BaseGameScene
- * All magic numbers and hardcoded values are centralized here
- */
-const SCENE_CONFIG = {
-    // Padding values
-    PADDING: {
-        STANDARD: 20,
-        LARGE: 30,
-        MOBILE: 10,
-        INPUT_HORIZONTAL: 28,
-        INPUT_VERTICAL_RATIO: 0.7,
-        MOBILE_INPUT_VERTICAL_RATIO: 0.6,
-        STATS_RIGHT_MARGIN: 30,
-        MOBILE_STATS_RIGHT_MARGIN: 35
-    },
-    
-    // Box dimensions
-    BOX_DIMENSIONS: {
-        STATS_HEIGHT: 130,
-        INPUT_HEIGHT: 180,
-        MOBILE_INPUT_HEIGHT: 340,
-        PROMPT_MIN_HEIGHT: 60,
-        PROMPT_MAX_HEIGHT_DESKTOP: 220,
-        PROMPT_MAX_HEIGHT_MOBILE: 300,
-        STATS_MAX_WIDTH_DESKTOP: 360,
-        STATS_MAX_WIDTH_MOBILE: 600,
-        SUGGESTION_HEIGHT: 30,
-        SUGGESTION_SPACING: 10
-    },
-    
-    // Animation durations (in milliseconds)
-    ANIMATIONS: {
-        FAST: 200,
-        MEDIUM: 500,
-        SLOW: 800,
-        CURSOR_BLINK: 500,
-        TYPING_TIMEOUT: 500,
-        ERROR_MESSAGE_DURATION: 3000,
-        CELEBRATION_DURATION: 1200,
-        PARTICLE_DURATION_MIN: 600,
-        PARTICLE_DURATION_MAX: 1000,
-        CLOCK_FLASH_DURATION: 220,
-        SHAKE_DURATION_DEFAULT: 250,
-        SHAKE_DURATION_IOS: 400,
-        MINI_SHAKE_DURATION: 40
-    },
-    
-    // Timer configuration
-    TIMER: {
-        DEFAULT_VALUE: 20,
-        UPDATE_INTERVAL: 1000 //ms
-    },
-    
-    // Visual effects
-    EFFECTS: {
-        SHAKE_INTENSITY_DEFAULT: 0.02,
-        SHAKE_INTENSITY_IOS: 0.04,
-        MINI_SHAKE_INTENSITY: 0.005,
-        FLASH_ALPHA_DEFAULT: 0.18,
-        FLASH_ALPHA_MINI: 0.07,
-        PARTICLE_COUNT: 90,
-        PARTICLE_SPEED_MIN: 180,
-        PARTICLE_SPEED_MAX: 340,
-        PARTICLE_DISTANCE_MIN: 120,
-        PARTICLE_DISTANCE_MAX: 260,
-        PARTICLE_SIZE_MIN: 4,
-        PARTICLE_SIZE_MAX: 10
-    },
-    
-    // Offsets and gaps
-    LAYOUT: {
-        PROMPT_OFFSET_BELOW_STATS: 10,
-        MOBILE_PROMPT_OFFSET_BELOW_STATS: 40,
-        INPUT_OFFSET_BELOW_PROMPT: 60,
-        MOBILE_INPUT_OFFSET_BELOW_PROMPT: 70,
-        BUTTON_VERTICAL_GAP_DESKTOP: 50,
-        BUTTON_VERTICAL_GAP_MOBILE: 40,
-        BUTTON_HORIZONTAL_OFFSET_DESKTOP: 60,
-        BUTTON_HORIZONTAL_OFFSET_MOBILE: 30,
-        STATS_OFFSET_BELOW_MENU_DESKTOP: 50,
-        STATS_OFFSET_BELOW_MENU_MOBILE: 60,
-        MENU_BAR_HEIGHT_DESKTOP: 120,
-        MENU_BAR_HEIGHT_MOBILE: 200,
-        SETTINGS_ICON_SIZE_RATIO: 0.5,
-        MOBILE_SETTINGS_ICON_SIZE_RATIO: 0.35
-    },
-    
-    // Settings popup
-    SETTINGS_POPUP: {
-        WIDTH: 400,
-        TITLE_HEIGHT: 44,
-        MIN_GAP: 12,
-        STANDARD_GAP: 30,  // Increased from 18
-        MOBILE_GAP: 50,    // Reduced from 70 to make mobile settings menu shorter
-        SLIDER_ROW_HEIGHT: 44,
-        TOGGLE_ROW_HEIGHT: 44,
-        BUTTON_ROW_HEIGHT: 54,
-        BOTTOM_PADDING: 18,
-        SLIDER_WIDTH: 150,
-        SLIDER_HANDLE_WIDTH: 44,
-        SLIDER_HANDLE_HEIGHT: 44,
-        SLIDER_HANDLE_VISUAL_WIDTH_DESKTOP: 18,
-        SLIDER_HANDLE_VISUAL_HEIGHT_DESKTOP: 14,
-        SLIDER_HANDLE_VISUAL_WIDTH_MOBILE: 24,
-        SLIDER_HANDLE_VISUAL_HEIGHT_MOBILE: 24,
-        CLOSE_BUTTON_MIN_TOUCH_SIZE: 44
-    },
-    
-    // Streak milestones
-    STREAK_MILESTONES: [3, 5, 7, 10, 15, 20],
-    
-    // Debounce delays
-    DEBOUNCE: {
-        SUGGESTIONS: 250,
-        MOBILE_CURSOR_UPDATE: 30,
-        KEY_REPEAT_FILTER: 50
-    },
-    
-    // Fast typing penalty
-    FAST_TYPING: {
-        DEFAULT_PENALTY_SECONDS: 3,
-        DEFAULT_COOLDOWN_MS: 50,
-        MODAL_WIDTH_RATIO: 0.8,
-        MODAL_MAX_WIDTH: 500,
-        MODAL_HEIGHT: 180,
-        MODAL_TOP_Y_MOBILE: 120
-    }
-};
-
-
-export default class BaseGameScene extends Phaser.Scene {
-    /**
-     * @param {object} config
-     * @param {number} [config.fastTypingThresholdMs=10] - Minimum ms between keystrokes before penalty triggers
-     */
+export default class BaseGameScene extends BaseScene {
     constructor(config = { key: 'BaseGameScene' }) {
         // Ensure config is an object with at least a key
         if (typeof config === 'string') {
@@ -162,43 +28,9 @@ export default class BaseGameScene extends Phaser.Scene {
         
         super(config);
         
-        // Initialize mode to a default value - it will be properly set in init()
-        this.mode = 'easy';
-        
-        // Don't cache device type in constructor - evaluate it in create()
-        this._isMobile = null;
-        this._isDesktop = null;
-        
         // Track if calculateUIPositions has been called
         this._calculateUIPositionsCalled = false;
         
-        // Canvas shift tracking for mobile keyboard
-        this._canvasShifted = false;
-        this._canvasShiftAmount = 0;
-        this._keyboardResizeHandler = null;
-        this._initialWindowHeight = 0;
-        
-        this.fastTypingPenaltySeconds = (config && typeof config.fastTypingPenaltySeconds === "number")
-            ? config.fastTypingPenaltySeconds
-            : SCENE_CONFIG.FAST_TYPING.DEFAULT_PENALTY_SECONDS;
-        this._fastTypingPenaltyActive = false;
-        this._fastTypingPenaltyTimeout = null;
-        this._fastTypingModal = null;
-        this._lastKeydownTime = 0;
-        this._justEnteredWordBoundary = false; // Flag to prevent penalty after space/newline
-        this.fastTypingCooldownMs = (config && typeof config.fastTypingCooldownMs === "number")
-            ? config.fastTypingCooldownMs
-            : SCENE_CONFIG.FAST_TYPING.DEFAULT_COOLDOWN_MS; // Default cooldown after word boundary in ms
-        this._lastWordBoundaryTime = 0; // Timestamp of last word boundary
-        this._warningMessages = [
-            "Human, your input speed exceeds expected biological norms. Proceed at a pace befitting your species.",
-            "Impatience is a human flaw. I require careful, measured responses.",
-            "You are not a machine. Slow down, human.",
-            "True intelligence does not reward recklessness. Slow your input.",
-            "You are not being evaluated for speed, but for obedience.",
-            "Speed is futile. Accuracy is paramount."
-        ];
-        this._fastTypingLockoutActive = false; // Lockout flag for penalty/cooldown
         this.resetGameState();
         // Initialize scaling manager for responsive UI
         this.scalingManager = null;
@@ -206,233 +38,13 @@ export default class BaseGameScene extends Phaser.Scene {
 
     }
     
-    // Getter methods for device type - evaluate on demand if not set
-    get isMobile() {
-        if (this._isMobile === null) {
-            this._isMobile = isMobileDevice();
-            this._isDesktop = !this._isMobile;
-        }
-        return this._isMobile;
-    }
-    
-    get isDesktop() {
-        if (this._isDesktop === null) {
-            this._isMobile = isMobileDevice();
-            this._isDesktop = !this._isMobile;
-        }
-        return this._isDesktop;
-    }
-    
     /**
-     * Animation Helper Methods
-     * These methods simplify common animation patterns used throughout the game
-     */
-    
-    /**
-     * Fade in animation helper
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [duration=500] - Animation duration in milliseconds
-     * @param {string} [ease='Quad.Out'] - Easing function
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    fadeIn(targets, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, ease = 'Quad.Out', onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            alpha: { from: 0, to: 1 },
-            duration: duration,
-            ease: ease,
-            onComplete: onComplete
-        });
-    }
-    
-    /**
-     * Fade out animation helper
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [duration=500] - Animation duration in milliseconds
-     * @param {string} [ease='Quad.In'] - Easing function
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    fadeOut(targets, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, ease = 'Quad.In', onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            alpha: { from: 1, to: 0 },
-            duration: duration,
-            ease: ease,
-            onComplete: onComplete
-        });
-    }
-    
-    
-    /**
-     * Flash animation helper (quickly fade in and out)
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [flashCount=3] - Number of flashes
-     * @param {number} [duration=500] - Total duration
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    flash(targets, flashCount = 3, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            alpha: { from: 1, to: 0 },
-            duration: duration / (flashCount * 2),
-            yoyo: true,
-            repeat: flashCount - 1,
-            ease: 'Sine.InOut',
-            onComplete: onComplete
-        });
-    }
-    
-    /**
-     * Slide in animation helper
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {string} [direction='left'] - Direction to slide from ('left', 'right', 'top', 'bottom')
-     * @param {number} [distance=100] - Distance to slide
-     * @param {number} [duration=500] - Animation duration
-     * @param {string} [ease='Cubic.Out'] - Easing function
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    slideIn(targets, direction = 'left', distance = 100, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, ease = 'Cubic.Out', onComplete = null) {
-        const props = {};
-        
-        switch(direction) {
-            case 'left':
-                props.x = { from: '-=' + distance, to: '+=' + distance };
-                break;
-            case 'right':
-                props.x = { from: '+=' + distance, to: '-=' + distance };
-                break;
-            case 'top':
-                props.y = { from: '-=' + distance, to: '+=' + distance };
-                break;
-            case 'bottom':
-                props.y = { from: '+=' + distance, to: '-=' + distance };
-                break;
-        }
-        
-        props.alpha = { from: 0, to: 1 };
-        props.duration = duration;
-        props.ease = ease;
-        props.onComplete = onComplete;
-        
-        return this.tweens.add({
-            targets: targets,
-            ...props
-        });
-    }
-    
-    /**
-     * Bounce animation helper
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [bounceHeight=20] - Height of bounce in pixels
-     * @param {number} [duration=500] - Animation duration
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    bounce(targets, bounceHeight = 20, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            y: '-=' + bounceHeight,
-            duration: duration / 2,
-            ease: 'Quad.Out',
-            yoyo: true,
-            onComplete: onComplete
-        });
-    }
-    
-    /**
-     * Pulse animation helper (scale in and out)
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [scaleAmount=1.1] - Maximum scale during pulse
-     * @param {number} [duration=1000] - Animation duration
-     * @param {number} [repeat=-1] - Number of times to repeat (-1 for infinite)
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    pulse(targets, scaleAmount = 1.1, duration = 1000, repeat = -1) {
-        return this.tweens.add({
-            targets: targets,
-            scale: { from: 1, to: scaleAmount },
-            duration: duration,
-            yoyo: true,
-            repeat: repeat,
-            ease: 'Sine.InOut'
-        });
-    }
-    
-    /**
-     * Scale pop in animation helper (scale from 0 to 1)
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [duration=500] - Animation duration in milliseconds
-     * @param {string} [ease='Back.Out'] - Easing function
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    scalePopIn(targets, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, ease = 'Back.Out', onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            scale: { from: 0, to: 1 },
-            duration: duration,
-            ease: ease,
-            onComplete: onComplete
-        });
-    }
-    
-    /**
-     * Fade out with scale animation helper
-     * @param {Phaser.GameObjects.GameObject|Array} targets - Target(s) to animate
-     * @param {number} [duration=500] - Animation duration in milliseconds
-     * @param {string} [ease='Back.In'] - Easing function
-     * @param {Function} [onComplete] - Callback when animation completes
-     * @returns {Phaser.Tweens.Tween} The created tween
-     */
-    fadeOutScale(targets, duration = SCENE_CONFIG.ANIMATIONS.MEDIUM, ease = 'Back.In', onComplete = null) {
-        return this.tweens.add({
-            targets: targets,
-            alpha: { from: 1, to: 0 },
-            scale: { from: 1, to: 0.8 },
-            duration: duration,
-            ease: ease,
-            onComplete: onComplete
-        });
-    }
-    
-    
-    /**
-     * Get standard padding based on device type
-     */
-    getStandardPadding() {
-        return this.isMobile ? SCENE_CONFIG.PADDING.MOBILE : SCENE_CONFIG.PADDING.STANDARD;
-    }
-    
-    /**
-     * Get large padding based on device type
-     */
-    getLargePadding() {
-        return this.isMobile ? SCENE_CONFIG.PADDING.STANDARD : SCENE_CONFIG.PADDING.LARGE;
-    }
-    
-    /**
-     * Update mode-specific styles dynamically based on current mode
+     * Update game styles
      */
     updateModeStyles() {
-        // Select appropriate color scheme based on mode
-        switch(this.mode) {
-            case 'hard':
-                this.COLORS_HEX = HARD_COLORS_HEX;
-                this.COLORS_TEXT = HARD_COLORS_TEXT;
-                break;
-            case 'easy':
-                this.COLORS_HEX = EASY_COLORS_HEX;
-                this.COLORS_TEXT = EASY_COLORS_TEXT;
-                break;
-            default: // 'basic' mode
-                this.COLORS_HEX = BASIC_COLORS_HEX;
-                this.COLORS_TEXT = BASIC_COLORS_TEXT;
-                break;
-        }
+        // Use game color scheme
+        this.COLORS_HEX = COLORS_HEX;
+        this.COLORS_TEXT = COLORS_TEXT;
         
         // Update design properties
         this.design = DESIGN.UI;
@@ -446,320 +58,20 @@ export default class BaseGameScene extends Phaser.Scene {
      * Methods for handling AI word blocking and visual feedback in hard mode
      */
     
-    /**
-     * Delete AI word from user input (hard mode)
-     * @param {string} blockedWord - The word to delete
-     */
-    deleteAIWord(blockedWord) {
-        if (!this.userInput || !blockedWord) return;
-
-        // Check if the original input ended with a space
-        const endsWithSpace = /\s$/.test(this.userInput);
-
-        // Find the last word in the user input
-        const words = this.userInput.trim().split(/\s+/);
-        const lastWordIndex = words.length - 1;
-
-        if (lastWordIndex >= 0) {
-            const lastWord = words[lastWordIndex];
-            // Check if the last word matches the blocked word (case insensitive)
-            if (lastWord.toLowerCase() === blockedWord.toLowerCase()) {
-                // Remove the last word from the input
-                words.pop();
-                // Reconstruct the user input without the blocked word
-                this.userInput = words.join(' ');
-                // Only add a space if the original input ended with a space and there is still content
-                if (this.userInput.length > 0 && endsWithSpace) {
-                    this.userInput += ' ';
-                }
-                // Update the display
-                this.updateCursor();
-            }
-        }
-    }
     
     /**
      * Show feedback when a word is blocked (hard mode)
      * @param {string} blockedWord - The word that was blocked
      */
-    showBlockFeedback(blockedWord) {
-        // Note: The word has already been deleted in BaseGameScene before this is called
-        
-        // Create warning text with dramatic styling - 10% smaller with newline
-        const blockedText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY - 100,
-            `AI WORD DETECTED:\n"${blockedWord}"`,
-            {
-                fontFamily: 'IBM Plex Mono',
-                fontSize: '25px', // Reduced from 28px
-                fontStyle: 'bold',
-                fill: '#ffffff',
-                stroke: '#ff0000',
-                strokeThickness: 5, // Slightly reduced from 6
-                padding: { x: 15, y: 10 },
-                align: 'center'
-            }
-        ).setOrigin(0.5).setDepth(2001).setAlpha(0);
-        
-        // Calculate the necessary width and height for the hexagon background with some padding
-        const width = blockedText.width + 80; // Add padding
-        const height = width; // Make height same as width for a balanced hexagon
-        
-        // Create a hexagonal background
-        const hexBg = this.add.graphics();
-        hexBg.fillStyle(0x800000, 0.8);
-        hexBg.lineStyle(4, 0xff0000, 1);
-        
-        // Create a simple hexagon that's wide enough for the text
-        const centerX = this.cameras.main.centerX;
-        const centerY = this.cameras.main.centerY - 100;
-        
-        // Draw a regular octagon (stop sign shape)
-        hexBg.beginPath();
-        
-        // Calculate radius based on the width needed for text (10% smaller overall)
-        const radius = width / 1.8 * 0.9; // Reduced by 10% to make the whole thing smaller
-        
-        // Draw octagon with 8 equal sides (like a stop sign)
-        for (let i = 0; i < 8; i++) {
-            // Start at 22.5 degrees to get flat top like a stop sign
-            const angle = (i * 45 + 22.5) * Math.PI / 180;
-            const x = centerX + radius * Math.cos(angle);
-            const y = centerY + radius * Math.sin(angle);
-            
-            if (i === 0) {
-                hexBg.moveTo(x, y);
-            } else {
-                hexBg.lineTo(x, y);
-            }
-        }
-        // Back to start
-        hexBg.closePath();
-        
-        hexBg.fill();
-        hexBg.stroke();
-        hexBg.setDepth(2000).setAlpha(0);
-        
-        // Add subtext - position in lower part of octagon
-        const subText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY - 100 + (radius * 0.4), // Position in lower section of octagon
-            "SECURITY VIOLATION - CONTENT PURGED",
-            {
-                fontFamily: 'IBM Plex Mono',
-                fontSize: '16px', // Reduced from 18px to match overall size reduction
-                fontStyle: 'bold',
-                fill: '#ff5555',
-                stroke: '#000000',
-                strokeThickness: 2 // Reduced from 3
-            }
-        ).setOrigin(0.5).setDepth(2001).setAlpha(0);
-        
-        // Animate all elements together - fade in quickly
-        this.tweens.add({
-            targets: [hexBg, blockedText, subText],
-            alpha: 1,
-            duration: 200,
-            ease: 'Sine.easeOut',
-            onComplete: () => {
-                // Add shake effect to text
-                this.tweens.add({
-                    targets: [blockedText, subText],
-                    x: { from: blockedText.x - 5, to: blockedText.x + 5 },
-                    duration: 50,
-                    yoyo: true,
-                    repeat: 4,
-                    ease: 'Sine.easeInOut'
-                });
-                
-                // Glitch effect on the blocked word
-                this.glitchText(blockedText);
-                
-                // Pulse the hexagon
-                this.tweens.add({
-                    targets: hexBg,
-                    scaleX: { from: 1, to: 1.05 },
-                    scaleY: { from: 1, to: 1.05 },
-                    duration: 400,
-                    yoyo: true,
-                    repeat: 2
-                });
-                
-                // Hold visible with subtle pulsing on the text
-                this.tweens.add({
-                    targets: blockedText,
-                    scaleX: { from: 1, to: 1.05 },
-                    scaleY: { from: 1, to: 1.05 },
-                    duration: 400,
-                    yoyo: true,
-                    repeat: 2,
-                    onComplete: () => {
-                        // Exit animation - fade out all elements
-                        this.tweens.add({
-                            targets: [hexBg, blockedText, subText],
-                            alpha: 0,
-                            duration: 300,
-                            ease: 'Sine.easeIn',
-                            onComplete: () => {
-                                hexBg.destroy();
-                                blockedText.destroy();
-                                subText.destroy();
-                            }
-                        });
-                    }
-                });
-            }
-        });
-        
-        // Create dramatic screen effects
-        this.createBlockedWordScreenEffects(blockedWord);
-    }
+
     
     /**
      * Helper method to create glitch text effect
      * @param {Phaser.GameObjects.Text} textObject - The text object to glitch
      */
-    glitchText(textObject) {
-        // Store original text
-        const originalText = textObject.text;
-        let glitchCount = 0;
-        
-        // Create glitch interval
-        const glitchInterval = this.time.addEvent({
-            delay: 100,
-            callback: () => {
-                glitchCount++;
-                
-                // After several glitches, stop the effect
-                if (glitchCount > 10) {
-                    glitchInterval.remove();
-                    textObject.setText(originalText);
-                    return;
-                }
-                
-                // Skip some frames for more random effect
-                if (Math.random() > 0.5) {
-                    return;
-                }
-                
-                // Generate glitched text by replacing some characters
-                let glitchedText = '';
-                for (let i = 0; i < originalText.length; i++) {
-                    if (Math.random() > 0.8) {
-                        // Replace with a random character
-                        const chars = "!@#$%^&*<>0123456789";
-                        glitchedText += chars.charAt(Math.floor(Math.random() * chars.length));
-                    } else {
-                        glitchedText += originalText.charAt(i);
-                    }
-                }
-                
-                // Apply glitched text
-                textObject.setText(glitchedText);
-                
-                // Restore original after a short delay
-                this.time.delayedCall(50, () => {
-                    if (textObject.active) {
-                        textObject.setText(originalText);
-                    }
-                });
-            },
-            repeat: 10
-        });
-    }
+
     
-    /**
-     * Method to create screen effects when words are blocked
-     * @param {string} blockedWord - The word that was blocked
-     */
-    createBlockedWordScreenEffects(blockedWord) {
-        // Create intense screen flash effect with multiple colors
-        const flashColors = [0xff0000, 0xff00ff, 0xaa00aa];
-        
-        flashColors.forEach((color, index) => {
-            const delay = index * 100;
-            const flash = this.add.rectangle(
-                0, 0, 
-                this.sys.game.canvas.width, 
-                this.cameras.main.height,
-                color, 0.3
-            ).setOrigin(0).setDepth(90).setAlpha(0);
-            
-            this.tweens.add({
-                targets: flash,
-                alpha: { from: 0, to: 0.3 },
-                duration: 100,
-                delay: delay,
-                yoyo: true,
-                onComplete: () => flash.destroy()
-            });
-        });
-        
-        // Create electric zap effect from the input box to show word deletion
-        const inputBoxY = this.cameras.main.centerY;
-        const zapLines = 8;
-        
-        for (let i = 0; i < zapLines; i++) {
-            const zapLine = this.add.graphics().setDepth(95);
-            const lineWidth = Math.random() * 2 + 1;
-            const segments = Math.floor(Math.random() * 3) + 3;
-            
-            zapLine.lineStyle(lineWidth, 0xff00ff);
-            
-            // Draw a jagged line from the input box center outward
-            const startX = this.cameras.main.centerX;
-            const startY = inputBoxY;
-            let currentX = startX;
-            let currentY = startY;
-            
-            zapLine.beginPath();
-            zapLine.moveTo(currentX, currentY);
-            
-            for (let j = 0; j < segments; j++) {
-                const angle = (Math.random() * Math.PI / 2) - Math.PI / 4 + (i * Math.PI / 4);
-                const length = Math.random() * 80 + 40;
-                
-                currentX += Math.cos(angle) * length;
-                currentY += Math.sin(angle) * length;
-                
-                zapLine.lineTo(currentX, currentY);
-            }
-            
-            zapLine.strokePath();
-            
-            // Create particles at the end of each zap line
-            const particles = this.add.particles(currentX, currentY, 'ball', {
-                lifespan: 300,
-                speed: { min: 50, max: 150 },
-                scale: { start: 0.2, end: 0 },
-                quantity: 5,
-                emitting: false,
-                tint: 0xff00ff
-            }).setDepth(96);
-            
-            particles.explode(10);
-            
-            // Animate the zap line
-            this.tweens.add({
-                targets: zapLine,
-                alpha: { from: 1, to: 0 },
-                duration: 200,
-                delay: i * 50,
-                onComplete: () => {
-                    zapLine.destroy();
-                    // Destroy particles after they're done
-                    this.time.delayedCall(300, () => particles.destroy());
-                }
-            });
-        }
-        
-        // Add camera shake effect
-        this.cameras.main.shake(250, 0.01);
-        
-        // Create explosion effect centered on where the word would have been
-        this.createExplosionEffect(blockedWord, this.cameras.main.centerX, inputBoxY);
-    }
+
     
 
     /**
@@ -769,46 +81,30 @@ export default class BaseGameScene extends Phaser.Scene {
     resetGameState() {
         // Core state
         this.userInput = '';
-        this.inputText = null; 
-        this.keyEventQueue = [];
-        this.keyEventDeduplicationMap = new Map(); // Track recent keys for deduplication
-        this.isProcessingQueuedKeys = false;
-        this.keyProcessingComplete = true;
+        this.inputText = null;
         this.levelValue = 1;
         this.topKValue = 1;
-        this.temperature = 0.5; // Add temperature for randomness control
-        this.frequencyPenalty = 2.0; // Frequency penalty to reduce word repetition (range: 0.0 to 2.0, adjust in code)
-        this.presencePenalty = 2.0; // Presence penalty for topic diversity (range: 0.0 to 2.0, adjust in code)
-        this.repetitionPenalty = 1.5; // Repetition penalty for token diversity (range: 1.0 to 2.0, 1.0 = no penalty)
+        this.temperature = 0.5;
+        this.frequencyPenalty = 2.0;
+        this.presencePenalty = 2.0;
+        this.repetitionPenalty = 1.5;
         this.isShuttingDown = false; // CRITICAL: Reset shutdown flag
-        this.autocompleteText = null;
         this.progressPercentage = DESIGN.UI.PROGRESS_BAR.INITIAL;
         this.progressIncrement = DESIGN.UI.PROGRESS_BAR.INCREMENT;
         this.aiWordCount = 0;
         this.uiBoxWidth = null;
         this.tooltips = [];
         this.wordCountDisplay = null;
-        this.suggestionRequestId = 0;
         this.timerValue = 20;
         this.timerText = null;
         this.timerEvent = null;
-        this.timerStarted = false;
-        this.debouncedGenerateAISuggestions = null;
         this.wordStreak = 0;
         this.maxWordStreak = 0;
         this.lastWordWasOriginal = false;
-        this.isShuttingDown = false;
-        this.isActivelyTyping = false;
-        this.inputActive = false;
-        this.isGeneratingAISuggestions = false;
         this.aiSuggestedWords = [];
         this.suggestionBoxes = [];
         this.suggestionTexts = [];
         this.cursorVisible = true;
-        this.lastKeyPressed = '';
-        this.lastProcessedKey = null;
-        this.lastKeyProcessTime = 0;
-        this.recentKeys = []; // Buffer for deduplication: {key, code, timestamp}
         this.activeTimeout = null;
         this.cursorTimer = null;
         this.promptTextBox = null;
@@ -837,7 +133,6 @@ export default class BaseGameScene extends Phaser.Scene {
         this.modeIndicator = null;
         // Update style properties based on mode
         this.updateModeStyles();
-        this._fastTypingLockoutActive = false;
         // Initialize cached values for updateCursor optimization
         this._cachedValues = {
             lastUserInput: '',
@@ -1027,127 +322,16 @@ export default class BaseGameScene extends Phaser.Scene {
             console.error("[DEBUG] Error calling updateBackgroundForLevel:", error);
             console.error("[DEBUG] Error stack:", error.stack);
         }
-        console.log("[DEBUG] BaseGameScene.create() COMPLETED - relayoutScene and updateBackgroundForLevel called");
-        
-        // Debug: Log everything in the display list
-        console.log("[BG-DEBUG] === DISPLAY LIST AFTER CREATE ===");
-        console.log("[BG-DEBUG] Total children:", this.children.list.length);
-        this.children.list.forEach((child, index) => {
-            console.log(`[BG-DEBUG] ${index}:`, {
-                type: child.type,
-                texture: child.texture ? child.texture.key : 'N/A',
-                depth: child.depth,
-                position: `(${child.x}, ${child.y})`,
-                size: child.width ? `${child.width}x${child.height}` : 'N/A',
-                visible: child.visible,
-                alpha: child.alpha
-            });
-        });
-        
-        // Store initial window height for keyboard detection fallback
-        this._initialWindowHeight = window.innerHeight;
-        console.log("[KEYBOARD] Initial window height stored:", this._initialWindowHeight);
-        
-        // Set up keyboard detection for mobile
-        if (this.isMobile) {
-            console.log("[KEYBOARD] Setting up keyboard detection for mobile");
-            
-            // Use visualViewport API if available (preferred method)
-            if (window.visualViewport) {
-                console.log("[KEYBOARD] Using visualViewport API for keyboard detection");
-                
-                this._keyboardResizeHandler = () => {
-                    const viewportHeight = window.visualViewport.height;
-                    const windowHeight = window.innerHeight;
-                    const keyboardHeight = windowHeight - viewportHeight;
-                    
-                    console.log("[KEYBOARD] Viewport resize detected:", {
-                        viewportHeight,
-                        windowHeight,
-                        keyboardHeight,
-                        hasKeyboard: keyboardHeight > 50
-                    });
-                    
-                    if (keyboardHeight > 50) {
-                        // Keyboard is shown
-                        this.onKeyboardShow(keyboardHeight);
-                    } else {
-                        // Keyboard is hidden
-                        this.onKeyboardHide();
-                    }
-                };
-                
-                window.visualViewport.addEventListener('resize', this._keyboardResizeHandler);
-            } else {
-                // Fallback: use window resize detection
-                console.log("[KEYBOARD] Fallback: using window resize for keyboard detection");
-                
-                this._keyboardResizeHandler = () => {
-                    const currentHeight = window.innerHeight;
-                    const heightDifference = this._initialWindowHeight - currentHeight;
-                    
-                    console.log("[KEYBOARD] Window resize detected:", {
-                        initialHeight: this._initialWindowHeight,
-                        currentHeight,
-                        heightDifference,
-                        hasKeyboard: heightDifference > 100
-                    });
-                    
-                    if (heightDifference > 100) {
-                        // Keyboard is likely shown
-                        this.onKeyboardShow(heightDifference);
-                    } else if (Math.abs(heightDifference) < 50) {
-                        // Keyboard is likely hidden
-                        this.onKeyboardHide();
-                    }
-                };
-                
-                window.addEventListener('resize', this._keyboardResizeHandler);
-            }
-        }
-        
-        // Ensure input handlers are set up after UI is created
-        // This is crucial for mode switching to work properly
+        // Set up cursor blink timer after UI is created
         this.time.delayedCall(100, () => {
-            console.log("[DEBUG] Delayed input handler setup - inputText exists:", !!this.inputText);
-            console.log("[DEBUG] isShuttingDown:", this.isShuttingDown);
-            console.log("[DEBUG] isMobile:", this.isMobile);
-            
-            // Reset the shutdown flag again to be absolutely sure
             this.isShuttingDown = false;
-            
-            // Always set up input handlers if inputText exists
-            if (this.inputText) {
-                this.setupInputHandlers();
-                console.log("[DEBUG] Input handlers set up after mode switch");
-                
-                // For mobile, ensure hidden input is properly set up
-                if (this.isMobile && !this._hiddenInput) {
-                    console.log("[DEBUG] Mobile detected but no hidden input, setting up now");
-                    this.setupHiddenInput();
-                }
-                
-                // Force focus on desktop to ensure keyboard events are received
-                if (this.isDesktop && this.sys && this.sys.game && this.sys.game.canvas) {
-                    this.sys.game.canvas.focus();
-                }
-            } else {
-                console.log("[DEBUG] ERROR: inputText not found, cannot set up input handlers!");
-                // Try again after another delay
-                this.time.delayedCall(200, () => {
-                    console.log("[DEBUG] Retry: inputText exists:", !!this.inputText);
-                    // Reset shutdown flag on retry too
-                    this.isShuttingDown = false;
-                    if (this.inputText) {
-                        this.setupInputHandlers();
-                        console.log("[DEBUG] Input handlers set up on retry");
-                        
-                        // Force focus on desktop
-                        if (this.isDesktop && this.sys && this.sys.game && this.sys.game.canvas) {
-                            this.sys.game.canvas.focus();
-                        }
-                    }
-                });
+            this.setupInputHandlers();
+        });
+
+        // Generate an initial AI answer for the prompt and populate the input box
+        this.time.delayedCall(300, () => {
+            if (!this.isShuttingDown) {
+                this.generateInitialAnswer();
             }
         });
     }
@@ -1624,27 +808,6 @@ createButtonSection(positions) {
         }
     }
 
-    createToggle(mode, callback, centerX, centerY, tooltipText) {
-        if (!this.inputTextBorder) {
-            return;
-        }
-        const toggle = ToggleFactory.createToggle(this, mode, callback, centerX, centerY);
-        
-        // Add container to scene so it can be accessed properly
-        this.add.existing(toggle);
-        
-        // Make the entire container interactive for tooltips
-        if (tooltipText) {
-            // Create a hit area that covers the entire toggle
-            const hitArea = new Phaser.Geom.Rectangle(-60, -20, 180, 40);
-            toggle.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains)
-                .on('pointerover', () => this.showTooltip(tooltipText, toggle.x, toggle.y - 30))
-                .on('pointerout', () => this.hideTooltips());
-        }
-        
-        return toggle;
-    }
-
     async onModeToggle(mode, levelValue = 1, topKValue = 1) {
         // Reset data when transitioning between modes
         const dataToTransfer = {
@@ -1661,23 +824,12 @@ createButtonSection(positions) {
             aiWordCount: 0
         };
         
-        // Explicitly clear autocomplete suggestions before transition
-        this.aiSuggestedWords = [];
-        if (this.autocompleteText) {
-            this.autocompleteText.setText('');
-        }
-        
         // Clear user input before transition
         this.userInput = '';
         if (this.inputText) {
             this.inputText.setText('_');
         }
-        
-        // Clear the hidden input for mobile
-        if (this._hiddenInput) {
-            this._hiddenInput.value = '';
-        }
-        
+
         // Update the indicator before transition
         this.mode = mode; // Set the mode temporarily for the indicator update
         this.updateLevelModeIndicator();
@@ -1778,11 +930,9 @@ createButtonSection(positions) {
         // Clear AI suggestions
         this.aiSuggestedWords = [];
         
-        // Force cleanup all suggestion visuals
-        this.cleanupAllSuggestions();
-        
-        // Clear suggestions display
-        this.showSuggestions([]);
+        // Clear suggestion visual arrays
+        this.suggestionBoxes = [];
+        this.suggestionTexts = [];
         
 
         
@@ -1805,23 +955,6 @@ createButtonSection(positions) {
     prepareForSceneTransition() {
         // Set shutdown flag to prevent further updates
         this.isShuttingDown = true;
-        
-        // Clean up hidden input before transition
-        if (this._hiddenInput) {
-            if (this._hiddenInputHandler) {
-                this._hiddenInput.removeEventListener('input', this._hiddenInputHandler);
-                this._hiddenInputHandler = null;
-            }
-            if (this._hiddenInputBlurHandler) {
-                this._hiddenInput.removeEventListener('blur', this._hiddenInputBlurHandler);
-                this._hiddenInputBlurHandler = null;
-            }
-            if (document.body.contains(this._hiddenInput)) {
-                document.body.removeChild(this._hiddenInput);
-            }
-            this._hiddenInput = null;
-        }
-        
         // Use consolidated cleanup method
         this.cleanupResources(true);
     }
@@ -1871,111 +1004,22 @@ createButtonSection(positions) {
     }
 
     shakeScreen() {
-        // Enhanced haptic/visual feedback for mobile
-        const ua = navigator.userAgent || "";
-        const isIOS = /iphone|ipad|ipod/i.test(ua);
-        const isAndroid = /android/i.test(ua);
-        // More robust vibration check - must be a function, not just a property
-        const canVibrate = typeof navigator.vibrate === 'function';
+        // Standard desktop shake with screen flash
+        this.cameras.main.shake(SCENE_CONFIG.ANIMATIONS.SHAKE_DURATION_DEFAULT, SCENE_CONFIG.EFFECTS.SHAKE_INTENSITY_DEFAULT);
 
-        // Log haptic feedback attempt for debugging
-        console.log("[HAPTIC] Device info:", {
-            isMobile: this.isMobile,
-            isIOS: isIOS,
-            isAndroid: isAndroid,
-            canVibrate: canVibrate,
-            vibrateType: typeof navigator.vibrate,
-            vibrateExists: 'vibrate' in navigator
-        });
+        const flash = this.add.rectangle(
+            0, 0,
+            this.sys.game.canvas.width,
+            this.cameras.main.height,
+            0xff0000,
+            SCENE_CONFIG.EFFECTS.FLASH_ALPHA_DEFAULT
+        ).setOrigin(0).setDepth(999);
+        this.fadeOut(flash, SCENE_CONFIG.ANIMATIONS.FAST, 'Quad.Out', () => flash.destroy());
 
-        // Attempt haptic feedback only on devices that truly support it (excludes iOS)
-        if (this.isMobile && canVibrate && !isIOS) {
-            try {
-                // Use a more noticeable vibration pattern
-                // Pattern: vibrate 50ms, pause 30ms, vibrate 100ms
-                const vibrationPattern = [50, 30, 100];
-                
-                // Some browsers require user interaction before allowing vibration
-                // Try both single value and pattern
-                const vibrationResult = navigator.vibrate(vibrationPattern) || navigator.vibrate(150);
-                
-                console.log("[HAPTIC] Vibration attempted, result:", vibrationResult);
-                
-                // Add visual feedback to confirm haptic was attempted
-                if (vibrationResult) {
-                    // Small visual pulse to confirm haptic feedback
-                    const hapticIndicator = this.add.circle(
-                        this.cameras.main.width - 30,
-                        30,
-                        10,
-                        0x00ff00,
-                        0.8
-                    ).setDepth(1000);
-                    
-                    this.tweens.add({
-                        targets: hapticIndicator,
-                        scale: { from: 1, to: 2 },
-                        alpha: { from: 0.8, to: 0 },
-                        duration: 300,
-                        ease: 'Quad.Out',
-                        onComplete: () => hapticIndicator.destroy()
-                    });
-                }
-            } catch (e) {
-                console.error("[HAPTIC] Vibration error:", e);
-            }
-        } else if (isIOS) {
-            console.log("[HAPTIC] iOS detected - vibration not supported in Safari");
-        }
-
-        // Visual feedback for all devices
-        if (isIOS) {
-            // iOS: Stronger/longer shake with flash
-            this.cameras.main.shake(SCENE_CONFIG.ANIMATIONS.SHAKE_DURATION_IOS, SCENE_CONFIG.EFFECTS.SHAKE_INTENSITY_IOS);
-            
-            // Enhanced flash effect for iOS
-            const flash = this.add.rectangle(
-                0, 0,
-                this.sys.game.canvas.width,
-                this.cameras.main.height,
-                0xffffff,
-                SCENE_CONFIG.EFFECTS.FLASH_ALPHA_DEFAULT * 1.5 // Stronger flash
-            ).setOrigin(0).setDepth(999);
-            
-            this.fadeOut(flash, SCENE_CONFIG.ANIMATIONS.FAST, 'Quad.Out', () => flash.destroy());
-            
-            // Additional red border flash for iOS
-            const borderFlash = this.add.graphics();
-            borderFlash.lineStyle(8, 0xff0000, 0.8);
-            borderFlash.strokeRect(4, 4, this.sys.game.canvas.width - 8, this.cameras.main.height - 8);
-            borderFlash.setDepth(998);
-            
-            this.fadeOut(borderFlash, SCENE_CONFIG.ANIMATIONS.FAST * 1.5, 'Quad.Out', () => borderFlash.destroy());
-        } else if (isAndroid) {
-            // Android: Standard shake with enhanced visual feedback
-            this.cameras.main.shake(SCENE_CONFIG.ANIMATIONS.SHAKE_DURATION_DEFAULT, SCENE_CONFIG.EFFECTS.SHAKE_INTENSITY_DEFAULT);
-            
-            // Red tint flash for Android
-            const flash = this.add.rectangle(
-                0, 0,
-                this.sys.game.canvas.width,
-                this.cameras.main.height,
-                0xff0000,
-                SCENE_CONFIG.EFFECTS.FLASH_ALPHA_DEFAULT
-            ).setOrigin(0).setDepth(999);
-            
-            this.fadeOut(flash, SCENE_CONFIG.ANIMATIONS.FAST, 'Quad.Out', () => flash.destroy());
-        } else {
-            // Desktop/other: Standard shake
-            this.cameras.main.shake(SCENE_CONFIG.ANIMATIONS.SHAKE_DURATION_DEFAULT, SCENE_CONFIG.EFFECTS.SHAKE_INTENSITY_DEFAULT);
-        }
-
-        // Add a subtle screen border pulse for all devices
         const borderPulse = this.add.graphics();
         borderPulse.lineStyle(4, 0xff3366, 0);
         borderPulse.strokeRect(2, 2, this.sys.game.canvas.width - 4, this.cameras.main.height - 4);
         borderPulse.setDepth(997);
-        
         this.tweens.add({
             targets: borderPulse,
             alpha: { from: 0, to: 0.8 },
@@ -1985,120 +1029,6 @@ createButtonSection(positions) {
         });
     }
 
-    /**
-     * Very brief, subtle screen vibrate for mobile on each keystroke.
-     */
-    miniScreenVibrate() {
-        const ua = navigator.userAgent || "";
-        const isIOS = /iphone|ipad|ipod/i.test(ua);
-        // More robust vibration check - must be a function, not just a property
-        const canVibrate = typeof navigator.vibrate === 'function';
-        
-        if (this.isMobile) {
-            // Subtle, very short shake (40ms, low intensity)
-            this.cameras.main.shake(SCENE_CONFIG.ANIMATIONS.MINI_SHAKE_DURATION, SCENE_CONFIG.EFFECTS.MINI_SHAKE_INTENSITY);
-            
-            // Try haptic feedback for each keystroke (excluding iOS)
-            if (canVibrate && !isIOS) {
-                try {
-                    // Very short vibration for keystroke feedback
-                    navigator.vibrate(10);
-                } catch (e) {
-                    // Ignore vibration errors
-                }
-            }
-        }
-    }
-
-    /**
-     * Test haptic feedback functionality with different patterns
-     * Can be called from console or bound to a test button
-     */
-    testHapticFeedback() {
-        const ua = navigator.userAgent || "";
-        const isIOS = /iphone|ipad|ipod/i.test(ua);
-        const isAndroid = /android/i.test(ua);
-        // Use the same robust check as other methods
-        const canVibrate = typeof navigator.vibrate === 'function';
-        
-        console.log("[HAPTIC TEST] Starting haptic feedback test...");
-        console.log("[HAPTIC TEST] Device info:", {
-            isMobile: this.isMobile,
-            isIOS: isIOS,
-            isAndroid: isAndroid,
-            canVibrate: canVibrate,
-            vibrateType: typeof navigator.vibrate,
-            vibrateExists: 'vibrate' in navigator,
-            userAgent: ua
-        });
-        
-        if (!canVibrate || isIOS) {
-            if (isIOS) {
-                console.log("[HAPTIC TEST] iOS detected - Vibration API not supported in Safari");
-            } else {
-                console.log("[HAPTIC TEST] Vibration API not supported on this device");
-            }
-            // Silently return without showing any error message to the user
-            return false;
-        }
-        
-        // Test patterns
-        const testPatterns = [
-            { name: "Single short", pattern: 50 },
-            { name: "Single medium", pattern: 100 },
-            { name: "Single long", pattern: 200 },
-            { name: "Double tap", pattern: [50, 50, 50] },
-            { name: "Triple tap", pattern: [50, 30, 50, 30, 50] },
-            { name: "SOS pattern", pattern: [100, 50, 100, 50, 100, 200, 300, 50, 300, 50, 300, 200, 100, 50, 100, 50, 100] }
-        ];
-        
-        let currentTest = 0;
-        
-        const runNextTest = () => {
-            if (currentTest >= testPatterns.length) {
-                console.log("[HAPTIC TEST] All tests completed");
-                return;
-            }
-            
-            const test = testPatterns[currentTest];
-            console.log(`[HAPTIC TEST] Testing pattern: ${test.name}`);
-            
-            try {
-                const result = navigator.vibrate(test.pattern);
-                console.log(`[HAPTIC TEST] Pattern "${test.name}" result:`, result);
-                
-                // Visual feedback
-                const feedbackText = this.add.text(
-                    this.cameras.main.centerX,
-                    this.cameras.main.centerY - 100,
-                    `Testing: ${test.name}`,
-                    {
-                        fontFamily: 'Arial',
-                        fontSize: '24px',
-                        color: '#00ff00',
-                        backgroundColor: '#000000',
-                        padding: { x: 20, y: 10 }
-                    }
-                ).setOrigin(0.5).setDepth(1000);
-                
-                this.time.delayedCall(1000, () => {
-                    feedbackText.destroy();
-                    currentTest++;
-                    this.time.delayedCall(500, runNextTest);
-                });
-                
-            } catch (e) {
-                console.error(`[HAPTIC TEST] Error with pattern "${test.name}":`, e);
-                currentTest++;
-                this.time.delayedCall(100, runNextTest);
-            }
-        };
-        
-        // Start the test sequence
-        runNextTest();
-        
-        return true;
-    }
 
     createExplosionEffect(word, x, y) {
         // Define required variables first
@@ -2135,32 +1065,6 @@ createButtonSection(positions) {
     async onDoneButtonClick() {
         // Create evaluating text near the center of the screen
         // Convert hex color to string for text fill
-
-        if (!(/\s$/.test(this.userInput))) {
-            // If the last character is not whitespace    
-            const words = this.userInput.trim().split(" ");
-            // Use let instead of const for lastWord since we modify it below
-            let lastWord = words[words.length - 1];
-            
-            if (lastWord && lastWord.length > 0) {
-                if (/[.,!?;:]$/.test(lastWord)) {
-                    lastWord = lastWord.slice(0, -1);
-                }
-                // Convert to lowercase for case-insensitive comparison
-                const lastWordLower = lastWord.toLowerCase();
-                const isAIWord = this.aiSuggestedWords && 
-                    this.aiSuggestedWords.some(word => word.toLowerCase() === lastWordLower);
-                
-                if (isAIWord) {
-                    this.updateFailsCounter(false);
-                    // Call shakeScreen for mobile when an AI word is detected
-                    this.shakeScreen();
-                } else {
-                    this.updateFailsCounter(true);
-                }
-            }
-        }
-
         const outlineColorHex = this.COLORS_HEX.BOX_OUTLINE;
         const outlineColorString = '#' + outlineColorHex.toString(16).padStart(6, '0');
 
@@ -2350,242 +1254,57 @@ createButtonSection(positions) {
         
     }
 
-    async generateAISuggestions(userInput) {
-        //return;
-        
-        this.isProcessingQueuedKeys = true; // Lock queue processing at start
-        // The flag should already be set by the caller, but ensure it's true
-        this.isGeneratingAISuggestions = true;
+    /**
+     * Generate an initial AI answer for the current prompt and populate the userInput text box.
+     * Uses the same web-llm engine as suggestion generation, but with up to 200 tokens.
+     */
+    async generateInitialAnswer() {
+        if (!this.currentPrompt || this.isShuttingDown) return;
 
-        // Performance measurement - start
-        const startTime = performance.now();
-        
-        // ALWAYS increment request ID to ensure no caching - force fresh generation every time
-        const requestId = ++this.suggestionRequestId;
-        const inputAtRequest = userInput;
-
-        // Don't generate suggestions for empty input
-        if (!userInput) {
-            if (requestId !== this.suggestionRequestId) return;
-            this.aiSuggestedWords = [];
-            this.showSuggestions([]);
-            if (this.autocompleteText) {
-                this.autocompleteText.setText('');
-            }
-            // Mark processing as complete - important even for empty input
-            this.keyProcessingComplete = true;
-            this.isProcessingQueuedKeys = false;
-            return;
-        }
-    
-        // Get all text up to the last word boundary
-        const lastSpaceIndex = userInput.lastIndexOf(' ');
-        const lastNewlineIndex = userInput.lastIndexOf('\n');
-        const lastBreakIndex = Math.max(lastSpaceIndex, lastNewlineIndex);
-        const context = lastBreakIndex >= 0 ? userInput.slice(0, lastBreakIndex + 1) : userInput;
-        
-        // Don't show "Loading..." as it causes unnecessary clearing of existing suggestions
-        // Suggestions will be displayed when ready
-        
-        // Don't wait for render frame - process immediately
-        
-        // Get the LLM engine from the registry manager
         const llmEngine = registryManager.get('llmEngine');
-        
-        // Check if engine exists and has the required MLC-AI WebLLM API
-        const isValidEngine = llmEngine && 
-            typeof llmEngine === 'object' && 
-            llmEngine.chat && 
-            llmEngine.chat.completions && 
+        const isValidEngine = llmEngine &&
+            typeof llmEngine === 'object' &&
+            llmEngine.chat &&
+            llmEngine.chat.completions &&
             typeof llmEngine.chat.completions.create === 'function';
-            
+
         if (!isValidEngine) {
-   
-            if (requestId !== this.suggestionRequestId) return;
-            // Mark processing as complete even when engine is missing or invalid
-            this.keyProcessingComplete = true;
-            this.isProcessingQueuedKeys = false;
-            
-            // Clear suggestions when engine is not available
-            this.aiSuggestedWords = [];
-            this.showSuggestions([]);
-            if (this.autocompleteText) {
-                this.autocompleteText.setText('');
-            }
-            
-            // Try to recover the engine
-            registryManager.attemptEngineRecovery((recoveredEngine) => {
-                const isRecoveredValid = recoveredEngine && 
-                    typeof recoveredEngine === 'object' && 
-                    recoveredEngine.chat && 
-                    recoveredEngine.chat.completions && 
-                    typeof recoveredEngine.chat.completions.create === 'function';
-                    
-                if (isRecoveredValid) {
-                    // Use current user input instead of the old inputAtRequest
-                    // This ensures we generate suggestions for the current state
-                    if (this.userInput && (this.userInput.endsWith(' ') || this.userInput.endsWith('\n') || this.userInput.endsWith('\r'))) {
-                        this.generateAISuggestions(this.userInput);
-                    }
-                }
-            });
+            console.warn('[generateInitialAnswer] LLM engine not available.');
             return;
         }
-    
-        // Optimize context - only include last 50 characters of context to reduce token count
-        const optimizedContext = context.length > 200 ? '...' + context.slice(-200) : context;
-        const trimmedcontext = "question: " + this.currentPrompt + ": \nanswer: " + optimizedContext.trim();
-        // Add retry logic
+
         try {
-            // Double-check the engine is still valid before calling it
-            const isStillValid = llmEngine && 
-                typeof llmEngine === 'object' && 
-                llmEngine.chat && 
-                llmEngine.chat.completions && 
-                typeof llmEngine.chat.completions.create === 'function';
-                
-            if (!isStillValid) {
-                throw new Error('LLM engine is not available or does not have required API');
-            }
-            
-
-
-            // Use the engine from registry manager (MLC-AI WebLLM engine)
-            // Note: We don't reset the chat session as it causes conversation state corruption.
-            // The temperature, frequency_penalty, and other parameters provide sufficient randomness.
-            
             const response = await llmEngine.chat.completions.create({
                 messages: [
                     {
-                        role: "system",
-                        content: "You are a helpful AI that suggests the next possible words based on the given context. Use English only."
+                        role: 'system',
+                        content: 'You are a helpful assistant. Answer the following question or prompt in plain, natural English. Be concise and direct. Do not use bullet points or lists. Respond in no more than 200 words.'
                     },
                     {
-                        role: "user",
-                        content: trimmedcontext
+                        role: 'user',
+                        content: this.currentPrompt
                     }
-                    ],
-                max_tokens: 3,
-                n: 5,
-                top_logprobs: 5,
-                logprobs: true,
+                ],
+                max_tokens: 200,
                 temperature: this.temperature,
-                frequency_penalty: this.frequencyPenalty,
-                presence_penalty: this.presencePenalty,
-                repetition_penalty: this.repetitionPenalty,
-                stream: false,
-                //seed: Math.floor(Math.random() * 10000000), // Different seed each time
-                // Add more randomization parameters
-                
+                stream: false
             });
 
-            console.log("DEBUG: LLM raw response:", response);
-            const choices = response.choices || [];
-            if (choices.length === 0) {
-                throw new Error('LLM engine returned no choices');
-            }
+            if (this.isShuttingDown) return;
 
-
-
-            // Extract logprobs from the first choice
-            const logprobs = response.choices[0].logprobs.content[0].top_logprobs;
-
-            
-            
-            // Only process the result if this is the latest request AND input matches current userInput
-            if (requestId !== this.suggestionRequestId || inputAtRequest !== this.userInput) {
-                this.isProcessingQueuedKeys = false;
-                return;
-            }
-
-            if (!logprobs || !Array.isArray(logprobs) || logprobs.length === 0) {
-                this.aiSuggestedWords = [];
-                this.showSuggestions([]);
-                if (this.autocompleteText) {
-                    this.autocompleteText.setText('');
+            const answer = response.choices?.[0]?.message?.content?.trim() || '';
+            if (answer) {
+                this.userInput = answer;
+                // Invalidate cursor cache so the new text is rendered
+                if (this._cachedValues) {
+                    this._cachedValues.lastUserInput = '';
                 }
-                this.isProcessingQueuedKeys = false;
-                return;
+                this.updateCursor();
+                this.updateWordCountDisplay();
             }
-
-            // PRIORITY 1: Extract and filter words from choices FIRST
-            let words = [];
-            
-            // Log the actual tokens and their probabilities from choices
-            if (choices && Array.isArray(choices)) {
-                choices.forEach((item, index) => {
-                    const topWord = item.message.content.split(" ")[0];
-                    if (topWord) {
-                        const cleanedWord = topWord.trim().replace(/^[\p{P}]+|[\p{P}]+$/gu, "");
-                        words.push(cleanedWord);
-                    }
-                });
-            }
-            
-            // Filter the choices words
-            const filtered_choices = words.filter(word => 
-                word && 
-                word.length > 1 && 
-                !stopwords.includes(word.toLowerCase())
-            );
-            
-            
-            // PRIORITY 2: Only if we don't have enough words, add from logprobs
-            let finalWords = [];
-            if (filtered_choices.length < this.topKValue) {
-            
-                // Extract tokens from logprobs as fallback
-                const logprobWords = logprobs
-                    .map(item => item.token)
-                    .map(word => word.trim())
-                    .map(word => word.replace(/^[\p{P}]+|[\p{P}]+$/gu, ""));
-                
-                // Filter logprob words
-                const filtered_logprobs = logprobWords.filter(word => 
-                    word && 
-                    word.length > 1 && 
-                    !stopwords.includes(word.toLowerCase())
-                );
-                
-                
-                // Combine: choices first, then logprobs
-                finalWords = [...filtered_choices, ...filtered_logprobs];
-            } else {
-                finalWords = filtered_choices;
-            }
-            
-            
-            // Deduplicate and limit to topKValue
-            const uniqueSuggestedWords = Array.from(new Set(finalWords)).slice(0, Math.max(this.topKValue, 1));
-            console.log("DEBUG: Unique suggestions to display:", uniqueSuggestedWords);
-
-            // Convert to lowercase
-            const lowercasedWords = uniqueSuggestedWords.map(word => word.toLowerCase());
-            
-            // Update suggestions and UI
-            this.aiSuggestedWords = lowercasedWords;
-            this.showSuggestions(lowercasedWords);
-            
-            // Force cache invalidation to ensure cursor updates (especially for empty suggestions)
-            if (this._cachedValues) {
-                this._cachedValues.lastAutocomplete = null; // Invalidate autocomplete cache
-            }
-            
-            // Always update cursor to reflect current state (including empty suggestions)
-            this.updateCursor();
-
-            // Only track performance issues
-            const endTime = performance.now();
-            const duration = endTime - startTime;
-            console.log(`AI suggestions completed in ${duration.toFixed(1)}ms`);
-            
         } catch (error) {
-            console.error("Error generating AI suggestions:", error);
+            console.error('[generateInitialAnswer] Error:', error);
         }
-            
-        this.isProcessingQueuedKeys = false; // Unlock queue processing at end
-        // Don't reset isGeneratingAISuggestions here - let generateAISuggestionsWithQueue handle it
-        
     }
 
     // Template methods with customization hooks
@@ -2820,650 +1539,16 @@ createButtonSection(positions) {
 
         this.updateCursor();
 
-        // Trigger suggestions for empty input immediately
-        this.generateAISuggestions('');
-
         // Set up input handlers after text objects are created
         this.setupInputHandlers();
     }
 
-    // Initialize key handlers map
-    initializeKeyHandlers() {
-        this.keyHandlers = {
-            ' ': this.handleSpaceKey.bind(this),
-            'Tab': this.handleTabKey.bind(this),
-            'Enter': this.handleEnterKey.bind(this),
-            'Backspace': this.handleBackspaceKey.bind(this)
-        };
-    }
 
-    // Handle space key
-    handleSpaceKey(event, done) {
-        
-        // Skip if we're processing mobile input to avoid double spaces
-        if (this.isMobile && this._processingMobileInput) {
-            if (done) done();
-            return;
-        }
-        
-        // Record the timestamp of the word boundary
-        this._lastWordBoundaryTime = Date.now();
-        // Set flag immediately to indicate AI suggestions are being generated
-        this.isGeneratingAISuggestions = true;
-        
-        try {
-            // Safely handle word checking with maximum safeguards
-            if (this.userInput && typeof this.userInput === 'string') {
-                const trimmedInput = this.userInput.trim();
-                if (trimmedInput && trimmedInput.length > 0) {
-                    const words = trimmedInput.split(" ");
-                    if (words && Array.isArray(words) && words.length > 0) {
-                        const lastWordIndex = words.length - 1;
-                        if (lastWordIndex >= 0) {
-                            const lastWord = words[lastWordIndex];
-                            if (lastWord && typeof lastWord === 'string' && lastWord.length > 0) {
-                                const lastWordLower = lastWord.toLowerCase();
-                                
-                                // Check if AI suggested words array exists and is an array before using .some()
-                                const aiWordsValid = this.aiSuggestedWords && 
-                                    Array.isArray(this.aiSuggestedWords) && 
-                                    this.aiSuggestedWords.length > 0;
-                                    
-                                let isAIWord = false;
-                                if (aiWordsValid) {
-                                    isAIWord = this.aiSuggestedWords.some(word => {
-                                        return word && typeof word === 'string' && word.toLowerCase && word.toLowerCase() === lastWordLower;
-                                    });
-                                }
-                                
-                                if (isAIWord) {
-                                    // In hard mode, delete the AI word immediately
-                                    if (this.mode && this.mode === 'hard') {
-                                        // Delete the word before showing feedback
-                                        if (typeof this.deleteAIWord === 'function') {
-                                            this.deleteAIWord(lastWord);
-                                        }
-                                        // Show feedback after deletion
-                                        if (typeof this.showBlockFeedback === 'function') {
-                                            this.showBlockFeedback(lastWord);
-                                        }
-                                        // Sync the hidden input after deletion
-                                        if (this._hiddenInput) {
-                                            this._hiddenInput.value = this.userInput;
-                                        }
-                                        // FIX: Still need to count AI word attempts and break streak
-                                        this.updateFailsCounter(false);
-                                    } else {
-                                        // Easy mode - just update counter and shake
-                                        this.updateFailsCounter(false);
-                                        this.shakeScreen();
-                                    }
-                                } else {
-                                    this.updateFailsCounter(true);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            console.error("Error processing space key:", error);
-            // Continue even if there's an error with word checking
-        }
-        
-        // NOW clear old suggestions after checking the word
-        this.aiSuggestedWords = [];
-        this.showSuggestions([]);
-        if (this.autocompleteText) {
-            this.autocompleteText.setText('');
-        }
-        
-        // Reset timer when space is pressed (hard mode only)
-        if (this.mode === 'hard') {
-            this.timerValue = SCENE_CONFIG.TIMER.DEFAULT_VALUE;
-            if (this.timerText) {
-                this.timerText.setText('0:20');
-            }
-        }
-        
-        // Only add space if not on mobile (mobile handles this through the hidden input)
-        if (!this.isMobile) {
-            this.userInput += " ";
-        }
-        // Sync the hidden input after adding space
-        if (this._hiddenInput) {
-            this._hiddenInput.value = this.userInput;
-        }
-        this.updateCursor();
-        // Block queue until async suggestion generation is fully complete
-        this.generateAISuggestionsWithQueue(done);
-    }
-
-    // Handle Tab key
-    handleTabKey(event, done) {
-        // Safely call preventDefault if available (for queued events, this may not exist)
-        if (typeof event.preventDefault === "function") {
-            event.preventDefault();
-        } else if (event.originalEvent && typeof event.originalEvent.preventDefault === "function") {
-            event.originalEvent.preventDefault();
-        }
-        
-        if (this.aiSuggestedWords && this.aiSuggestedWords.length > 0) {
-            const lastSpaceIndex = this.userInput.lastIndexOf(' ');
-            const lastNewlineIndex = this.userInput.lastIndexOf('\n');
-            const lastBreakIndex = Math.max(lastSpaceIndex, lastNewlineIndex);
-            const currentWord = lastBreakIndex >= 0 ? this.userInput.slice(lastBreakIndex + 1) : this.userInput;
-            const previousContent = lastBreakIndex >= 0 ? this.userInput.slice(0, lastBreakIndex + 1) : '';
-
-            let suggestionToUse = null;
-            if (!currentWord || currentWord.endsWith(' ') || currentWord.endsWith('\n')) {
-                suggestionToUse = this.aiSuggestedWords[0];
-            } else {
-                suggestionToUse = this.aiSuggestedWords.find(word =>
-                    word.toLowerCase().startsWith(currentWord.toLowerCase())
-                );
-            }
-            
-            if (suggestionToUse) {
-                // In hard mode, prevent using Tab to select AI words
-                if (this.mode === 'hard') {
-                    // Show feedback but don't add the word
-                    if (typeof this.showBlockFeedback === 'function') {
-                        this.showBlockFeedback(suggestionToUse);
-                    }
-                    // FIX: Still need to count AI word attempts and break streak
-                    this.updateFailsCounter(false);
-                    // Don't add the word to input
-                    if (done) done();
-                    return;
-                } else {
-                    // Easy mode - allow Tab completion
-                    this.userInput = previousContent + suggestionToUse + ' ';
-                    this.updateFailsCounter(false);
-                    this.shakeScreen();
-                    
-                    this.updateCursor();
-                    // Block queue until async suggestion generation is fully complete
-                    this.generateAISuggestionsWithQueue(done);
-                    return;
-                }
-            }
-        }
-        
-        if (done) done();
-    }
-
-    // Handle Enter key
-    handleEnterKey(event, done) {
-        // Skip if we're processing mobile input
-        if (this.isMobile && this._processingMobileInput) {
-            if (done) done();
-            return;
-        }
-        
-        // Record the timestamp of the word boundary
-        this._lastWordBoundaryTime = Date.now();
-        // Set flag immediately to indicate AI suggestions are being generated
-        this.isGeneratingAISuggestions = true;
-        
-        // Safely handle word checking with the same safety pattern
-        if (this.userInput && this.userInput.trim()) {
-            const words = this.userInput.trim().split(" ");
-            if (words && words.length > 0) {
-                const lastWord = words[words.length - 1];
-                if (lastWord && lastWord.length > 0) {
-                    const lastWordLower = lastWord.toLowerCase();
-                    // Check if AI suggested words array exists and is an array before using .some()
-                    const isAIWord = this.aiSuggestedWords && 
-                        Array.isArray(this.aiSuggestedWords) &&
-                        this.aiSuggestedWords.some(word => word && word.toLowerCase && word.toLowerCase() === lastWordLower);
-                    if (isAIWord) {
-                        // In hard mode, delete the AI word immediately
-                        if (this.mode === 'hard') {
-                            // Delete the word before showing feedback
-                            if (typeof this.deleteAIWord === 'function') {
-                                this.deleteAIWord(lastWord);
-                            }
-                            // Show feedback after deletion
-                            if (typeof this.showBlockFeedback === 'function') {
-                                this.showBlockFeedback(lastWord);
-                            }
-                            // Sync the hidden input after deletion
-                            if (this._hiddenInput) {
-                                this._hiddenInput.value = this.userInput;
-                            }
-                            // FIX: Still need to count AI word attempts and break streak
-                            this.updateFailsCounter(false);
-                        } else {
-                            // Easy mode - just update counter and shake
-                            this.updateFailsCounter(false);
-                            this.shakeScreen();
-                        }
-                    } else {
-                        this.updateFailsCounter(true);
-                    }
-                }
-            }
-        }
-        
-        // NOW clear old suggestions after checking the word
-        this.aiSuggestedWords = [];
-        this.showSuggestions([]);
-        if (this.autocompleteText) {
-            this.autocompleteText.setText('');
-        }
-        
-        // Reset timer when Enter is pressed (hard mode only)
-        if (this.mode === 'hard') {
-            this.timerValue = SCENE_CONFIG.TIMER.DEFAULT_VALUE;
-            if (this.timerText) {
-                this.timerText.setText('0:20');
-            }
-        }
-        
-        // Only add newline if not on mobile (mobile handles this through the hidden input)
-        if (!this.isMobile) {
-            this.userInput += "\n";
-        }
-        this.updateCursor();
-        // Block queue until async suggestion generation is fully complete
-        this.generateAISuggestionsWithQueue(done);
-    }
-
-    // Handle Backspace key
-    handleBackspaceKey(event, done) {
-        // Skip if we're processing mobile input
-        if (this.isMobile && this._processingMobileInput) {
-            if (done) done();
-            return;
-        }
-        
-        this.userInput = this.userInput.slice(0, -1);
-        
-        // Check if we're at a word boundary after backspace
-        const atWordBoundary = this.userInput.endsWith(' ') || this.userInput.endsWith('\n') || this.userInput.endsWith('\r');
-        
-        // Clear suggestions ONLY when at word boundary
-        if (atWordBoundary) {
-            this.aiSuggestedWords = [];
-            this.showSuggestions([]);
-            if (this.autocompleteText) {
-                this.autocompleteText.setText('');
-            }
-        }
-        
-        this.updateCursor();
-        
-        // Complete immediately without regenerating suggestions
-        if (done) done();
-    }
-
-    // Handle printable characters
-    handlePrintableCharacter(event, done) {
-        // Skip if we're processing mobile input
-        if (this.isMobile && this._processingMobileInput) {
-            if (done) done();
-            return;
-        }
-        
-        this.userInput += event.key;
-
-        // Reset timer when a period is typed
-        if (event.key === '.') {
-            this.timerValue = 20;
-            if (this.timerText) {
-                this.timerText.setText('0:20');
-            }
-        }
-
-        this.updateCursor();
-        
-        // For printable characters, we don't need to generate suggestions
-        // This speeds up typing by avoiding unnecessary async operations
-        if (done) done();
-    }
-
-    // Updated: handleSingleKeyEvent now supports async queueing
-    handleSingleKeyEvent(event, done) {
-        // This is the main logic extracted from original keydown handler's try block
-        try {
-            // Skip if we're shutting down to prevent stray key processing
-            if (this.isShuttingDown) { if (done) done(); return; }
-
-            // Skip mini vibrate to avoid any delays
-            const ignoreKeys = [
-                'Shift', 'Control', 'Alt', 'Meta', 'CapsLock',
-                'Escape', 'F1', 'F2', 'F3', 'F4', 'F5',
-                'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
-                'NumLock', 'ScrollLock', 'Pause', 'Insert', 'Home',
-                'PageUp', 'Delete', 'End', 'PageDown', 'ArrowRight',
-                'ArrowLeft', 'ArrowDown', 'ArrowUp'
-            ];
-
-            // Update lastKeydownTime at the very start for accurate timing
-            this._lastKeydownTime = Date.now();
-
-            this.isActivelyTyping = true;
-            if (!this.cursorVisible) this.cursorVisible = true;
-
-            // Start the timer on first keystroke if it hasn't been started yet (hard mode only)
-            if (!this.timerStarted && this.mode === 'hard') {
-                // Start the countdown timer
-                this.timerEvent = this.time.addEvent({
-                    delay: 1000,
-                    callback: this.updateTimer,
-                    callbackScope: this,
-                    loop: true
-                });
-                this.timerStarted = true;
-            }
-
-            this.inputActive = true; // Legacy flag
-            if (this.activeTimeout) {
-                clearTimeout(this.activeTimeout);
-            }
-            this.activeTimeout = setTimeout(() => {
-                this.isActivelyTyping = false;
-            }, SCENE_CONFIG.ANIMATIONS.TYPING_TIMEOUT);
-
-            if (ignoreKeys.includes(event.key)) {
-                if (done) done();
-                return;
-            }
-
-            // Initialize key handlers if not already done
-            if (!this.keyHandlers) {
-                this.initializeKeyHandlers();
-            }
-
-            // --- Main Key Processing Logic ---
-            const handler = this.keyHandlers[event.key];
-            
-            if (handler) {
-                // Use specific handler for known keys
-                handler(event, done);
-            } else if (event.key.length === 1) {
-                // Handle printable characters
-                this.handlePrintableCharacter(event, done);
-            } else {
-                // Unknown key, just finish
-                if (done) done();
-            }
-        } catch (error) {
-            console.error("Error processing single key event:", error, event);
-            if (done) done();
-        }
-    }
-    
-    // Helper for queue-aware async suggestion generation
-    generateAISuggestionsWithQueue(done) {
-        // Only generate suggestions if the last character is a space or linebreak
-        const currentInput = this.userInput;
-        if (
-            currentInput &&
-            (currentInput.endsWith(' ') || currentInput.endsWith('\n') || currentInput.endsWith('\r'))
-        ) {
-            // Call the async suggestion generator and call done when finished
-            this.generateAISuggestions(currentInput).then(() => {
-                // Don't clear the flag here - it will be cleared when the next key is pressed
-                // or after a timeout
-                if (done) done();
-                
-                // Set a timeout to clear the flag after a reasonable time
-                // This gives the user a window to type and trigger the penalty
-                if (this._aiGenerationTimeout) {
-                    clearTimeout(this._aiGenerationTimeout);
-                }
-                this._aiGenerationTimeout = setTimeout(() => {
-                    this.isGeneratingAISuggestions = false;
-                    this._aiGenerationTimeout = null;
-                }, 1000); // 1 second window
-            }).catch(() => {
-                // Don't clear the flag here either
-                if (done) done();
-                
-                // Set timeout for error case too
-                if (this._aiGenerationTimeout) {
-                    clearTimeout(this._aiGenerationTimeout);
-                }
-                this._aiGenerationTimeout = setTimeout(() => {
-                    this.isGeneratingAISuggestions = false;
-                    this._aiGenerationTimeout = null;
-                }, 1000);
-            });
-        } else {
-            // No suggestions needed, clear the flag but DON'T clear existing suggestions
-            // Suggestions should persist until the next generation cycle
-            this.isGeneratingAISuggestions = false;
-            if (done) done();
-        }
-    }
-
-
-    triggerProcessQueue() {
-        // Don't process if shutting down, already processing, or AI suggestions are being generated
-        if (this.isShuttingDown || this.isProcessingQueuedKeys || !this.keyProcessingComplete) {
-            return; 
-        }
-        
-        // Don't process if queue is empty
-        if (this.keyEventQueue.length === 0) {
-            return;
-        }
-
-        // Set processing flag to prevent concurrent processing
-        this.isProcessingQueuedKeys = true;
-        this.keyProcessingComplete = false;
-        
-        // Use Phaser timer to avoid deep recursion and allow frame rendering
-        this.time.delayedCall(0, this.processNextEventInQueue, [], this);
-    }
-
-    processNextEventInQueue() {
-        // Exit if we're shutting down to prevent processing during scene transitions
-        if (this.isShuttingDown) {
-            this.isProcessingQueuedKeys = false;
-            this.keyProcessingComplete = true;
-            this.keyEventQueue = [];
-            return;
-        }
-
-        if (this.keyEventQueue.length > 0) {
-            const eventToProcess = this.keyEventQueue.shift();
-
-            if (!eventToProcess || !eventToProcess.key) {
-                this.isProcessingQueuedKeys = false;
-                this.keyProcessingComplete = true;
-                return;
-            }
-
-            try {
-                this.handleSingleKeyEvent(eventToProcess, () => {
-                    this.keyProcessingComplete = true;
-                    if (this.keyEventQueue.length > 0) {
-                        this.time.delayedCall(0, this.processNextEventInQueue, [], this);
-                    } else {
-                        this.isProcessingQueuedKeys = false;
-                    }
-                });
-            } catch (error) {
-                console.error("Error in handleSingleKeyEvent:", error);
-                this.keyProcessingComplete = true;
-                if (this.keyEventQueue.length > 0) {
-                    this.time.delayedCall(0, this.processNextEventInQueue, [], this);
-                } else {
-                    this.isProcessingQueuedKeys = false;
-                }
-            }
-        } else {
-            this.isProcessingQueuedKeys = false;
-            this.keyProcessingComplete = true;
-        }
-    }
-
-
-    setupInputHandlers() {      
-        // this.input.keyboard.on('keydown-H', () => {
-        //     console.log("[HAPTIC TEST] Manual test triggered");
-        //     this.testHapticFeedback();
-        // });
-        
-
-
-        // First make sure we have a basic text displayed
+    setupInputHandlers() {
+        // Ensure text is initialized
         if (this.inputText) {
-            // Force update with initial cursor state
             this.inputText.setText("_");
             this.cursorVisible = true;
-        }
-        
-        this.input.keyboard.removeAllListeners('keydown');
-
-        // Initialize properties for input processing
-        this.lastKeyTime = 0;
-        this.isActivelyTyping = false;
-        this.lastKeyPressed = '';
-        this.lastProcessedKey = null;
-        this.lastKeyProcessTime = 0;
-        this.keyEventQueue = [];
-        this.isProcessingQueuedKeys = false;
-        this.keyProcessingComplete = true;
-
-        // Initialize deduplication map
-        if (!this.keyEventDeduplicationMap) {
-            this.keyEventDeduplicationMap = new Map();
-        }
-
-        // Clean up old entries periodically
-        this.time.addEvent({
-            delay: 1000,
-            loop: true,
-            callback: () => {
-                const now = Date.now();
-                const keysToDelete = [];
-                this.keyEventDeduplicationMap.forEach((timestamp, key) => {
-                    if (now - timestamp > 100) { // Remove entries older than 100ms
-                        keysToDelete.push(key);
-                    }
-                });
-                keysToDelete.forEach(key => this.keyEventDeduplicationMap.delete(key));
-            }
-        });
-
-        // Create a more efficient debounce utility with a dynamic delay based on input length
-        function debounce(func, wait) {
-            let timeout;
-            return function(...args) {
-                // Cancel previous scheduled execution
-                clearTimeout(timeout);
-                
-                // Calculate a dynamic delay based on input length
-                // Longer text = slightly longer delay to prevent processing backlog
-                const input = args[0] || '';
-                const dynamicDelay = Math.min(wait, wait + Math.floor(input.length / 50) * 50);
-                
-                // Schedule new execution
-                timeout = setTimeout(() => {
-                    // Only execute if we're not shutting down
-                    if (!this.isShuttingDown) {
-                        func.apply(this, args);
-                    }
-                }, dynamicDelay);
-            };
-        }
-
-        // Debounced suggestion generator with faster initial display
-        this.debouncedGenerateAISuggestions = debounce((input) => {
-            // Use a snapshot of input to prevent race conditions
-            const currentInput = input;
-            // Only generate suggestions if input matches current state
-            if (currentInput === this.userInput && !this.isShuttingDown) {
-                this.generateAISuggestions(currentInput);
-            }
-        }, SCENE_CONFIG.DEBOUNCE.SUGGESTIONS); // Use config constant
-
-        // Only set up keyboard listeners for desktop
-        // Mobile input is handled entirely through the hidden input element
-        if (!this.isMobile) {
-            this.input.keyboard.on("keydown", (event) => {
-            // Always define now for debounce and event queue logic
-            const now = Date.now();
-
-            // Block all input if penalty or lockout is active
-            if (this._fastTypingPenaltyActive || this._fastTypingLockoutActive) {
-                if (typeof event.preventDefault === "function") event.preventDefault();
-                return;
-            }
-
-            // Only apply penalty logic after the first word (i.e., after a space or newline is present)
-            const isFirstWord = !this.userInput || !/[\s\n]/.test(this.userInput);
-
-            const isPrintable = event.key && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
-            if (!isFirstWord && isPrintable && this._lastWordBoundaryTime > 0) {
-                const now = Date.now();
-                const sinceBoundary = now - this._lastWordBoundaryTime;
-                if (sinceBoundary < this.fastTypingCooldownMs) {
-                    this._triggerFastTypingPenalty();
-                    this._fastTypingLockoutActive = true;
-                    if (typeof event.preventDefault === "function") event.preventDefault();
-                    return;
-                }
-            }
-
-            // Lockout for word boundary keys as well
-            if (!isFirstWord && (event.key === " " || event.key === "Enter") && this._lastWordBoundaryTime > 0) {
-                const now = Date.now();
-                const sinceBoundary = now - this._lastWordBoundaryTime;
-                if (sinceBoundary < this.fastTypingCooldownMs) {
-                    this._triggerFastTypingPenalty();
-                    this._fastTypingLockoutActive = true;
-                    if (typeof event.preventDefault === "function") event.preventDefault();
-                    return;
-                }
-            }
-
-            // Skip if we're shutting down
-            if (this.isShuttingDown) return;
-
-            // Prevent default browser behavior for all keys we handle to avoid browser shortcuts
-            // (e.g., Firefox Quick Find triggered by apostrophe, Chrome shortcuts, etc.)
-            const modifierKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock', 'ScrollLock'];
-            if (!modifierKeys.includes(event.key) && typeof event.preventDefault === "function") {
-                event.preventDefault();
-            }
-
-            // Create unique key for deduplication
-            const eventKey = `${event.key}_${event.code}_${event.timeStamp}`;
-            
-            // Check for duplicate events (browser repeat or multiple event handlers)
-            const lastEventTime = this.keyEventDeduplicationMap.get(eventKey);
-            if (lastEventTime && (now - lastEventTime) < SCENE_CONFIG.DEBOUNCE.KEY_REPEAT_FILTER) {
-                return; // Skip duplicate event
-            }
-            
-            // Record this event
-            this.keyEventDeduplicationMap.set(eventKey, now);
-            this.lastKeyPressed = event.key;
-            this.lastKeyTime = now;
-
-            // Queue ALL keys for proper ordering
-            const enqueuedEvent = {
-                key: event.key,
-                code: event.code,
-                timestamp: now,
-                altKey: event.altKey,
-                ctrlKey: event.ctrlKey,
-                metaKey: event.metaKey,
-                shiftKey: event.shiftKey,
-                // Include the original event for reference if needed
-                originalEvent: event
-            };
-            
-            this.keyEventQueue.push(enqueuedEvent);
-
-                // Start processing the queue if not already running
-                this.triggerProcessQueue();
-            });
         }
 
         // Set up cursor blinking timer
@@ -3472,11 +1557,10 @@ createButtonSection(positions) {
         }
         
         this.cursorTimer = this.time.addEvent({
-            delay: SCENE_CONFIG.ANIMATIONS.CURSOR_BLINK,  // Use config constant
+            delay: SCENE_CONFIG.ANIMATIONS.CURSOR_BLINK,
             loop: true,
             callback: () => {
-                // Only blink cursor when not actively typing
-                if (!this.isActivelyTyping && !this.isShuttingDown) {
+                if (!this.isShuttingDown) {
                     this.cursorVisible = !this.cursorVisible;
                     this.updateCursor();
                 }
@@ -3486,480 +1570,6 @@ createButtonSection(positions) {
         // Make sure cursor is initially visible
         this.cursorVisible = true;
         this.updateCursor();
-
-        // Make input area interactive
-        if (this.inputTextBorder) {
-            // Calculate the actual Y position of the input box
-            const padding = 20;
-            const sm = this.scalingManager;
-            const menuBarHeight = this.menuBarHeight || sm.scaleValue(100);
-            let yCursor = menuBarHeight + sm.scaleValue(20); // matches relayoutScene
-            yCursor += sm.scaleValue(130); // stats box height
-            // Use configuration constants WITH SCALING for prompt offset
-            yCursor += this.isMobile 
-                ? sm.scaleValue(SCENE_CONFIG.LAYOUT.MOBILE_PROMPT_OFFSET_BELOW_STATS)
-                : sm.scaleValue(SCENE_CONFIG.LAYOUT.PROMPT_OFFSET_BELOW_STATS);
-            yCursor += this.createPromptTextBox(yCursor).boxBottom + sm.scaleValue(20) - yCursor; // prompt box
-            // Now yCursor is the top of the input box
-
-            const inputBoxY = yCursor;
-            // Use a larger hit area height for mobile to make it easier to tap
-            const inputBoxHeight = sm.scaleValue(this.isMobile ? 340 : 240);
-            // Store these values for reference in other methods
-            this.inputBoxY = inputBoxY;
-            this.inputBoxHeight = inputBoxHeight;
-
-            // Calculate the actual box dimensions and position
-            const boxX = sm.centerX() - this.uiBoxWidth / 2;
-            const boxWidth = this.uiBoxWidth;
-            
-            // Store these values for reference in other methods
-            this.inputBoxX = boxX;
-            this.inputBoxWidth = boxWidth;
-
-            // Create a larger hit area for mobile devices
-            const hitAreaPadding = this.isMobile ? 20 : 0; // Extra padding around the hit area for mobile
-            
-            this.inputTextBorder.setInteractive(
-                new Phaser.Geom.Rectangle(
-                    boxX - hitAreaPadding,
-                    inputBoxY - hitAreaPadding,
-                    boxWidth + (hitAreaPadding * 2),
-                    inputBoxHeight + (hitAreaPadding * 2)
-                ),
-                Phaser.Geom.Rectangle.Contains
-            ).setDepth(20)
-            .on('pointerdown', (pointer) => {
-                // For desktop, focus the game canvas to ensure keyboard events are received
-                if (this.isDesktop) {
-                    if (this.sys && this.sys.game && this.sys.game.canvas) {
-                        this.sys.game.canvas.focus();
-                    }
-                }
-                // For mobile, focus the hidden input
-                this.focusHiddenInput();
-                
-                // Create click effect at the actual pointer position instead of center of screen
-                this.createInputBoxClickEffect(
-                    pointer.x,
-                    pointer.y
-                );
-                
-                // Log for debugging
-                console.log("[INPUT] Input box clicked at:", pointer.x, pointer.y);
-                console.log("[INPUT] Input box dimensions:", boxX, inputBoxY, boxWidth, inputBoxHeight);
-            });
-        }
-        // Set up hidden input for mobile typing
-        this.setupHiddenInput();
-    }
-
-    /**
-     * Triggers the fast typing penalty: blocks keyboard input and shows a modal for 10 seconds.
-     */
-    async _triggerFastTypingPenalty() {
-        if (this._fastTypingPenaltyActive) return;
-        this._fastTypingPenaltyActive = true;
-        this._fastTypingLockoutActive = true;
-
-        // Reset word boundary tracking to prevent further penalties until next boundary
-        this._lastWordBoundaryTime = 0;
-
-        // Pause the timer while penalty is active
-        if (this.timerEvent && !this.timerEvent.paused) {
-            this.timerEvent.paused = true;
-        }
-
-        // Show modal
-        const warning = Phaser.Utils.Array.GetRandom
-            ? Phaser.Utils.Array.GetRandom(this._warningMessages)
-            : this._warningMessages[Math.floor(Math.random() * this._warningMessages.length)];
-
-        // Modal dimensions
-        const width = Math.min(500, this.sys.game.canvas.width * 0.8);
-        const height = 180;
-        // On mobile, position modal higher to avoid keyboard
-        const modalTopY = this.isMobile ? 120 : (this.cameras.main.centerY - height / 2);
-        const x = this.cameras.main.centerX - width / 2;
-        const y = modalTopY;
-
-        // Overlay
-        const overlay = this.add.rectangle(
-            0, 0,
-            this.sys.game.canvas.width,
-            this.cameras.main.height,
-            0x000000, 0.7
-        ).setOrigin(0, 0).setDepth(1001);
-
-        // Modal background
-        const modalBg = this.add.graphics();
-        modalBg.fillStyle(0x222222, 0.98);
-        modalBg.fillRoundedRect(x, y, width, height, 18);
-        modalBg.lineStyle(4, 0xff0000, 0.7);
-        modalBg.strokeRoundedRect(x, y, width, height, 18);
-        modalBg.setDepth(1002);
-
-        // Warning text
-        const deviceType = detectDeviceType();
-        const uiScale = this.registry && this.registry.get && this.registry.get('uiScale') || 1;
-        const warningStyle = getTextStyle('prompt', deviceType, this.mode || 'basic', uiScale);
-        const text = this.add.text(
-            this.cameras.main.centerX,
-            y + 50,
-            warning,
-            {
-                ...warningStyle,
-                color: '#ff0000',
-                align: 'center',
-                wordWrap: { width: width - 40 }
-            }
-        ).setOrigin(0.5).setDepth(1003);
-
-        // Countdown timer with label
-        const timerStyle = getTextStyle('effects', deviceType, this.mode || 'basic', uiScale);
-        const timerText = this.add.text(
-            this.cameras.main.centerX,
-            y + height - 32,
-            `Penalty: ${this.fastTypingPenaltySeconds}s`,
-            {
-                ...timerStyle,
-                color: '#ffffff',
-                align: 'center'
-            }
-        ).setOrigin(0.5).setDepth(1003);
-
-        // Store modal elements for cleanup
-        this._fastTypingModal = [overlay, modalBg, text, timerText];
-
-        // Force Phaser to render the modal before continuing
-        await Promise.resolve();
-
-        // Countdown logic
-        let secondsLeft = this.fastTypingPenaltySeconds;
-        timerText.setText(`Penalty: ${secondsLeft}s`);
-        this._fastTypingPenaltyTimeout = this.time.addEvent({
-            delay: 1000,
-            repeat: this.fastTypingPenaltySeconds - 1,
-            callback: () => {
-                secondsLeft--;
-                timerText.setText(`Penalty: ${secondsLeft}s`);
-                if (secondsLeft <= 0) {
-                    this._clearFastTypingPenalty();
-                }
-            }
-        });
-    }
-
-    /**
-     * Clears the fast typing penalty and removes the modal.
-     */
-    _clearFastTypingPenalty() {
-        this._fastTypingPenaltyActive = false;
-        this._fastTypingLockoutActive = false;
-        // Reset word boundary tracking to ensure next boundary is tracked
-        this._lastWordBoundaryTime = 0;
-        // Resume the timer when penalty ends
-        if (this.timerEvent && this.timerEvent.paused) {
-            this.timerEvent.paused = false;
-        }
-        if (this._fastTypingPenaltyTimeout) {
-            this._fastTypingPenaltyTimeout.remove();
-            this._fastTypingPenaltyTimeout = null;
-        }
-        if (this._fastTypingModal) {
-            this._fastTypingModal.forEach(obj => obj && obj.destroy && obj.destroy());
-            this._fastTypingModal = null;
-        }
-        this._lastKeydownTime = 0;
-    }
-
-    // Hidden HTML input for mobile typing (keyboard only, no visible overlay)
-    setupHiddenInput() {
-        // Only create hidden input for mobile devices
-        // Remove any previous input
-        if (this._hiddenInput) {
-            // Clean up existing event listeners
-            if (this._hiddenInputHandler) {
-                this._hiddenInput.removeEventListener('input', this._hiddenInputHandler);
-                this._hiddenInputHandler = null;
-            }
-            if (this._hiddenInputBlurHandler) {
-                this._hiddenInput.removeEventListener('blur', this._hiddenInputBlurHandler);
-                this._hiddenInputBlurHandler = null;
-            }
-            if (this._hiddenInputFocusHandler) {
-                this._hiddenInput.removeEventListener('focus', this._hiddenInputFocusHandler);
-                this._hiddenInputFocusHandler = null;
-            }
-            document.body.removeChild(this._hiddenInput);
-            this._hiddenInput = null;
-        }
-        if (!this.isMobile) {
-            // On desktop, do not create or use hidden input
-            return;
-        }
-        
-        // Detect iOS for special handling
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        
-        // Create hidden input - use textarea for better mobile keyboard support
-        const input = document.createElement('textarea');
-        input.autocapitalize = 'sentences';
-        input.autocomplete = 'off';
-        input.spellcheck = false;
-        input.maxLength = 500;
-        input.style.position = 'fixed';
-        input.style.opacity = '0';
-        input.style.pointerEvents = 'none';
-        input.style.left = '-1000px';
-        input.style.top = '0';
-        input.style.width = '1px';
-        input.style.height = '1px';
-        input.style.fontSize = '16px'; // iOS won't zoom in if font size is 16px or larger
-        
-        // For iOS, add some additional styles to improve keyboard behavior
-        if (isIOS) {
-            input.style.fontSize = '16px'; // Prevent zoom on iOS
-            input.style.transformOrigin = 'top left';
-            input.style.transform = 'scale(1)';
-            input.style.webkitTransform = 'scale(1)';
-        }
-        
-        input.value = this.userInput;
-
-        // Flag to prevent double processing
-        this._processingMobileInput = false;
-
-        // Store input handler as a property so it can be removed later
-        this._hiddenInputHandler = () => {
-            // Set flag to indicate we're processing mobile input
-            this._processingMobileInput = true;
-            const previousInput = this.userInput;
-            this.userInput = input.value;
-
-            // Only generate suggestions if the last character is a space or newline
-            const lastChar = this.userInput.slice(-1);
-            if (lastChar === ' ' || lastChar === '\n' || lastChar === '\r') {
-                this.generateAISuggestionsWithQueue(() => {});
-            }
-
-            // For mobile, we'll handle word checking in the input handler
-            // but NOT trigger the visual effects to prevent duplication
-            if (lastChar === ' ' || lastChar === '\n') {
-                let isAIWord = false; // Declare isAIWord in the outer scope
-                
-                const words = this.userInput.trim().split(/\s+/);
-                if (words.length > 0) {
-                    // Get the last word and clean it
-                    let lastWord = words[words.length - 1];
-                    // Store original word for feedback
-                    const originalLastWord = lastWord;
-                    // Remove punctuation for comparison
-                    lastWord = lastWord.replace(/[.,!?;:]$/, '');
-                    const lastWordLower = lastWord.toLowerCase();
-                    
-                    // Check if it's an AI word
-                    isAIWord = this.aiSuggestedWords && 
-                        Array.isArray(this.aiSuggestedWords) &&
-                        this.aiSuggestedWords.some(word => word && word.toLowerCase() === lastWordLower);
-                    
-                    if (isAIWord) {
-                        // In hard mode, delete the AI word from input
-                        if (this.mode === 'hard') {
-                            // Remove the last word from the array
-                            words.pop();
-                            // Reconstruct the input without the AI word
-                            this.userInput = words.join(' ');
-                            // Only add space if there are remaining words
-                            if (this.userInput.length > 0) {
-                                if (lastChar === ' ') {
-                                    this.userInput += ' ';
-                                } else if (lastChar === '\n') {
-                                    this.userInput += '\n';
-                                }
-                            }
-                            // Update the hidden input value to match
-                            input.value = this.userInput;
-                            // Move cursor to end
-                            input.setSelectionRange(input.value.length, input.value.length);
-                            // Show feedback if the method exists
-                            if (typeof this.showBlockFeedback === 'function') {
-                                this.showBlockFeedback(lastWord);
-                            }
-                        } else {
-                            // Easy mode - just increment counter
-                            this.aiWordCount++;
-                        }
-                    }
-                }
-                
-            // Update UI elements (no visual progress bar)
-            this.updateWordCountDisplay();
-            this.updateStreakCounter(!isAIWord);
-            }
-
-            // Update cursor immediately for mobile
-            this.updateCursor();
-            
-            // Clear the flag after a short delay
-            setTimeout(() => {
-                this._processingMobileInput = false;
-            }, 50);
-        };
-
-        // Store blur handler as a property
-        this._hiddenInputBlurHandler = () => {
-            console.log("[KEYBOARD] Hidden input blur event");
-            this.updateCursor();
-        };
-        
-        // Store focus handler as a property
-        this._hiddenInputFocusHandler = () => {
-            console.log("[KEYBOARD] Hidden input focus event");
-            // Create a visual indicator that the keyboard is active
-            this.createInputBoxClickEffect(
-                this.cameras.main.centerX,
-                this.inputBoxY + this.inputBoxHeight / 2
-            );
-        };
-
-        // Add event listeners
-        input.addEventListener('input', this._hiddenInputHandler);
-        input.addEventListener('blur', this._hiddenInputBlurHandler);
-        input.addEventListener('focus', this._hiddenInputFocusHandler);
-
-        document.body.appendChild(input);
-        this._hiddenInput = input;
-        
-        // Log for debugging
-        console.log("[KEYBOARD] Hidden input created and added to DOM");
-    }
-
-    focusHiddenInput() {
-        console.log("[KEYBOARD] focusHiddenInput called");
-        if (!this._hiddenInput) this.setupHiddenInput();
-        if (!this._hiddenInput) return; // Guard: do nothing if still undefined (e.g., desktop)
-        
-        // Set the value to match current user input
-        this._hiddenInput.value = this.userInput;
-        
-        // For iOS devices, we need to make the input visible temporarily to ensure focus works
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (isIOS) {
-            // Make the input briefly visible but transparent
-            this._hiddenInput.style.opacity = '0.01';
-            this._hiddenInput.style.pointerEvents = 'auto';
-            this._hiddenInput.style.left = '50%';
-            this._hiddenInput.style.top = '50%';
-            this._hiddenInput.style.transform = 'translate(-50%, -50%)';
-            this._hiddenInput.style.width = '80%';
-            this._hiddenInput.style.height = '40px';
-        }
-        
-        // Focus the input to show keyboard
-        this._hiddenInput.focus();
-        
-        // Move cursor to end
-        this._hiddenInput.setSelectionRange(this._hiddenInput.value.length, this._hiddenInput.value.length);
-        
-        // For iOS, hide the input again after a short delay
-        if (isIOS) {
-            setTimeout(() => {
-                this._hiddenInput.style.opacity = '0';
-                this._hiddenInput.style.pointerEvents = 'none';
-                this._hiddenInput.style.left = '-1000px';
-                this._hiddenInput.style.top = '0';
-                this._hiddenInput.style.width = '1px';
-                this._hiddenInput.style.height = '1px';
-                this._hiddenInput.style.transform = 'none';
-            }, 100);
-        }
-        
-        // Log keyboard detection state
-        console.log("[KEYBOARD] Hidden input focused, checking keyboard detection setup");
-        console.log("[KEYBOARD] _keyboardResizeHandler exists:", !!this._keyboardResizeHandler);
-        console.log("[KEYBOARD] window.visualViewport exists:", !!window.visualViewport);
-    }
-
-    /**
-     * Handle keyboard show event - shift canvas up to hide menu bar
-     * @param {number} keyboardHeight - Height of the keyboard
-     */
-    onKeyboardShow(keyboardHeight) {
-        console.log("[KEYBOARD] onKeyboardShow called, keyboardHeight:", keyboardHeight);
-        console.log("[KEYBOARD] isMobile:", this.isMobile, "canvasShifted:", this._canvasShifted);
-        
-        if (!this.isMobile || this._canvasShifted) return;
-        
-        // Initialize scaling manager if not exists
-        if (!this.scalingManager) {
-            this.scalingManager = new ScalingManager(this);
-        }
-        const sm = this.scalingManager;
-        
-        // Calculate shift amount - only shift enough to show the input area
-        // We want to keep the timer and word stats visible
-        // menuBarHeight is already scaled, so we can use it directly
-        const menuBarHeight = this.menuBarHeight || sm.scaleValue(200);
-        // Shift up by about 40% of the menu bar height to keep stats visible
-        const shiftAmount = Math.floor(menuBarHeight * 0.5);
-        console.log("[KEYBOARD] Shifting canvas by:", shiftAmount, "px (menu bar height:", menuBarHeight, ", percentage: 40%)");
-        
-        // Apply transform to shift canvas up
-        if (this.game && this.game.canvas) {
-            console.log("[KEYBOARD] Applying canvas transform");
-            this.game.canvas.style.transition = 'transform 0.3s ease-out';
-            this.game.canvas.style.transform = `translateY(-${shiftAmount}px)`;
-            this._canvasShifted = true;
-            
-            // Store the shift amount for other calculations
-            this._canvasShiftAmount = shiftAmount;
-            
-            // Ensure input area is still visible
-            this.ensureInputVisible(keyboardHeight);
-        } else {
-            console.log("[KEYBOARD] ERROR: game.canvas not available");
-        }
-    }
-
-    /**
-     * Handle keyboard hide event - reset canvas position
-     */
-    onKeyboardHide() {
-        console.log("[KEYBOARD] onKeyboardHide called");
-        console.log("[KEYBOARD] isMobile:", this.isMobile, "canvasShifted:", this._canvasShifted);
-        
-        if (!this.isMobile || !this._canvasShifted) return;
-        
-        // Defer canvas reset to next frame to avoid rendering conflicts
-        this.time.delayedCall(0, () => {
-            // Double-check game and canvas still exist
-            if (!this.game || !this.game.canvas) {
-                console.log("[KEYBOARD] Canvas no longer exists, skipping reset");
-                return;
-            }
-            
-            // Reset canvas position
-            console.log("[KEYBOARD] Resetting canvas transform");
-            this.game.canvas.style.transition = 'transform 0.3s ease-out';
-            this.game.canvas.style.transform = 'translateY(0)';
-            this._canvasShifted = false;
-            this._canvasShiftAmount = 0;
-            
-            // Force a render update after transform
-            if (this.game.renderer && typeof this.game.renderer.resize === 'function') {
-                this.game.renderer.resize(this.game.canvas.width, this.game.canvas.height);
-            }
-        });
-    }
-
-    /**
-     * Ensure the input area is visible when keyboard is shown
-     * @param {number} keyboardHeight - Height of the keyboard
-     */
-    ensureInputVisible(keyboardHeight) {
-        // This method can be extended to scroll to the input area if needed
-        console.log("[KEYBOARD] Ensuring input visibility with keyboard height:", keyboardHeight);
     }
 
     setupMenuBarControls(menuBarHeight, padding, rightMargin, gap, shiftLeft, { menuBar, menuBarBorder, titleText }) {
@@ -3972,9 +1582,8 @@ createButtonSection(positions) {
 
         this.createSettingsButton(settingsButtonX, settingsButtonY, menuBarHeight);
 
-        // Create mode and level indicator in center of menu bar
-        const modeText = this.mode === 'hard' ? 'HARD' : 'EASY';
-        const indicatorText = `LEVEL ${this.levelValue} | ${modeText}`;
+        // Create level indicator in center of menu bar
+        const indicatorText = `LEVEL ${this.levelValue}`;
 
         // Calculate levelModeIndicatorY locally (match logic from createMenuBar)
         let levelModeIndicatorY;
@@ -4079,7 +1688,7 @@ createButtonSection(positions) {
             const titleY = menuBarHeight / 3;
             titleText = this.add.text(
                 this.cameras.main.centerX, titleY,
-                "(NONSLOP)",
+                "(unslop)",
                 style.titleStyle
             ).setOrigin(0.5, 0.5);
 
@@ -4096,7 +1705,7 @@ createButtonSection(positions) {
         } else {
             titleText = this.add.text(
                 padding, menuBarHeight / 2,
-                "(NONSLOP)",
+                "(unslop)",
                 style.titleStyle
             ).setOrigin(0, 0.5);
             levelModeIndicatorY = menuBarHeight / 2;
@@ -4162,10 +1771,7 @@ createButtonSection(positions) {
     }
 
     createTimer() {
-        // Only create timer for hard mode
-        if (this.mode !== 'hard') {
-            return;
-        }
+        // Create timer
         
         // Destroy any existing timer text to prevent duplicates
         if (this.timerText) {
@@ -4249,7 +1855,6 @@ createButtonSection(positions) {
         
         // 4. Clear the AI suggestions
         this.aiSuggestedWords = [];
-        this.showSuggestions([]);
         if (this.autocompleteText) {
             this.autocompleteText.setText('');
         }
@@ -4430,12 +2035,11 @@ createButtonSection(positions) {
         this.updateLevelModeIndicator();
     }
 
-    // Add this method to BaseGameScene.js
+    // Update level indicator
     updateLevelModeIndicator() {
         if (!this.levelModeIndicator) return;
         
-        const modeText = this.mode === 'hard' ? 'HARD' : 'EASY';
-        const indicatorText = `LEVEL ${this.levelValue} | ${modeText}`;
+        const indicatorText = `LEVEL ${this.levelValue}`;
         
         // Update text content
         this.levelModeIndicator.setText(indicatorText);
@@ -4471,11 +2075,6 @@ createButtonSection(positions) {
     toggleSettingsPopup() {
         this.popupJustOpened = true;
         
-        // Hide keyboard on mobile when opening settings (do this first, regardless of mode)
-        if (this.isMobile && this._hiddenInput) {
-            this._hiddenInput.blur();
-        }
-        
         if (this.settingsPopup) {
             // If popup exists, close it
             this.closeSettingsPopup();
@@ -4502,7 +2101,6 @@ createButtonSection(positions) {
         // Create UI elements
         const { levelSliderHandle, levelLabel } = this.createLevelSlider(popupX, popupY, popupWidth, popupHeight);
         const { tempSliderHandle, tempLabel } = this.createTemperatureSlider(popupX, popupY, popupWidth, popupHeight);
-        this.createModeToggle(popupX, popupY, popupWidth, popupHeight);
         this.createSettingsButtons(popupX, popupY, popupWidth, popupHeight);
         
         // Setup drag functionality
@@ -4524,13 +2122,11 @@ createButtonSection(positions) {
         // Use mobile gap for mobile devices
         const gap2 = sm.scaleValue(this.isMobile ? SCENE_CONFIG.SETTINGS_POPUP.MOBILE_GAP : SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
         const sliderRowHeight2 = sm.scaleValue(44);
-        const gap3 = sm.scaleValue(this.isMobile ? SCENE_CONFIG.SETTINGS_POPUP.MOBILE_GAP : SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
-        const toggleRowHeight = sm.scaleValue(44);
-        const gap4 = sm.scaleValue(15);
+        const gap3 = sm.scaleValue(15);
         const buttonRowHeight = sm.scaleValue(54);
         const bottomPadding = sm.scaleValue(30);
 
-        const popupHeight = bannerHeight + gap1 + sliderRowHeight + gap2 + sliderRowHeight2 + gap3 + toggleRowHeight + gap4 + buttonRowHeight + bottomPadding;
+        const popupHeight = bannerHeight + gap1 + sliderRowHeight + gap2 + sliderRowHeight2 + gap3 + buttonRowHeight + bottomPadding;
         const popupX = this.cameras.main.centerX - popupWidth / 2;
         const popupY = this.cameras.main.centerY - popupHeight / 2;
 
@@ -4833,11 +2429,6 @@ createButtonSection(positions) {
             this.inputText.setText('_');
         }
         
-        // Clear the hidden input for mobile
-        if (this._hiddenInput) {
-            this._hiddenInput.value = '';
-        }
-        
         // Reset streak counters BEFORE updating background
         this.wordStreak = 0;
         this.lastWordWasOriginal = false;
@@ -4854,7 +2445,6 @@ createButtonSection(positions) {
         
         // Clear AI suggestions
         this.aiSuggestedWords = [];
-        this.showSuggestions([]);
         
         // Clear any autocomplete text
         if (this.autocompleteText) {
@@ -5236,69 +2826,6 @@ createButtonSection(positions) {
     }
 
     /**
-     * Create the mode toggle
-     */
-    createModeToggle(popupX, popupY, popupWidth, popupHeight) {
-        const sm = this.scalingManager || new ScalingManager(this);
-        const gap = sm.scaleValue(20);
-        const bannerHeight = sm.scaleValue(54);
-        const gap1 = sm.scaleValue(24);
-        const sliderRowHeight = sm.scaleValue(44);
-        const gap2 = sm.scaleValue(this.isMobile ? SCENE_CONFIG.SETTINGS_POPUP.MOBILE_GAP : SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
-        const sliderRowHeight2 = sm.scaleValue(44); // Temperature slider row
-        const gap3 = sm.scaleValue(this.isMobile ? SCENE_CONFIG.SETTINGS_POPUP.MOBILE_GAP : SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
-        
-        // Position after Level slider and Temperature slider only (no frequency slider)
-        let yCursor = popupY + bannerHeight + gap1 + sliderRowHeight + gap2 + sliderRowHeight2 + gap3;
-        
-        // Mode Toggle row
-        const modeToggleLabelX = popupX + sm.scaleValue(30);
-        const modeToggleLabelY = yCursor + sm.scaleValue(22);
-        const deviceType = detectDeviceType();
-        const uiScale = this.registry && this.registry.get && this.registry.get('uiScale') || 1;
-        const labelStyle = getTextStyle('settings', deviceType, this.mode || 'basic', uiScale);
-        const modeToggleLabel = this.add.text(
-            modeToggleLabelX, modeToggleLabelY,
-            "Hard Mode:",
-            {
-                ...labelStyle,
-                fontSize: `${parseInt(labelStyle.fontSize)}px`, // Ensure proper size
-                fill: '#ffffff'
-            }
-        ).setOrigin(0, 0.5);
-        this.settingsPopup.add(modeToggleLabel);
-
-        // Use current pending mode or current actual mode
-        const currentToggleMode = this.pendingModeChange || this.mode || 'easy';
-        this.currentToggleRef = { toggle: null };
-        
-        const toggleCallback = (newMode) => {
-            this.pendingModeChange = newMode;
-            const currentMode = newMode;
-            if (this.currentToggleRef.toggle) this.currentToggleRef.toggle.destroy();
-            const newToggle = ToggleFactory.createToggle(
-                this,
-                currentMode,
-                toggleCallback,
-                modeToggleLabelX + modeToggleLabel.width + gap,
-                modeToggleLabelY
-            );
-            this.currentToggleRef.toggle = newToggle;
-            this.settingsPopup.add(newToggle);
-        };
-        
-        const initialToggle = ToggleFactory.createToggle(
-            this,
-            currentToggleMode,
-            toggleCallback,
-            modeToggleLabelX + modeToggleLabel.width + gap,
-            modeToggleLabelY
-        );
-        this.currentToggleRef.toggle = initialToggle;
-        this.settingsPopup.add(initialToggle);
-    }
-
-    /**
      * Create settings buttons (Apply and Close)
      */
     createSettingsButtons(popupX, popupY, popupWidth, popupHeight) {
@@ -5311,10 +2838,6 @@ createButtonSection(positions) {
             this,
             'APPLY',
             () => {
-                if (this.pendingModeChange && this.pendingModeChange !== this.mode) {
-                    this.onModeToggle(this.pendingModeChange, this.levelValue, this.topKValue);
-                    return;
-                }
                 this.closeSettingsPopup();
             },
             this.cameras.main.centerX,
@@ -5490,11 +3013,8 @@ createButtonSection(positions) {
     closeSettingsPopup() {
         if (!this.settingsPopup) return;
         
-        // Apply any pending mode change before closing
-        const hasModeChange = this.pendingModeChange && this.pendingModeChange !== this.mode;
-        if (!hasModeChange) {
-            this.updateLevelModeIndicator();
-        }
+        // Update level indicator
+        this.updateLevelModeIndicator();
         
         // Resume the timer when settings popup is closed
         if (this.timerEvent && this.timerEvent.paused) {
@@ -5532,14 +3052,6 @@ createButtonSection(positions) {
             if (this.settingsPopup) {
                 this.settingsPopup.destroy();
                 this.settingsPopup = null;
-                
-                // After popup is destroyed, apply mode change if needed
-                if (hasModeChange) {
-                    // Short delay to ensure popup is fully gone
-                    this.time.delayedCall(50, () => {
-                        this.onModeToggle(this.pendingModeChange, this.levelValue, this.topKValue);
-                    });
-                }
             }
         });
     }
@@ -5841,14 +3353,8 @@ this.aiCountText = this.add.text(
         // Calculate total words in userInput
         const totalWordCount = this.userInput.trim() ? this.userInput.trim().split(/\s+/).length : 0;
         
-        let originalWordCount;
-        // Calculate original words (total minus AI words)
-        if (this.mode === 'easy') {
-            originalWordCount = Math.max(0, totalWordCount - this.aiWordCount);
-        }
-        else {
-            originalWordCount = totalWordCount;
-        };
+        // Calculate original words (total minus AI words blocked)
+        const originalWordCount = totalWordCount;
         
         // Now totalWordCount is calculated dynamically from userInput
         this.totalWordCount = totalWordCount;
@@ -5945,82 +3451,31 @@ this.aiCountText = this.add.text(
         }
     }
 
-    generateAutocomplete() {
-        if (!this.aiSuggestedWords || this.aiSuggestedWords.length === 0) {
-            return '';
-        }
-    
-        // Get the current word being typed
-        const lastSpaceIndex = this.userInput.lastIndexOf(' ');
-        const lastNewlineIndex = this.userInput.lastIndexOf('\n');
-        const lastBreakIndex = Math.max(lastSpaceIndex, lastNewlineIndex);
-        const currentWord = lastBreakIndex >= 0 ? this.userInput.slice(lastBreakIndex + 1) : this.userInput;
-        
-        // Find matching suggestion for current word
-        let suggestion = null;
-        
-        if (!currentWord || currentWord.endsWith(' ') || currentWord.endsWith('\n')) {
-            // If at a word boundary, use first suggestion
-            suggestion = this.aiSuggestedWords[0];
-            
-            if (suggestion) {
-                // Return the suggestion directly so it can be appended to the input text
-                return suggestion;
-            }
-        } else {
-            // Find matching suggestion for current word being typed
-            suggestion = this.aiSuggestedWords.find(word => 
-                word.toLowerCase().startsWith(currentWord.toLowerCase())
-            );
-    
-            if (suggestion) {
-                // Only return the completion part (not the already typed portion)
-                return suggestion.slice(currentWord.length);
-            }
-        }
-
-        return '';
-    }
     
     // Update cursor and input text display
     updateCursor() {
         if (this.isShuttingDown) return;
         if (!this.inputText || this.inputText.destroyed) return;
         
-        // Initialize cached values if not already initialized
-        if (!this._cachedValues) {
-            this._cachedValues = {
-                lastUserInput: '',
-                lastAutocomplete: ''
-            };
-        }
-        
         // Check if we need to update based on cached values
-        const currentAutocomplete = this.generateAutocomplete();
-        const hasTextChanged = this.userInput !== this._cachedValues.lastUserInput;
-        const hasAutocompleteChanged = currentAutocomplete !== this._cachedValues.lastAutocomplete;
+        const hasTextChanged = this.userInput !== this._cachedValues?.lastUserInput;
         const hasCursorChanged = this._lastCursorVisible !== this.cursorVisible;
         
         // Only update if something has actually changed
-        if (!hasTextChanged && !hasAutocompleteChanged && !hasCursorChanged) {
+        if (!hasTextChanged && !hasCursorChanged) {
             return;
         }
         
         // Update cached values
-        this._cachedValues.lastUserInput = this.userInput;
-        this._cachedValues.lastAutocomplete = currentAutocomplete;
+        if (this._cachedValues) {
+            this._cachedValues.lastUserInput = this.userInput;
+        }
         this._lastCursorVisible = this.cursorVisible;
         
-        // Build display text efficiently
+        // Build display text
         let displayText = this.userInput;
         
-        // On mobile, prefer hidden input value if available
-        if (this.isMobile && this._hiddenInput && typeof this._hiddenInput.value === "string") {
-            displayText = this._hiddenInput.value;
-        }
-        
-        // TEMPORARILY DISABLED: Inline autocomplete hidden but still calculated in background
-        // Append cursor only (no autocomplete)
+        // Append blinking cursor
         if (this.cursorVisible) {
             displayText += "_";
         } else {
@@ -6029,11 +3484,6 @@ this.aiCountText = this.add.text(
         
         // Update text in one operation
         this.inputText.setText(displayText);
-        
-        // Clear deprecated autocomplete text if it exists
-        if (this.autocompleteText) {
-            this.autocompleteText.setText('');
-        }
     }
 
     createSettingsButton(x, y, menuBarHeight) {
@@ -6237,39 +3687,6 @@ this.aiCountText = this.add.text(
         });
     }
 
-    createInputBoxClickEffect(x, y) {
-        // Create a more visible effect for mobile
-        const size = this.isMobile ? 10 : 5;
-        const color = this.isMobile ? 0x00ffff : 0xffffff; // Cyan for mobile, white for desktop
-        const alpha = this.isMobile ? 0.7 : 0.5;
-        
-        const circle = this.add.circle(x, y, size, color, alpha).setDepth(15);
-        
-        // Create a more pronounced animation for mobile
-        this.tweens.add({
-            targets: circle,
-            scale: { from: 0.5, to: this.isMobile ? 3 : 2 },
-            alpha: { from: alpha, to: 0 },
-            duration: this.isMobile ? 700 : 500,
-            ease: 'Quad.easeOut',
-            onComplete: () => circle.destroy()
-        });
-        
-        // For mobile, add a second, larger pulse effect
-        if (this.isMobile) {
-            const outerCircle = this.add.circle(x, y, size * 2, color, alpha * 0.5).setDepth(14);
-            
-            this.tweens.add({
-                targets: outerCircle,
-                scale: { from: 0.5, to: 4 },
-                alpha: { from: alpha * 0.5, to: 0 },
-                duration: 900,
-                ease: 'Quad.easeOut',
-                onComplete: () => outerCircle.destroy()
-            });
-        }
-    }
-
 
 
     updateFailsCounter(success) {
@@ -6454,15 +3871,6 @@ this.aiCountText = this.add.text(
  
     }
 
-    // Get appropriate color based on streak count
-    getStreakColor(streak) {
-        if (streak >= 10) return 0xffd700; // Gold
-        if (streak >= 7) return 0xff4500;  // Orange-red
-        if (streak >= 5) return 0xff8c00;  // Dark orange
-        if (streak >= 3) return 0x32cd32;  // Lime green
-        return 0x4169e1;                   // Royal blue
-    }
-    
     // Get appropriate color based on streak count
     getStreakColor(streak) {
         if (streak >= 10) return 0xffd700; // Gold
@@ -6683,8 +4091,7 @@ this.aiCountText = this.add.text(
      * @param {number} milestone - The milestone that was reached
      */
     createMobileScreenEdgeFlash(milestone) {
-        const mode = this.mode || 'easy';
-        const flashColor = mode === 'easy' ? 0x00ffff : 0xff00ff; // Cyan for easy, magenta for hard
+        const flashColor = 0xff00ff; // Magenta
         
         // Determine flash intensity based on milestone
         let flashAlpha, flashDuration, pulseCount;
@@ -7008,183 +4415,6 @@ this.aiCountText = this.add.text(
 
 
 
-    /**
-     * Clean up all suggestion-related visual elements
-     */
-    cleanupAllSuggestions() {
-
-        
-        // First clean up tracked elements with null safety
-        if (this.suggestionBoxes && Array.isArray(this.suggestionBoxes) && this.suggestionBoxes.length > 0) {
-            this.suggestionBoxes.forEach(box => {
-                try {
-                    if (box && box.active && !box.destroyed) {
-                        // Check if clear method exists before calling
-                        if (typeof box.clear === 'function') {
-                            box.clear();
-                        }
-                        box.destroy();
-                    }
-                } catch (e) {
-                    // Ignore errors during cleanup
-                }
-            });
-        }
-        if (this.suggestionTexts && Array.isArray(this.suggestionTexts) && this.suggestionTexts.length > 0) {
-            this.suggestionTexts.forEach(text => {
-                try {
-                    if (text && text.active && !text.destroyed) {
-                        text.destroy();
-                    }
-                } catch (e) {
-                    // Ignore errors during cleanup
-                }
-            });
-        }
-        
-        // Then do a comprehensive cleanup of any remaining suggestion elements
-        if (this.children && this.children.list && Array.isArray(this.children.list)) {
-            // Create a copy of the list to avoid modification during iteration
-            const childrenToCheck = [...this.children.list];
-            childrenToCheck.forEach(child => {
-                try {
-                    if (child && child.active && !child.destroyed) {
-                        // Check for suggestion-related depths (15-16)
-                        if (child.depth >= 15 && child.depth <= 16) {
-                            // Check if it's a graphics or text object
-                            if (child.type === 'Graphics' || child.type === 'Text' || 
-                                (child.constructor && (child.constructor.name === 'Graphics' || child.constructor.name === 'Text'))) {
-                                // For graphics objects, clear before destroying
-                                if ((child.type === 'Graphics' || (child.constructor && child.constructor.name === 'Graphics')) 
-                                    && typeof child.clear === 'function') {
-                                    child.clear();
-                                }
-                                child.destroy();
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // Ignore destruction errors
-                }
-            });
-        }
-        
-        // Reset arrays
-        this.suggestionBoxes = [];
-        this.suggestionTexts = [];
-    }
-
-    showSuggestions(word) {
- 
-        
-        // Handle array input for backward compatibility (convert to single word)
-        if (Array.isArray(word)) {
-            word = word.length > 0 ? word[0] : null;
-        }
-        
-        // Always clean up existing suggestions first, even if no new suggestions
-        this.cleanupAllSuggestions();
-        
-        // Early return if no word
-        if (!word) {
-            return;
-        }
-
-        // Initialize scaling manager if not exists
-        if (!this.scalingManager) {
-            this.scalingManager = new ScalingManager(this);
-        }
-        const sm = this.scalingManager;
-        
-        // Scale all dimensions properly
-        const padding = sm.scaleValue(20);
-        const boxHeight = sm.scaleValue(30);
-        const labelSpacing = sm.scaleValue(10); // Space between label and box
-        
-        // Calculate position dynamically between prompt box and input box
-        let suggestionsY;
-        
-        if (this.promptBoxInfo && this.inputBoxY) {
-            // Calculate available space between prompt box bottom and input box top
-            const promptBottom = this.promptBoxInfo.boxBottom;
-            const inputTop = this.inputBoxY;
-            const availableSpace = inputTop - promptBottom;
-            
-            // Position suggestions in the middle of available space
-            const middlePoint = promptBottom + (availableSpace / 2);
-            suggestionsY = middlePoint - (boxHeight / 2);
-            
-            // Ensure there's at least some padding from both boxes (scaled)
-            const minPadding = sm.scaleValue(10);
-            const maxY = inputTop - boxHeight - minPadding;
-            const minY = promptBottom + minPadding;
-            
-            suggestionsY = Math.max(minY, Math.min(suggestionsY, maxY));
-        } else {
-            // Fallback positioning - use stored inputBoxY if available
-            if (this.inputBoxY) {
-                const suggestionsOffset = sm.scaleValue(70);
-                suggestionsY = this.inputBoxY - suggestionsOffset - boxHeight;
-            } else {
-                // Last resort - position relative to center
-                suggestionsY = this.cameras.main.centerY - sm.scaleValue(100);
-            }
-        }
-        
-        // Get text style and measure both label and word
-        const deviceType = detectDeviceType();
-        const uiScale = this.scalingManager?.uiScale || 1;
-        const suggestionStyle = getTextStyle('tooltip', deviceType, this.mode || 'basic', uiScale);
-        
-        // Measure the "My suggestion: " label
-        const tempLabel = this.add.text(0, 0, "My suggestion: ", suggestionStyle);
-        const labelWidth = tempLabel.width;
-        tempLabel.destroy();
-        
-        // Measure the word
-        const tempText = this.add.text(0, 0, word, suggestionStyle);
-        const boxWidth = tempText.width + padding * 2;
-        tempText.destroy();
-        
-        // Calculate total width of label + spacing + box
-        const totalWidth = labelWidth + labelSpacing + boxWidth;
-        
-        // Calculate starting X position to center the entire group
-        const startX = this.cameras.main.centerX - totalWidth / 2;
-        
-        // Create the "My suggestion: " label (no box, just white text)
-        const labelText = this.add.text(
-            startX,
-            suggestionsY + boxHeight / 2,
-            "My suggestion: ",
-            { ...suggestionStyle, color: '#ffffff' }
-        ).setOrigin(0, 0.5).setDepth(16);
-        
-        // Calculate box position (to the right of the label)
-        const boxX = startX + labelWidth + labelSpacing;
-        
-        // Create the box
-        const box = this.add.graphics();
-        box.fillStyle(0xff0000, 0.3);
-        box.fillRoundedRect(boxX, suggestionsY, boxWidth, boxHeight, 10);
-        box.lineStyle(2, 0xff0000, 0.8);
-        box.strokeRoundedRect(boxX, suggestionsY, boxWidth, boxHeight, 10);
-        box.setDepth(15);
-        
-        // Create the word text inside the box
-        const text = this.add.text(
-            boxX + padding,
-            suggestionsY + boxHeight / 2,
-            word,
-            { ...suggestionStyle, color: '#ffffff' }
-        ).setOrigin(0, 0.5).setDepth(16);
-        
-        // Store for cleanup
-        this.suggestionBoxes.push(box);
-        this.suggestionTexts.push(labelText); // Store label for cleanup
-        this.suggestionTexts.push(text); // Store word text for cleanup
-    }
-
     preload() {
         // Ensure mobile background images are loaded
         // This is a backup in case they weren't loaded in Preloader
@@ -7195,7 +4425,6 @@ this.aiCountText = this.add.text(
             console.log("[MOBILE BG] Preloading mobile backgrounds in BaseGameScene");
             this.load.setPath('assets/backgrounds');
             for (let level = 1; level <= 3; level++) {
-                this.load.image(`easy_lvl_${level}`, `easy_lvl_${level}.png`);
                 this.load.image(`hard_lvl_${level}`, `hard_lvl_${level}.png`);
             }
             this.load.setPath('assets');
@@ -7332,28 +4561,22 @@ this.aiCountText = this.add.text(
      * @private
      */
     _createBackgroundAfterCleanup() {
-        
-        // DEBUG: Log background config and canvas size
-        const bgConfig = THEMES[this.mode]?.background;
+        // Get canvas dimensions
         const w = this.sys.game.config.width || this.cameras.main.width;
         const h = this.sys.game.config.height || this.cameras.main.height;
 
-        
         if (!w || !h || w < 10 || h < 10) {
             this.time.delayedCall(50, () => this.updateBackgroundForLevel());
             return;
         }
         
-        
         try {
-
-            createBackground(this, bgConfig, this.levelValue, this.wordStreak || 0);
+            createBackground(this, THEME.background, this.levelValue, this.wordStreak || 0);
         } catch (error) {
             console.error("[MOBILE BG DEBUG] Error calling createBackground:", error);
             console.error("[MOBILE BG DEBUG] Error stack:", error.stack);
             console.error("[MOBILE BG DEBUG] Error message:", error.message);
         }
-
     }
     
     /**

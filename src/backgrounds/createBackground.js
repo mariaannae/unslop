@@ -5,7 +5,7 @@
  */
 
 import { isMobileDevice } from '../config/dimensions.js';
-import { EASY_COLORS_HEX, HARD_COLORS_HEX } from '../config/design.js';
+import { COLORS_HEX } from '../config/design.js';
 
 // Helper: Convert hex to CSS string
 function hexToString(hex) {
@@ -25,8 +25,9 @@ function addEnhancedNoise(ctx, width, height, opacity) {
   }
 }
 
-// Easy mode backgrounds by level
-function createEasyLevel1(ctx, width, height) {
+// Game backgrounds by level (formerly Hard mode)
+// These functions are kept for potential future use but are not currently used
+function createUnusedLevel1(ctx, width, height) {
   // Level 1: Calm Ocean Depths
   const gradient = ctx.createLinearGradient(0, 0, width, height);
   gradient.addColorStop(0, "#000e18");
@@ -75,7 +76,7 @@ function createEasyLevel1(ctx, width, height) {
   });
 }
 
-function createEasyLevel2(ctx, width, height) {
+function createUnusedLevel2(ctx, width, height) {
   // Level 2: Ethereal Currents
   const centerX = width / 2;
   const centerY = height / 2;
@@ -129,7 +130,7 @@ function createEasyLevel2(ctx, width, height) {
   }
 }
 
-function createEasyLevel3(ctx, width, height) {
+function createUnusedLevel3(ctx, width, height) {
   // Level 3: Luminous Depths
   const centerX = width / 2;
   const centerY = height / 2;
@@ -184,8 +185,8 @@ function createEasyLevel3(ctx, width, height) {
   }
 }
 
-// Hard mode backgrounds by level
-function createHardLevel1(ctx, width, height) {
+// Main game backgrounds by level
+function createGameLevel1(ctx, width, height) {
   // Level 1: Intense Energy Field
   const gradient = ctx.createLinearGradient(0, 0, width, height);
   gradient.addColorStop(0, "#0c0020");
@@ -266,7 +267,7 @@ function createHardLevel1(ctx, width, height) {
   }
 }
 
-function createHardLevel2(ctx, width, height) {
+function createGameLevel2(ctx, width, height) {
   // Level 2: Intense Energy Vortex
   const centerX = width/2;
   const centerY = height/2;
@@ -345,7 +346,7 @@ function createHardLevel2(ctx, width, height) {
   ctx.fill();
 }
 
-function createHardLevel3(ctx, width, height) {
+function createGameLevel3(ctx, width, height) {
   // Level 3: Central Radiating Energy
   const centerX = width/2;
   const centerY = height/2;
@@ -510,41 +511,21 @@ function createHardLevel3(ctx, width, height) {
   }
 }
 
-// Theme-specific background creation functions
-function createEasyBackground(ctx, width, height, levelValue) {
+// Main background creation function
+function createGameBackground(ctx, width, height, levelValue) {
   // Cap level at 3 - any level above 3 should use level 3 background
   const cappedLevel = Math.min(levelValue, 3);
   
   if (cappedLevel === 1) {
-    createEasyLevel1(ctx, width, height);
+    createGameLevel1(ctx, width, height);
   } else if (cappedLevel === 2) {
-    createEasyLevel2(ctx, width, height);
+    createGameLevel2(ctx, width, height);
   } else {
-    createEasyLevel3(ctx, width, height);
-  }
-  
-  // Add noise to all easy backgrounds
-  addEnhancedNoise(ctx, width, height, 0.02);
-  
-  // Add darkening overlay to make backgrounds darker
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // 30% black overlay
-  ctx.fillRect(0, 0, width, height);
-}
-
-function createHardBackground(ctx, width, height, levelValue) {
-  // Cap level at 3 - any level above 3 should use level 3 background
-  const cappedLevel = Math.min(levelValue, 3);
-  
-  if (cappedLevel === 1) {
-    createHardLevel1(ctx, width, height);
-  } else if (cappedLevel === 2) {
-    createHardLevel2(ctx, width, height);
-  } else {
-    createHardLevel3(ctx, width, height);
+    createGameLevel3(ctx, width, height);
   }
   
   // Add darkening overlay to make backgrounds darker
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; // 40% black overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -586,12 +567,10 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
   const streakIntensity = getStreakIntensity(wordStreak);
   
     // Mobile: use static background images with overlay
-    if (isMobile && (effect === "bubbles" || effect === "easy" || effect === "electric" || effect === "hard")) {
-        // Determine the image key based on mode and level
-        const mode = (effect === "bubbles" || effect === "easy") ? "easy" : "hard";
+    if (isMobile && (effect === "electric" || effect === "hard")) {
         // Cap level at 3 - any level above 3 should use level 3 background
         const cappedLevel = Math.min(levelValue, 3);
-        const imageKey = `${mode}_lvl_${cappedLevel}`;
+        const imageKey = `hard_lvl_${cappedLevel}`;
         
         // IMPORTANT: Clear any camera background color that might be covering the image
         scene.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
@@ -601,8 +580,8 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
       // For level 3, try fallback to level 2, then level 1
       let fallbackKey = null;
       if (levelValue === 3) {
-        const fallbackLevel2 = `${mode}_lvl_2`;
-        const fallbackLevel1 = `${mode}_lvl_1`;
+        const fallbackLevel2 = 'hard_lvl_2';
+        const fallbackLevel1 = 'hard_lvl_1';
         if (scene.textures.exists(fallbackLevel2)) {
           fallbackKey = fallbackLevel2;
         } else if (scene.textures.exists(fallbackLevel1)) {
@@ -630,11 +609,8 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
         
         scene.background.setScale(scale);
         
-        // Add black overlay for fallback
-        
-        const overlayColor = mode === "easy" ? EASY_COLORS_HEX.BACKGROUND : HARD_COLORS_HEX.BACKGROUND;
-        //const overlayColor = EASY_COLORS_HEX.BLACK; 
-
+        // Add overlay for fallback
+        const overlayColor = COLORS_HEX.BACKGROUND;
         const baseOpacity = 0.9;
         const opacityReduction = streakIntensity * 0.05;
         const overlayOpacity = Math.max(0.1, baseOpacity - opacityReduction);
@@ -704,10 +680,8 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
     
     scene.background.setScale(scale);
     
-    // Add semi-opaque  overlay that becomes more transparent with streak
-    const overlayColor = mode === "easy" ? EASY_COLORS_HEX.BACKGROUND : HARD_COLORS_HEX.BACKGROUND;
-
-    //const overlayColor = 0x000000; // Black color
+    // Add semi-opaque overlay that becomes more transparent with streak
+    const overlayColor = COLORS_HEX.BACKGROUND;
     const baseOpacity = 0.9; // Start at 90% opacity
     // More noticeable reduction per streak intensity level
     const opacityReduction = streakIntensity * 0.05; // Reduce by 5% per intensity level
@@ -727,8 +701,8 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
     
     // Add enhanced multi-layered border effects for mobile when streak > 0
     if (wordStreak > 0 && streakIntensity >= 1) {
-      // Use mode-appropriate color
-      const borderColor = mode === "easy" ? 0x00ffff : 0xff00ff; // Cyan for easy, magenta for hard
+      // Use game color
+      const borderColor = 0xff00ff; // Magenta
       
       // Calculate dynamic properties based on streak intensity
       const borderWidth = 2 + Math.min(streakIntensity * 1.5, 6); // 2px to 8px max
@@ -855,11 +829,9 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
         return;
       }
 
-      // Delegate to the appropriate background creator based on effect
-      if (effect === "bubbles" || effect === "easy") {
-        createEasyBackground(ctx, width, height, levelValue);
-      } else if (effect === "electric" || effect === "hard") {
-        createHardBackground(ctx, width, height, levelValue);
+      // Create game background (formerly hard mode)
+      if (effect === "electric" || effect === "hard") {
+        createGameBackground(ctx, width, height, levelValue);
       }
 
       gradientCanvas.refresh();
@@ -915,7 +887,7 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
       });
       
       // Add a visual streak indicator (a colored border) that gets more intense with higher streaks
-      const borderColor = effect === "electric" || effect === "hard" ? 0xff00ff : 0x00ffff;
+      const borderColor = 0xff00ff; // Magenta
       const borderWidth = 2 + (streakIntensity * 3); // 2px to 14px
       const border = scene.add.rectangle(
         width/2, 
@@ -946,7 +918,7 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
     if (streakIntensity >= 2) {
       try {
         // Create particles for streaks
-        const particleColor = effect === "electric" || effect === "hard" ? 0xff00ff : 0x00ffff;
+        const particleColor = 0xff00ff; // Magenta
         
         // Create simple particles using circles
         const particles = [];
@@ -1005,7 +977,7 @@ export function createBackground(scene, backgroundConfig, levelValue = 1, wordSt
     // For high streaks, add dramatic overlay effects
     if (streakIntensity >= 3) {
       // Create a glowing overlay
-      const glowColor = effect === "electric" || effect === "hard" ? 0xff00ff : 0x00ffff;
+      const glowColor = 0xff00ff; // Magenta
       const glowAlpha = 0.15 + (streakIntensity * 0.05); // 0.15 to 0.35
       const glow = scene.add.rectangle(
         width/2, 

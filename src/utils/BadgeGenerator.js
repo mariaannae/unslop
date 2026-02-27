@@ -3,7 +3,7 @@
  * This replaces the pre-generated badges with real-time badge creation using user text
  */
 
-import { EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT } from '../config/design.js';
+import { COLORS_HEX, COLORS_TEXT } from '../config/design.js';
 
 export class BadgeGenerator {
     // Badge text options - same as original generator
@@ -26,12 +26,12 @@ export class BadgeGenerator {
      * Generate a dynamic badge texture with user's text
      * @param {Phaser.Scene} scene - The Phaser scene instance
      * @param {string} userText - The user's written text to display on badge
-     * @param {string} mode - Game mode ('easy' or 'hard')
+     * @param {string} mode - Game mode (deprecated, kept for backwards compatibility)
      * @param {number} score - The score to display (0-15)
      * @returns {string} The texture key for the generated badge
      */
     static async generate(scene, userText, mode, score) {
-        console.log('[BadgeGenerator] Starting badge generation', { userText, mode, score });
+        console.log('[BadgeGenerator] Starting badge generation', { userText, score });
         
         // Ensure barcade3d font is loaded before drawing
         try {
@@ -114,9 +114,9 @@ export class BadgeGenerator {
             return null;
         }
         
-        // Get colors based on mode
-        const colorsHex = mode === 'easy' ? EASY_COLORS_HEX : HARD_COLORS_HEX;
-        const colorsText = mode === 'easy' ? EASY_COLORS_TEXT : HARD_COLORS_TEXT;
+        // Use game colors
+        const colorsHex = COLORS_HEX;
+        const colorsText = COLORS_TEXT;
         
         console.log('[BadgeGenerator] Colors:', { colorsHex, colorsText });
         
@@ -149,7 +149,7 @@ export class BadgeGenerator {
         // Verify the font was applied
         console.log('[BadgeGenerator] Canvas font set to:', ctx.font);
         
-        ctx.fillText('(NONSLOP)', currentWidth / 2, 85);
+        ctx.fillText('(unslop)', currentWidth / 2, 85);
         
         // Draw score - larger font with more spacing from title
         console.log('[BadgeGenerator] Drawing score:', score);

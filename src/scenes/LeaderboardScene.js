@@ -1,17 +1,14 @@
-import { DESIGN, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT, THEMES } from "../config/design.js";
+import { DESIGN, COLORS_HEX, COLORS_TEXT, THEME } from "../config/design.js";
 import { getTopScores, cleanupOldScores } from "../config/firebase.js";
-import ButtonFactory from "../utils/ButtonFactory.js";
-import ToggleFactory from "../utils/ToggleFactory.js";
 import { createBackground } from "../backgrounds/createBackground.js";
-import { ScalingManager } from "../config/scaling.js";
-import { getTextStyle, getBoxStyle } from "../config/textStyles.js";
+import { getTextStyle } from "../config/textStyles.js";
 import { detectDeviceType } from "../config/dimensions.js";
+import { BaseScene } from "./BaseScene.js";
 
-export default class LeaderboardScene extends Phaser.Scene {
+export default class LeaderboardScene extends BaseScene {
     constructor() {
         super({ key: 'LeaderboardScene' });
         this.scores = [];
-        this.mode = 'easy'; // Default mode
         this.leaderboardEntries = [];
         this.isLoading = false;
         this.scrollContainer = null;
@@ -23,51 +20,33 @@ export default class LeaderboardScene extends Phaser.Scene {
     }
 
     init(data) {
-        this.mode = data.mode || 'easy';
         this.levelValue = data.levelValue || 1;
         this.score = data.score || 0;
         this.userResponse = data.userResponse || null;
-        //this.previousScene = data.previousScene || 'DoneScene';
-
-        // Set colors based on mode
-        if (this.mode === "easy") {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        } else {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        }
     }
 
     async create() {
+        // IMPORTANT: Call parent create() first to get all BaseScene functionality
+        super.create();
 
         window._leaderboardScene = this;
         console.log("Camera size:", this.sys.game.canvas.width, this.cameras.main.height);
         console.log("Window size:", window.innerWidth, window.innerHeight);
         try {
-            // Initialize scaling manager for responsive UI
-            this.scalingManager = new ScalingManager(this);
 
             console.log("[LeaderboardScene] Step 1: Creating background");
-            if (this.mode === "easy") {
-                createBackground(this, THEMES.easy.background, this.levelValue);
-            } else {
-                createBackground(this, THEMES.hard.background, this.levelValue);
-            }
+            createBackground(this, THEME.background, this.levelValue);
 
             console.log("[LeaderboardScene] Step 2: Creating title");
             this.createTitle();
 
-            console.log("[LeaderboardScene] Step 3: Creating mode toggle");
-            this.createModeToggle();
-
-            console.log("[LeaderboardScene] Step 4: Showing loading indicator");
+            console.log("[LeaderboardScene] Step 3: Showing loading indicator");
             this.showLoadingIndicator();
 
-            console.log("[LeaderboardScene] Step 5: Loading scores");
+            console.log("[LeaderboardScene] Step 4: Loading scores");
             await this.loadScores();
 
-            console.log("[LeaderboardScene] Step 6: Hiding loading indicator and displaying scores");
+            console.log("[LeaderboardScene] Step 5: Hiding loading indicator and displaying scores");
             this.hideLoadingIndicator();
             this.displayScores();
 
@@ -138,68 +117,6 @@ export default class LeaderboardScene extends Phaser.Scene {
         ).setOrigin(0.5);
     }
 
-    createModeToggle() {
-        // Create a container for the toggle and labels
-        this.modeToggleContainer = this.add.container(
-            this.scalingManager.centerX(), 
-            this.scalingManager.heightPercent(14) // 14% from top
-        );
-        
-        // Get text style for settings/labels
-        const deviceType = detectDeviceType();
-        const labelStyle = getTextStyle('settings', deviceType, this.mode, this.scalingManager.scale);
-        
-        // Add labels for the toggle
-        const easyLabel = this.add.text(
-            this.scalingManager.scaleValue(-50), 
-            0, 
-            "EASY", 
-            {
-                ...labelStyle,
-                color: this.mode === 'easy' ? this.COLORS_TEXT.HIGHLIGHT : '#ffffff',
-                fontStyle: 'bold'
-            }
-        ).setOrigin(1, 0.5);
-        
-        const hardLabel = this.add.text(
-            this.scalingManager.scaleValue(50), 
-            0, 
-            "HARD", 
-            {
-                ...labelStyle,
-                color: this.mode === 'hard' ? this.COLORS_TEXT.HIGHLIGHT : '#ffffff',
-                fontStyle: 'bold'
-            }
-        ).setOrigin(0, 0.5);
-        
-        // Create the toggle switch
-        const toggleLeftX = this.scalingManager.scaleValue(-20); // Position relative to center, scaled
-        this.modeToggle = ToggleFactory.createToggle(
-            this,
-            this.mode,
-            this.changeMode.bind(this),
-            toggleLeftX,
-            0
-        );
-        
-        // Add elements to the container
-        this.modeToggleContainer.add([easyLabel, hardLabel, this.modeToggle]);
-        
-        // Update the label colors based on current mode
-        this.updateModeLabels();
-    }
-    
-    updateModeLabels() {
-        // Update label colors based on the current mode
-        const children = this.modeToggleContainer.getAll();
-        
-        // First child is the "EASY" label
-        children[0].setColor(this.mode === 'easy' ? this.COLORS_TEXT.HIGHLIGHT : '#ffffff');
-        
-        // Second child is the "HARD" label
-        children[1].setColor(this.mode === 'hard' ? this.COLORS_TEXT.HIGHLIGHT : '#ffffff');
-    }
-
     createButton(label, callback, centerX, centerY, options = {}) {
         // Ensure scalingManager is passed for responsive sizing
         return ButtonFactory.createButton(
@@ -210,48 +127,6 @@ export default class LeaderboardScene extends Phaser.Scene {
             centerY,
             { ...options, scalingManager: this.scalingManager }
         );
-    }
-
-    async changeMode(mode) {
-        if (this.mode === mode) return;
-        this.mode = mode;
-
-        // Clear existing scores
-        this.clearScoreDisplay();
-
-        // Show loading indicator
-        this.showLoadingIndicator();
-
-        // Load scores for the new mode
-        await this.loadScores();
-
-        // Hide loading and display new scores
-        this.hideLoadingIndicator();
-        this.displayScores();
-        
-        // Update the toggle labels to reflect the current mode
-        this.updateModeLabels();
-        
-        // Make sure the toggle's visual state matches the mode
-        if (this.modeToggle && this.modeToggle.updateState) {
-            this.modeToggle.updateState(mode);
-        }
-
-        // Update UI colors based on mode
-        if (this.mode === "easy") {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        } else {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        }
-
-        // Recreate the background with the new colors and level
-        if (this.mode === "easy") {
-            createBackground(this, THEMES.easy.background, this.levelValue);
-        } else {
-            createBackground(this, THEMES.hard.background, this.levelValue);
-        }
     }
 
     showLoadingIndicator() {
@@ -288,8 +163,8 @@ export default class LeaderboardScene extends Phaser.Scene {
 
     async loadScores() {
         try {
-            console.log("[LeaderboardScene] [loadScores] Fetching top scores for mode:", this.mode);
-            this.scores = await getTopScores(this.mode, 20);
+            console.log("[LeaderboardScene] [loadScores] Fetching top scores");
+            this.scores = await getTopScores(null, 20);
             console.log("[LeaderboardScene] [loadScores] Loaded scores:", this.scores);
         } catch (error) {
             console.error("[LeaderboardScene] [loadScores] ERROR:", error);
@@ -713,7 +588,6 @@ export default class LeaderboardScene extends Phaser.Scene {
             { label: "Player:", value: score.username || "Anonymous Player" },
             { label: "Score:", value: score.score },
             { label: "Level:", value: score.level || 1, customColor: this.getLevelColor(score.level || 1) },
-            { label: "Mode:", value: score.mode === 'easy' ? 'Easy' : 'Hard' },
             { label: "Prompt:", value: score.prompt || "No prompt available", isLongText: true },
             { label: "Input Text:", value: score.inputText || "No input text available", isLongText: true }
         ];
@@ -973,7 +847,7 @@ export default class LeaderboardScene extends Phaser.Scene {
                 
                 try {
                     // Call cleanup function
-                    await cleanupOldScores(this.mode, 20);
+                    await cleanupOldScores(null, 20);
                     
                     // Reload scores after cleanup
                     await this.loadScores();

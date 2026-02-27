@@ -58,7 +58,7 @@ async function generateBadge(text, mode) {
     ctx.fillStyle = colors.TEXT.TITLE;
     ctx.font = '55px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('(NONSLOP)', canvas.width / 2, 100);
+    ctx.fillText('(unslop)', canvas.width / 2, 100);
 
     // Draw score
     ctx.fillStyle = colors.TEXT.PRIMARY;
@@ -77,7 +77,7 @@ async function generateBadge(text, mode) {
 
     // Load and draw QR code
     try {
-        const qrCode = await loadImage(path.join(__dirname, 'assets', 'nonslop-qr-code.png'));
+        const qrCode = await loadImage(path.join(__dirname, 'assets', 'unslop-qr-code.png'));
         const qrSize = 200;
         ctx.drawImage(
             qrCode,
@@ -91,7 +91,7 @@ async function generateBadge(text, mode) {
         ctx.fillStyle = '#ffffff';
         ctx.font = '18px monospace';
         ctx.fillText(
-            'https://mariaannae.github.io/nonslop/',
+            'https://mariaannae.github.io/unslop/',
             canvas.width / 2,
             y + qrSize + 80
         );

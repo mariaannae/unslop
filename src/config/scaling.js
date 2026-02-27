@@ -102,12 +102,12 @@ export class ScalingManager {
       console.log(`[ScalingManager] Applied Uniform Scale: ${this.scale.toFixed(3)}, Device: ${this.deviceType}`);
     }
 
-    buttonWidth(cameraWidth) {
+    buttonWidth() {
         // Scale button width for all device types
         return 115 * this.scale;
     }
 
-    buttonHeight(buttonWidth) {
+    buttonHeight() {
         // Scale button height based on device type
         // Reduce desktop button height by 5px
         return (this.deviceType === DEVICE_TYPES.DESKTOP ? 30 : 40) * this.scale;

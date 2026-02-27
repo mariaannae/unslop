@@ -1,5 +1,8 @@
 // Design configuration file for game modes and UI elements
 
+// Import and re-export SCENE_CONFIG for backward compatibility
+export { SCENE_CONFIG } from './sceneConfig.js';
+
 /**
  * Base color palette with semantic naming
  */
@@ -16,12 +19,7 @@ const PALETTE = {
     PURPLE_DARK: 0x121754,       // Dark saturated purple
     PURPLE_MID: 0x1a1f6e,        // Mid saturated purple
     PURPLE_LIGHT: 0x222788,      // Lighter saturated purple
-    // Serene colors for Easy mode
-    EASY_DARKEST: 0x000e18,    // Very deep saturated ocean blue
-    EASY_DARKER: 0x001828,     // Deep saturated midnight ocean
-    EASY_DARK: 0x002440,       // Dark saturated ocean blue
-    EASY_MID: 0x003058,        // Mid saturated teal blue
-    // Intense colors for Hard mode
+    // Game colors (formerly Hard mode)
     HARD_DARKEST: 0x0c0020,    // Very deep saturated blue-magenta
     HARD_DARKER: 0x1a0045,     // Deep saturated blue-magenta
     HARD_DARK: 0x280068,       // Dark saturated blue-magenta
@@ -38,9 +36,9 @@ const PALETTE = {
   },
   // Special colors
   TEAL: {
-    MAIN: 0x00e5ff,    // Brighter teal for easy mode
+    MAIN: 0x00e5ff,
     DARK: 0x00292a,
-    GLOW: 0x00ffff,    // Glowing teal for effects
+    GLOW: 0x00ffff,
   },
   COOL_PURPLE: {
     MAIN: 0x5a6bc4,       // Cool purple accent (based on your color)
@@ -130,25 +128,25 @@ const UI = {
 };
 
 /**
- * Basic mode color configuration
+ * Basic mode color configuration (kept for backwards compatibility)
  */
 const BASIC = {
   COLORS: {
-    BACKGROUND: PALETTE.BACKGROUND.PURPLE_DARKEST,      // Very dark cool purple background (0x0a0c36)
-    BACKGROUND_DARKEST: PALETTE.BACKGROUND.DARKEST,     // Almost black for consistent box fills
-    BACKGROUND_LESS_DARK: PALETTE.BACKGROUND.PURPLE_DARKER, // Your chosen cool purple (0x101551)
-    BOX_OUTLINE: PALETTE.TEAL.GLOW,              // Cool purple for outlines (0x5a6bc4)
-    BOX_FILL: PALETTE.BACKGROUND.DARKEST,               // Keep original box fill
-    BACKGROUND_MID: PALETTE.BACKGROUND.PURPLE_MID,      // Cool purple mid (0x242987)
-    BACKGROUND_ALT: PALETTE.TEAL.DARK,                  // Keep original alt background
-    ACCENT: PALETTE.ACCENT.PINK,                        // Keep original accent
-    HIGHLIGHT: PALETTE.HIGHLIGHT.GREEN_LIGHT,           // Keep original highlight
-    TEXT: PALETTE.HIGHLIGHT.GREEN_LIGHTEST,             // Keep original text
-    GREEN: PALETTE.HIGHLIGHT.GREEN,      
+    BACKGROUND: PALETTE.BACKGROUND.PURPLE_DARKEST,
+    BACKGROUND_DARKEST: PALETTE.BACKGROUND.DARKEST,
+    BACKGROUND_LESS_DARK: PALETTE.BACKGROUND.PURPLE_DARKER,
+    BOX_OUTLINE: PALETTE.TEAL.GLOW,
+    BOX_FILL: PALETTE.BACKGROUND.DARKEST,
+    BACKGROUND_MID: PALETTE.BACKGROUND.PURPLE_MID,
+    BACKGROUND_ALT: PALETTE.TEAL.DARK,
+    ACCENT: PALETTE.ACCENT.PINK,
+    HIGHLIGHT: PALETTE.HIGHLIGHT.GREEN_LIGHT,
+    TEXT: PALETTE.HIGHLIGHT.GREEN_LIGHTEST,
+    GREEN: PALETTE.HIGHLIGHT.GREEN,
     BLACK: PALETTE.BLACK,
     BUTTON: {
-      FILL: PALETTE.ACCENT.PINK,                        // Keep original button fill
-      OVERLAY: PALETTE.ACCENT.PINK_RED                  // Keep original button overlay
+      FILL: PALETTE.ACCENT.PINK,
+      OVERLAY: PALETTE.ACCENT.PINK_RED
     }
   },
   TEXT_COLORS: {
@@ -163,45 +161,10 @@ const BASIC = {
   }
 };
 
-
-
-
 /**
- * Easy mode color configuration
+ * Main game color configuration (formerly Hard mode - now the default)
  */
-const EASY = {
-  COLORS: {
-    BACKGROUND: PALETTE.BACKGROUND.EASY_DARKEST,
-    BOX_OUTLINE: PALETTE.ACCENT.PINK,
-    BOX_FILL: PALETTE.BACKGROUND.DARKEST, 
-    BACKGROUND_ALT: PALETTE.BACKGROUND.EASY_DARKER,
-    BACKGROUND_MID: PALETTE.BACKGROUND.EASY_MID,
-    ACCENT: PALETTE.TEAL.MAIN,
-    HIGHLIGHT: PALETTE.HIGHLIGHT.YELLOW,
-    TEXT: PALETTE.HIGHLIGHT.GREEN_LIGHTEST,
-    WARNING: PALETTE.ACCENT.ORANGE_LIGHT,
-    BLACK: PALETTE.BLACK,
-    BUTTON: {
-      FILL: PALETTE.ACCENT.PINK,
-      OVERLAY: PALETTE.ACCENT.PINK_RED
-    }
-  },
-  TEXT_COLORS: {
-    PRIMARY: hexToString(PALETTE.HIGHLIGHT.GREEN_LIGHTEST),
-    SECONDARY: hexToString(PALETTE.HIGHLIGHT.GREEN_LIGHTER),
-    HIGHLIGHT: hexToString(PALETTE.HIGHLIGHT.YELLOW),
-    ACCENT: hexToString(PALETTE.HIGHLIGHT.GREEN_LIGHT),
-    SUCCESS: hexToString(PALETTE.HIGHLIGHT.BRIGHT_GREEN),
-    ERROR: hexToString(PALETTE.ACCENT.RED),
-    TITLE: hexToString(PALETTE.HIGHLIGHT.YELLOW),
-    BLACK: hexToString(PALETTE.BLACK)
-  }
-};
-
-/**
- * Hard mode color configuration
- */
-const HARD = {
+const GAME = {
   COLORS: {
     BACKGROUND: PALETTE.BACKGROUND.HARD_DARKEST,
     BACKGROUND_ALT: PALETTE.BACKGROUND.HARD_DARKER,
@@ -240,8 +203,7 @@ const HARD = {
 export const DESIGN = {
   UI,
   BASIC: { ...UI, ...BASIC },
-  EASY: { ...UI, ...EASY },
-  HARD: { ...UI, ...HARD },
+  GAME: { ...UI, ...GAME },
   COLORS: {
     CURSOR: hexToString(PALETTE.BACKGROUND.DARKEST),
     AUTOCOMPLETE: hexToString(PALETTE.ACCENT.RED),
@@ -264,65 +226,31 @@ export const {
   TEXT_COLORS: BASIC_COLORS_TEXT
 } = BASIC;
 
+// Main game colors (formerly HARD)
 export const {
-  COLORS: EASY_COLORS_HEX,
-  TEXT_COLORS: EASY_COLORS_TEXT
-} = EASY;
+  COLORS: COLORS_HEX,
+  TEXT_COLORS: COLORS_TEXT
+} = GAME;
 
-export const {
-  COLORS: HARD_COLORS_HEX,
-  TEXT_COLORS: HARD_COLORS_TEXT
-} = HARD;
+// Legacy exports for backwards compatibility
+export const HARD_COLORS_HEX = COLORS_HEX;
+export const HARD_COLORS_TEXT = COLORS_TEXT;
 
 /**
- * THEMES object for scalable theme management
- * Each theme references the existing BASIC, EASY, HARD objects and adds background effect config
+ * Game theme configuration
  */
-export const THEMES = {
-  basic: {
-    ...BASIC,
-    background: {
-      effect: "gradient",
-      color: PALETTE.BACKGROUND.PURPLE_DARKEST,    // 0x0a0c36
-      gradientTo: PALETTE.BACKGROUND.PURPLE_DARKER, // 0x101551
-      asset: "bg.png"
-    }
-  },
-  easy: {
-    ...EASY,
-    background: {
-      effect: "bubbles",
-      color: PALETTE.BACKGROUND.EASY_DARKEST,
-      params: { bubbleCount: 20, speed: 0.5 }
-    }
-  },
-  hard: {
-    ...HARD,
-    background: {
-      effect: "electric",
-      color: PALETTE.BACKGROUND.HARD_DARKEST,
-      params: { lightningFrequency: 0.2 }
-    }
+export const THEME = {
+  ...GAME,
+  background: {
+    effect: "electric",
+    color: PALETTE.BACKGROUND.HARD_DARKEST,
+    params: { lightningFrequency: 0.2 }
   }
 };
 
-/**
- * Active theme selection logic
- */
-export let ACTIVE_THEME = "easy";
-
-/**
- * Set the active theme by name
- * @param {string} themeName
- */
-export function setActiveTheme(themeName) {
-  if (THEMES[themeName]) ACTIVE_THEME = themeName;
-}
-
-/**
- * Get the current active theme object
- * @returns {object}
- */
-export function getActiveTheme() {
-  return THEMES[ACTIVE_THEME];
-}
+// Legacy THEMES object for backwards compatibility
+export const THEMES = {
+  game: THEME,
+  // Aliases for backwards compatibility
+  hard: THEME
+};

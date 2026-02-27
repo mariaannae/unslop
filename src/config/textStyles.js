@@ -1,7 +1,7 @@
 // textStyles.js - Centralized configuration for all text styles based on device and mode
 
 import { DEVICE_TYPES, detectDeviceType } from './dimensions.js';
-import { BASIC_COLORS_HEX, BASIC_COLORS_TEXT, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT, DESIGN } from './design.js';
+import { BASIC_COLORS_HEX, BASIC_COLORS_TEXT, COLORS_HEX, COLORS_TEXT, DESIGN } from './design.js';
 
 // Device-aware font size clamp ranges
 const CLAMP_RANGES = {
@@ -107,31 +107,21 @@ function clamp(value, min, max) {
 }
 
 /**
- * Get text style for specific text type, device type, and game mode
+ * Get text style for specific text type and device type
  * @param {string} textType - Type of text (title, input, output, prompt, tooltip, effect)
  * @param {string} deviceType - Device type (desktop, tablet, phone)
- * @param {string} mode - Game mode (basic, easy, hard)
+ * @param {string} mode - Game mode (deprecated, kept for backwards compatibility)
  * @param {number} uiScale - UI scaling factor (default: 1)
  * @returns {object} Text style object
  */
-export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScale = 1) {
+export function getTextStyle(textType, deviceType = null, mode = null, uiScale = 1) {
     // If device type not provided, detect it
     if (!deviceType) {
         deviceType = detectDeviceType();
     }
 
-    // Get colors based on mode
-    let COLORS_TEXT;
-    switch (mode) {
-        case 'easy':
-            COLORS_TEXT = EASY_COLORS_TEXT;
-            break;
-        case 'hard':
-            COLORS_TEXT = HARD_COLORS_TEXT;
-            break;
-        default:
-            COLORS_TEXT = BASIC_COLORS_TEXT;
-    }
+    // Always use game colors (mode parameter deprecated but kept for backwards compatibility)
+    const TEXT_COLORS = COLORS_TEXT;
 
     // Get base font size for device and text type
     const baseFontSize = BASE_FONT_SIZES[deviceType][textType] || 
@@ -153,7 +143,7 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
         title: {
             fontFamily: 'barcade3d',
             fontSize: `${fontSize}px`,
-            color: COLORS_TEXT.TITLE || COLORS_TEXT.PRIMARY,
+            color: TEXT_COLORS.TITLE || TEXT_COLORS.PRIMARY,
             shadow: {
                 offsetX: 2 * uiScale,
                 offsetY: 2 * uiScale,
@@ -166,46 +156,46 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
             fontFamily: 'VT323',
             fontSize: `${fontSize}px`,
             fontWeight: "700",
-            color: COLORS_TEXT.PRIMARY,
+            color: TEXT_COLORS.PRIMARY,
             align: 'center',
             lineSpacing: 10 * uiScale
         },
         fancyButton: {
             fontFamily: 'VT323',
             fontSize: `${fontSize}px`,
-            color: COLORS_TEXT.WHITE,
+            color: TEXT_COLORS.WHITE || '#ffffff',
             align: 'center'
         },
         menuTitle: {
             fontFamily: 'barcade3d',
             fontSize: `${fontSize}px`,
-            color: COLORS_TEXT.TITLE || COLORS_TEXT.PRIMARY,
+            color: TEXT_COLORS.TITLE || TEXT_COLORS.PRIMARY,
             shadow: {
-                offsetX: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
-                offsetY: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
+                offsetX: 3 * uiScale,
+                offsetY: 3 * uiScale,
                 color: '#000',
-                blur: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
+                blur: 3 * uiScale,
                 fill: true
             }
         },
         prompt: {
             fontFamily: 'IBM Plex Mono',
             fontSize: `${fontSize}px`,
-            fill: COLORS_TEXT.PRIMARY,
+            fill: TEXT_COLORS.PRIMARY,
             align: 'left',
             lineSpacing: 6 * uiScale
         },
         input: {
             fontFamily: 'IBM Plex Mono',
             fontSize: `${fontSize}px`,
-            fill: COLORS_TEXT.BLACK,
+            fill: TEXT_COLORS.BLACK,
             align: 'left',
             lineSpacing: 6 * uiScale
         },
         output: {
             fontFamily: 'IBM Plex Mono',
             fontSize: `${fontSize}px`,
-            fill: COLORS_TEXT.PRIMARY,
+            fill: TEXT_COLORS.PRIMARY,
             align: 'left',
             lineSpacing: 6 * uiScale
         },
@@ -240,7 +230,7 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
         transitionText: {
             fontFamily: 'VT323',
             fontSize: `${fontSize}px`,
-            color: COLORS_TEXT.PRIMARY,
+            color: TEXT_COLORS.PRIMARY,
             align: 'center',
             shadow: {
                 offsetX: 2 * uiScale,
@@ -253,8 +243,8 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
         }
     };
 
-    // Add mode-specific styling modifications
-    if (mode === 'hard' && textType === 'prompt') {
+    // Add game-specific styling (formerly hard mode)
+    if (textType === 'prompt') {
         baseStyles.prompt.shadow = {
             offsetX: 1 * uiScale,
             offsetY: 1 * uiScale,
@@ -264,7 +254,7 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
         };
     }
 
-    if (textType === 'input' && mode === 'hard') {
+    if (textType === 'input') {
         baseStyles.input.shadow = {
             offsetX: 0,
             offsetY: 1 * uiScale,
@@ -278,37 +268,27 @@ export function getTextStyle(textType, deviceType = null, mode = 'basic', uiScal
 }
 
 /**
- * Get box style for specific box type and game mode
+ * Get box style for specific box type
  * @param {string} boxType - Type of box (prompt, input, output)
- * @param {string} mode - Game mode (basic, easy, hard)
+ * @param {string} mode - Game mode (deprecated, kept for backwards compatibility)
  * @param {number} uiScale - UI scaling factor (default: 1)
  * @returns {object} Box style object
  */
-export function getBoxStyle(boxType, mode = 'basic', uiScale = 1) {
+export function getBoxStyle(boxType, mode = null, uiScale = 1) {
     // Default styles based on UI configuration
     const outline = DESIGN.UI.OUTLINE;
     
-    // Get color configuration based on mode
-    let COLORS_HEX;
-    switch (mode) {
-        case 'easy':
-            COLORS_HEX = EASY_COLORS_HEX;
-            break;
-        case 'hard':
-            COLORS_HEX = HARD_COLORS_HEX;
-            break;
-        default:
-            COLORS_HEX = BASIC_COLORS_HEX;
-    }
+    // Always use game colors (mode parameter deprecated but kept for backwards compatibility)
+    const GAME_COLORS = COLORS_HEX;
     
     // Base styles for each box type
     const baseStyles = {
         prompt: {
-            fillColor: COLORS_HEX.BOX_FILL || COLORS_HEX.BACKGROUND || 0x000000,
-            fillAlpha: 0.8, // Always visible
+            fillColor: GAME_COLORS.BOX_FILL || GAME_COLORS.BACKGROUND || 0x000000,
+            fillAlpha: 0.8,
             hasOutline: true,
             outlineWidth: outline.WIDTH,
-            outlineColor: COLORS_HEX.BOX_OUTLINE || COLORS_HEX.ACCENT || 0xffffff,
+            outlineColor: GAME_COLORS.BOX_OUTLINE || GAME_COLORS.ACCENT || 0xffffff,
             cornerRadius: outline.CORNER_RADIUS
         },
         input: {
@@ -316,15 +296,15 @@ export function getBoxStyle(boxType, mode = 'basic', uiScale = 1) {
             fillAlpha: 0.85,
             hasOutline: true,
             outlineWidth: outline.WIDTH,
-            outlineColor: COLORS_HEX.ACCENT || 0x00ff00,
+            outlineColor: GAME_COLORS.ACCENT || 0x00ff00,
             cornerRadius: outline.CORNER_RADIUS
         },
         output: {
-            fillColor: COLORS_HEX.BOX_FILL || COLORS_HEX.BACKGROUND || 0x000000,
+            fillColor: GAME_COLORS.BOX_FILL || GAME_COLORS.BACKGROUND || 0x000000,
             fillAlpha: 0.8,
             hasOutline: true,
             outlineWidth: outline.WIDTH,
-            outlineColor: COLORS_HEX.BOX_OUTLINE || COLORS_HEX.ACCENT || 0xffffff,
+            outlineColor: GAME_COLORS.BOX_OUTLINE || GAME_COLORS.ACCENT || 0xffffff,
             cornerRadius: outline.CORNER_RADIUS
         }
     };
@@ -333,14 +313,14 @@ export function getBoxStyle(boxType, mode = 'basic', uiScale = 1) {
 }
 
 /**
- * Get autocomplete text style for game mode
+ * Get autocomplete text style
  * @param {string} deviceType - Device type (desktop, tablet, phone)
- * @param {string} mode - Game mode (basic, easy, hard)
+ * @param {string} mode - Game mode (deprecated, kept for backwards compatibility)
  * @param {number} uiScale - UI scaling factor (default: 1)
  * @param {number} boxWidth - Width of containing box
  * @returns {object} Autocomplete text style
  */
-export function getAutocompleteTextStyle(deviceType = null, mode = 'basic', uiScale = 1, boxWidth = 0) {
+export function getAutocompleteTextStyle(deviceType = null, mode = null, uiScale = 1, boxWidth = 0) {
     // If device type not provided, detect it
     if (!deviceType) {
         deviceType = detectDeviceType();
@@ -381,27 +361,15 @@ export function getAutocompleteTextStyle(deviceType = null, mode = 'basic', uiSc
 }
 
 /**
- * Get menu bar style for game mode
- * @param {string} mode - Game mode (basic, easy, hard)
+ * Get menu bar style
+ * @param {string} mode - Game mode (deprecated, kept for backwards compatibility)
  * @param {number} uiScale - UI scaling factor (default: 1)
  * @returns {object} Menu bar style
  */
-export function getMenuBarStyle(mode = 'basic', uiScale = 1) {
-    // Get color configuration based on mode
-    let COLORS_HEX, COLORS_TEXT;
-    switch (mode) {
-        case 'easy':
-            COLORS_HEX = EASY_COLORS_HEX;
-            COLORS_TEXT = EASY_COLORS_TEXT;
-            break;
-        case 'hard':
-            COLORS_HEX = HARD_COLORS_HEX;
-            COLORS_TEXT = HARD_COLORS_TEXT;
-            break;
-        default:
-            COLORS_HEX = BASIC_COLORS_HEX;
-            COLORS_TEXT = BASIC_COLORS_TEXT;
-    }
+export function getMenuBarStyle(mode = null, uiScale = 1) {
+    // Always use game colors (mode parameter deprecated but kept for backwards compatibility)
+    const GAME_COLORS_HEX = COLORS_HEX;
+    const GAME_COLORS_TEXT = COLORS_TEXT;
     
     // Get device type for responsive title size
     const deviceType = detectDeviceType();
@@ -417,20 +385,18 @@ export function getMenuBarStyle(mode = 'basic', uiScale = 1) {
     const titleFontSize = clamp(scaledTitleFontSize, titleClampRange.min, titleClampRange.max);
     
     return {
-        backgroundColor: COLORS_HEX.BACKGROUND || 0x000000,
-        borderColor: mode === 'hard' 
-            ? (COLORS_HEX.BOX_OUTLINE || COLORS_HEX.ACCENT || 0xffffff) 
-            : (COLORS_HEX.ACCENT || 0x00ff00),
+        backgroundColor: GAME_COLORS_HEX.BACKGROUND || 0x000000,
+        borderColor: GAME_COLORS_HEX.BOX_OUTLINE || GAME_COLORS_HEX.ACCENT || 0xffffff,
         borderWidth: DESIGN.UI.OUTLINE.WIDTH * uiScale,
         titleStyle: {
             fontFamily: 'barcade3d',
             fontSize: `${titleFontSize}px`,
-            color: COLORS_TEXT.TITLE || COLORS_TEXT.PRIMARY || '#ffffff',
+            color: GAME_COLORS_TEXT.TITLE || GAME_COLORS_TEXT.PRIMARY || '#ffffff',
             shadow: {
-                offsetX: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
-                offsetY: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
+                offsetX: 3 * uiScale,
+                offsetY: 3 * uiScale,
                 color: '#000',
-                blur: mode === 'hard' ? 3 * uiScale : 2 * uiScale,
+                blur: 3 * uiScale,
                 fill: true
             }
         }

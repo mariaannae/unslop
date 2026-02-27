@@ -1,20 +1,16 @@
-import { DESIGN, HARD_COLORS_HEX, HARD_COLORS_TEXT, EASY_COLORS_TEXT, EASY_COLORS_HEX, THEMES } from "../config/design.js";
+import { DESIGN, THEME } from "../config/design.js";
 import { saveInteraction, isHighScore } from "../config/firebase.js";
-import ButtonFactory from "../utils/ButtonFactory.js";
 import SceneTransitionManager from "../utils/SceneTransitionManager.js";
 import { createBackground } from "../backgrounds/createBackground.js";
-import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle, getBoxStyle } from "../config/textStyles.js";
 import { detectDeviceType } from "../config/dimensions.js";
+import { BaseScene } from "./BaseScene.js";
 
-//, DESIGN.UI.BUTTON.HEIGHT, DESIGN.UI.BUTTON.SPACING, colors_hex, colors_text, DESIGN.UI.BUTTON.WIDTH
-
-export default class DoneScene extends Phaser.Scene {
+export default class DoneScene extends BaseScene {
     constructor() {
         super({ key: 'DoneScene' });
         this.mode = null;
         this.userInput = '';
-        this.tooltips = []; // For tooltips like in BaseGameScene
     }
 
     onFeedbackClick() {
@@ -351,18 +347,6 @@ export default class DoneScene extends Phaser.Scene {
         });
     }    
 
-    createButton(label, callback, centerX, centerY, options = {}) {
-        // Ensure scalingManager is passed for responsive sizing
-        return ButtonFactory.createButton(
-            this,
-            label,
-            callback,
-            centerX,
-            centerY,
-            { ...options, scalingManager: this.scalingManager }
-        );
-    }
-    
     testUsernameScene() {
         // Direct test function to go to username scene
         console.log("TEST: Directly starting UsernameScene with test data");
@@ -390,7 +374,14 @@ export default class DoneScene extends Phaser.Scene {
         // Save the user input before clearing it
         const userInputCopy = this.userInput;
         
-        const interaction = userInputCopy;
+        // Create proper interaction object (not just a string)
+        const interaction = {
+            userInput: userInputCopy,
+            mode: this.mode,
+            levelValue: this.levelValue,
+            score: this.totalScore,
+            prompt: this.prompt
+        };
         saveInteraction(interaction, 'userSubmissions');
         
         // Log user input before clearing
@@ -672,13 +663,7 @@ export default class DoneScene extends Phaser.Scene {
         const boxStyle = this.getPromptBoxStyle();
         console.log("[Prompt BoxStyle]", JSON.stringify(boxStyle));
 
-        let defaultText;
-        if (this.mode === "hard") {
-            defaultText =`Unoriginal Words Attempted: ${this.failCount}\nAI Overlord's Assessment: ${this.aiScore}/15\nTotal Score: ${this.totalScore}/15`;
-        }
-        else if (this.mode === "easy") {
-            defaultText = `Unoriginal Words Attempted: ${this.failCount}\nAI Overlord's Assessment: ${this.aiScore}/15\nTotal Score: ${this.totalScore}/15`;
-        }
+        const defaultText = `Unoriginal Words Attempted: ${this.failCount}\nAI Overlord's Assessment: ${this.aiScore}/15\nTotal Score: ${this.totalScore}/15`;
 
         // Get the appropriate text style for current device
         const deviceType = detectDeviceType();
@@ -916,19 +901,8 @@ export default class DoneScene extends Phaser.Scene {
         this.totalWordCount = data.totalWordCount || 0;
         this.prompt = data.prompt;
         this.score = data.score || null;
-        //this.wordCount = data.wordCount || 0;
+        
         console.log("DoneScene initialized with mode:", this.mode, "levelValue:", this.levelValue, "topKValue:", this.topKValue, "temperature:", this.temperature, "score:", this.score);
-
-        if (this.mode === "easy") {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        }
-        else if (this.mode === "hard") {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        } else {
-            console.error("Error: Invalid mode in DoneScene.");
-        }
 
         // Reset key scene elements to ensure proper initialization when returning from other scenes
         this.promptTextBox = null;
@@ -976,14 +950,12 @@ export default class DoneScene extends Phaser.Scene {
 
 
     async create() {
-      // --- unchanged bootstrapping ---
-      this.uiScale = this.registry.get('uiScale') || 1;
+      // IMPORTANT: Call parent create() first to get all BaseScene functionality
+      super.create();
+      
       this.cameras.main.scrollY = 0;
-      this.scalingManager = new ScalingManager(this);
 
-      if (this.mode === "easy")      createBackground(this, THEMES.easy.background, this.levelValue);
-      else if (this.mode === "hard") createBackground(this, THEMES.hard.background, this.levelValue);
-      else                           this.createBackgroundEffect();
+      createBackground(this, THEME.background, this.levelValue);
 
       // --- unchanged scoring logic ---
       let xOver5Digits = [];
@@ -1165,52 +1137,7 @@ export default class DoneScene extends Phaser.Scene {
     }
 
 
-    // Tooltip methods (copied and adapted from BaseGameScene)
-    showTooltip(text, x, y) {
-        this.hideTooltips();
-        const padding = 10;
-        const tooltipText = this.add.text(0, 0, text, {
-            fontFamily: 'IBM Plex Mono',
-            fontSize: '14px',
-            color: '#ffffff',
-            align: 'center'
-        });
-        const width = tooltipText.width + padding * 2;
-        const height = tooltipText.height + padding * 2;
-        const background = this.add.graphics();
-        background.fillStyle(0x000000, 0.8);
-        background.fillRoundedRect(0, 0, width, height, 8);
-        background.lineStyle(1, 0xffffff, 0.3);
-        background.strokeRoundedRect(0, 0, width, height, 8);
-        const container = this.add.container(x - width/2, y - height - 5, [background, tooltipText]);
-        tooltipText.setPosition(padding, padding);
-        this.tooltips.push(container);
-        container.setAlpha(0);
-        this.tweens.add({
-            targets: container,
-            alpha: 1,
-            duration: 200,
-            ease: 'Quad.easeOut'
-        });
-        container.setDepth(1000);
-    }
-
-    hideTooltips() {
-        this.tooltips.forEach(tooltip => {
-            this.tweens.add({
-                targets: tooltip,
-                alpha: 0,
-                duration: 200,
-                ease: 'Quad.easeOut',
-                onComplete: () => tooltip.destroy()
-            });
-        });
-        this.tooltips = [];
-    }
-
-
-
-createLowScoreWarning() {
+    createLowScoreWarning() {
     if (this.totalScore < 5) {
       // Create red warning overlay
       const warningOverlay = this.add.rectangle(
@@ -1449,7 +1376,7 @@ createLowScoreWarning() {
         this.cameras.main.centerY,
         this.sys.game.canvas.width,
         this.cameras.main.height,
-        EASY_COLORS_HEX.WARNING, // Amber
+        this.COLORS_HEX.WARNING, // Amber
         0.1
       ).setDepth(200);
       
@@ -1470,7 +1397,7 @@ createLowScoreWarning() {
         {
           fontFamily: "Courier Prime",
           fontSize: this.scalingManager.scaleValue(60) + "px",
-          color: EASY_COLORS_HEX.WARNING, 
+          color: this.COLORS_HEX.WARNING,
           stroke: "#000000",
           strokeThickness: 3,
           shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 3, fill: true }

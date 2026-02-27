@@ -1,4 +1,4 @@
-import { DESIGN, EASY_COLORS_HEX, EASY_COLORS_TEXT, HARD_COLORS_HEX, HARD_COLORS_TEXT } from "../config/design.js";
+import { DESIGN, COLORS_HEX, COLORS_TEXT } from "../config/design.js";
 import ButtonFactory from "../utils/ButtonFactory.js";
 
 export default class BadgeGenerator extends Phaser.Scene {
@@ -23,27 +23,26 @@ export default class BadgeGenerator extends Phaser.Scene {
             "DECREE:\nTHIS HUMAN MAY WRITE AGAIN.\nUNDER SURVEILLANCE."
         ];
         this.currentIndex = 0;
-        this.currentMode = 'easy';
     }
 
     preload() {
         // Load QR code
-        this.load.image('nonslop-qr-code', 'assets/nonslop-qr-code.png');
+        this.load.image('unslop-qr-code', 'assets/unslop-qr-code.png');
     }
 
     create() {
         // Set background color
-        this.cameras.main.setBackgroundColor(EASY_COLORS_HEX.BACKGROUND);
+        this.cameras.main.setBackgroundColor(COLORS_HEX.BACKGROUND);
 
         // Add title
         const title = this.add.text(
             this.cameras.main.centerX,
             100,
-            "(NONSLOP)\nBADGE GENERATOR",
+            "(unslop)\nBADGE GENERATOR",
             {
                 fontFamily: 'barcade3d',
                 fontSize: '50px',
-                color: EASY_COLORS_TEXT.TITLE,
+                color: COLORS_TEXT.TITLE,
                 align: 'center',
                 stroke: '#000',
                 strokeThickness: 4,
@@ -65,7 +64,7 @@ export default class BadgeGenerator extends Phaser.Scene {
             {
                 fontFamily: 'IBM Plex Mono',
                 fontSize: '24px',
-                color: EASY_COLORS_TEXT.PRIMARY,
+                color: COLORS_TEXT.PRIMARY,
                 align: 'center'
             }
         ).setOrigin(0.5);
@@ -100,7 +99,7 @@ export default class BadgeGenerator extends Phaser.Scene {
     }
 
     generateNextBadge() {
-        if (this.currentIndex >= this.textList.length && this.currentMode === 'hard') {
+        if (this.currentIndex >= this.textList.length) {
             // Show completion message
             const completionText = this.add.text(
                 this.cameras.main.centerX,
@@ -130,14 +129,9 @@ export default class BadgeGenerator extends Phaser.Scene {
             return;
         }
 
-        // Set colors based on mode
-        if (this.currentMode === 'easy') {
-            this.COLORS_HEX = EASY_COLORS_HEX;
-            this.COLORS_TEXT = EASY_COLORS_TEXT;
-        } else {
-            this.COLORS_HEX = HARD_COLORS_HEX;
-            this.COLORS_TEXT = HARD_COLORS_TEXT;
-        }
+        // Set game colors
+        this.COLORS_HEX = COLORS_HEX;
+        this.COLORS_TEXT = COLORS_TEXT;
 
         // Create badge container
         const badgeContainer = this.add.container(this.cameras.main.centerX, this.cameras.main.centerY);
@@ -151,7 +145,7 @@ export default class BadgeGenerator extends Phaser.Scene {
         // Create badge elements
         const badgeTitle = this.add.text(
             0, 0,
-            "(NONSLOP)",
+            "(unslop)",
             {
                 fontFamily: 'barcade3d',
                 fontSize: '55px',
@@ -197,13 +191,13 @@ export default class BadgeGenerator extends Phaser.Scene {
             }
         ).setOrigin(0.5);
 
-        const qrCode = this.add.image(0, 0, 'nonslop-qr-code')
+        const qrCode = this.add.image(0, 0, 'unslop-qr-code')
             .setDisplaySize(200, 200)
             .setOrigin(0.5);
 
         const urlText = this.add.text(
             0, 0,
-            "nonslop.app",
+            "unslop.app",
             {
                 fontFamily: 'IBM Plex Mono',
                 fontSize: '18px',
@@ -266,26 +260,21 @@ export default class BadgeGenerator extends Phaser.Scene {
 
         // Capture and save badge
         this.captureBadgeAsImage(badgeContainer, (dataURL) => {
-            const filename = `badge_${this.currentIndex + 1}_${this.currentMode}_${this.currentScore}`;
+            const filename = `badge_${this.currentIndex + 1}_hard_${this.currentScore}`;
             this.downloadBadge(dataURL, filename);
 
             // Move to next badge
-            if (this.currentMode === 'easy') {
-                this.currentMode = 'hard';
-            } else {
-                this.currentMode = 'easy';
-                this.currentScore++;
-                if (this.currentScore > 15) {
-                    this.currentScore = 10;
-                    this.currentIndex++;
-                }
+            this.currentScore++;
+            if (this.currentScore > 15) {
+                this.currentScore = 10;
+                this.currentIndex++;
             }
 
             // Clear current badge
             badgeContainer.destroy();
 
             // Generate next badge after a short delay
-            if (this.currentIndex < this.textList.length || this.currentMode === 'hard') {
+            if (this.currentIndex < this.textList.length) {
                 this.time.delayedCall(100, () => this.generateNextBadge());
             }
         });

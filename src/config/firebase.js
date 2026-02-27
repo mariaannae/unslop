@@ -11,10 +11,10 @@ import { collection, addDoc, getDocs, query, orderBy, limit, where, doc, deleteD
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "AIzaSyCejXgwQ9jDGSi-EbsvvEKP0AcXHM2gUHM",
-    authDomain: "nonslop-game-logs.firebaseapp.com",
-    projectId: "nonslop-game-logs",
-    storageBucket: "nonslop-game-logs.firebasestorage.app",
+    apiKey: "AIzaSyCejXgwQ9jDGSi-EbsvvEKP0AcXHM2gUHM ADDING THIS FOR ERROR",
+    authDomain: "unslop-game-logs.firebaseapp.com",
+    projectId: "unslop-game-logs",
+    storageBucket: "unslop-game-logs.firebasestorage.app",
     messagingSenderId: "534330213993",
     appId: "1:534330213993:web:af32470f3b6c989e3e84f8",
     measurementId: "G-E963CDCXX6"
@@ -213,23 +213,13 @@ async function cleanupOldScores(gameMode, maxResults = 10) {
   await authReady;
   
   try {
-    console.log(`Cleaning up old scores for ${gameMode} mode...`);
+    console.log(`Cleaning up old scores...`);
     
-    // Get all scores for the mode without limit
-    let scoresQuery;
-    
-    if (gameMode) {
-      scoresQuery = query(
-        collection(db, 'highscores'),
-        where("mode", "==", gameMode),
-        orderBy("score", "desc")
-      );
-    } else {
-      scoresQuery = query(
-        collection(db, 'highscores'),
-        orderBy("score", "desc")
-      );
-    }
+    // Get all scores without limit
+    const scoresQuery = query(
+      collection(db, 'highscores'),
+      orderBy("score", "desc")
+    );
     
     const querySnapshot = await getDocs(scoresQuery);
     const scores = [];
@@ -286,7 +276,6 @@ async function saveHighScore(scoreData) {
       userId: currentUserId || "unknown",
       username: scoreData.username || "Anonymous Player",
       score: scoreData.score || 0,
-      mode: scoreData.mode || "easy",
       level: scoreData.level || 1,
       temperature: scoreData.temperature || 0.2,
       prompt: scoreData.prompt || "",
@@ -341,22 +330,12 @@ async function getTopScores(gameMode = null, maxResults = 10) {
     
     // Try with the ideal query first
     try {
-      if (gameMode) {
-        // Filter by mode if provided
-        scoresQuery = query(
-          collection(db, 'highscores'),
-          where("mode", "==", gameMode),
-          orderBy("score", "desc"),
-          limit(maxResults)
-        );
-      } else {
-        // Get all scores regardless of mode
-        scoresQuery = query(
-          collection(db, 'highscores'),
-          orderBy("score", "desc"),
-          limit(maxResults)
-        );
-      }
+      // Get all scores (gameMode parameter deprecated)
+      scoresQuery = query(
+        collection(db, 'highscores'),
+        orderBy("score", "desc"),
+        limit(maxResults)
+      );
       
       const querySnapshot = await getDocs(scoresQuery);
       const scores = [];
@@ -393,10 +372,8 @@ async function getTopScores(gameMode = null, maxResults = 10) {
             }
           });
           
-          // Manual filtering and sorting
-          let filteredScores = gameMode 
-            ? allScores.filter(score => score.mode === gameMode)
-            : allScores;
+          // Manual sorting (no filtering by mode)
+          let filteredScores = allScores;
             
           // Sort by level descending first, then by score descending
           filteredScores.sort((a, b) => {
@@ -432,7 +409,7 @@ async function getTopScores(gameMode = null, maxResults = 10) {
     console.error("Error getting top scores:", e);
     if (e.message && e.message.includes("requires an index")) {
       console.error("This error requires creating a Firebase index. Please visit the following URL to create the necessary index:");
-      console.error("https://console.firebase.google.com/project/nonslop-game-logs/firestore/indexes");
+      console.error("https://console.firebase.google.com/project/unslop-game-logs/firestore/indexes");
       console.error("You need to create a composite index on the 'highscores' collection with fields 'mode' (Ascending) and 'score' (Descending)");
       console.error("Until the index is created, the application will use a less efficient fallback method.");
     }
@@ -449,9 +426,9 @@ async function isHighScore(score, gameMode, level, maxResults = 10) {
       score = 0; // Default to 0 if invalid
     }
     
-    // Get top scores using our improved function
-    const topScores = await getTopScores(gameMode, maxResults);
-    console.log(`Retrieved ${topScores.length} top scores for ${gameMode} mode`);
+    // Get top scores using our improved function (gameMode parameter deprecated)
+    const topScores = await getTopScores(null, maxResults);
+    console.log(`Retrieved ${topScores.length} top scores`);
     
     // If we have fewer than maxResults scores, it's automatically a high score
     if (topScores.length < maxResults) {

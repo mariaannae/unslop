@@ -1,65 +1,12 @@
 import { DESIGN, BASIC_COLORS_HEX as COLORS_HEX, BASIC_COLORS_TEXT as COLORS_TEXT} from "../config/design.js";
 import { saveInteraction } from "../config/firebase.js";
-import ButtonFactory from "../utils/ButtonFactory.js";
-import { ScalingManager } from "../config/scaling.js";
 import { getTextStyle, getBoxStyle } from "../config/textStyles.js";
 import { detectDeviceType } from "../config/dimensions.js";
+import { BaseScene } from "./BaseScene.js";
 
-export default class InstructionScene extends Phaser.Scene {
+export default class InstructionScene extends BaseScene {
     constructor() {
         super({ key: 'InstructionScene' });
-        this.tooltips = []; // Array to store active tooltips
-    }
-
-    showTooltip(text, x, y) {
-        // Hide any existing tooltips
-        this.hideTooltips();
-
-        // Create tooltip background
-        const padding = 10;
-        const deviceType = detectDeviceType();
-        const tooltipStyle = getTextStyle('tooltip', deviceType, 'basic', this.uiScale || 1);
-        const tooltipText = this.add.text(0, 0, text, tooltipStyle);
-
-        const width = tooltipText.width + padding * 2;
-        const height = tooltipText.height + padding * 2;
-        
-        const background = this.add.graphics();
-        background.fillStyle(0x000000, 0.8);
-        background.fillRoundedRect(0, 0, width, height, 8);
-        background.lineStyle(1, 0xffffff, 0.3);
-        background.strokeRoundedRect(0, 0, width, height, 8);
-        
-        // Create container for tooltip
-        const container = this.add.container(x - width/2, y - height - 5, [background, tooltipText]);
-        tooltipText.setPosition(padding, padding);
-        
-        // Add to active tooltips
-        this.tooltips.push(container);
-        
-        // Fade in effect
-        container.setAlpha(0);
-        this.tweens.add({
-            targets: container,
-            alpha: 1,
-            duration: 200,
-            ease: 'Quad.easeOut'
-        });
-        
-        container.setDepth(1000);
-    }
-    
-    hideTooltips() {
-        this.tooltips.forEach(tooltip => {
-            this.tweens.add({
-                targets: tooltip,
-                alpha: 0,
-                duration: 200,
-                ease: 'Quad.easeOut',
-                onComplete: () => tooltip.destroy()
-            });
-        });
-        this.tooltips = [];
     }
     
     createBackgroundEffect() {
@@ -113,43 +60,6 @@ export default class InstructionScene extends Phaser.Scene {
             });
         }
     }  
-    
-    addButtonClickEffects() {
-        // Use green for "NEXT" button
-        const nextColor = 0x43ea5e;
-        const buttons = [this.nextButton];
-        buttons.forEach(button => {
-            if (!button) return;
-            button.setInteractive();
-            button.off('pointerdown');
-            button.on('pointerdown', (pointer) => {
-                this.tweens.add({
-                    targets: button,
-                    scaleX: 0.95,
-                    scaleY: 0.95,
-                    duration: 100,
-                    yoyo: true,
-                    ease: "Quad.Out",
-                    onComplete: () => {
-                        this.onDoneButtonClick();
-                    }
-                });
-            });
-        });
-    }
-
-
-    createButton(label, callback, centerX, centerY, options = {}) {
-        // Ensure scalingManager is passed for responsive sizing
-        return ButtonFactory.createButton(
-            this,
-            label,
-            callback,
-            centerX,
-            centerY,
-            { ...options, scalingManager: this.scalingManager }
-        );
-    }
     
     onDoneButtonClick() {
         console.log("Leaving instructions scene...");
@@ -264,19 +174,19 @@ export default class InstructionScene extends Phaser.Scene {
 
         console.log("[DEBUG] InstructionsScene button placement", { boxX, boxY, textHeight, buttonWidth, buttonHeight, buttonX, buttonY, uiScale });
 
-        this.nextButton = this.createButton("NEXT", () => this.onDoneButtonClick(), buttonX, buttonY, {
-            depth: 102
-        });
-        // Don't call setInteractive again - ButtonFactory already did that
-        this.nextButton.on('pointerover', () => {
-            this.showTooltip('Continue to difficulty selection', this.nextButton.x, this.nextButton.y - this.nextButton.height/2);
-            this.nextButton.setScale(1.1);
-        })
-        .on('pointerout', () => {
-            this.hideTooltips();
-            this.nextButton.setScale(1);
-        });
-        // Don't call addButtonClickEffects - it overrides the button's built-in functionality
+        // Use createButton with tooltip parameter from BaseScene
+        this.nextButton = this.createButton(
+            "NEXT", 
+            () => this.onDoneButtonClick(), 
+            buttonX, 
+            buttonY, 
+            'Continue to difficulty selection',  // tooltip text
+            { depth: 102 }
+        );
+        
+        // Add scale effect on hover
+        this.nextButton.on('pointerover', () => this.nextButton.setScale(1.1));
+        this.nextButton.on('pointerout', () => this.nextButton.setScale(1));
     }
 
     init(data) {
@@ -292,10 +202,10 @@ export default class InstructionScene extends Phaser.Scene {
     }
 
     async create() {
-        this.cameras.main.scrollY = 0; 
-
-        // Initialize scaling manager for responsive UI
-        this.scalingManager = new ScalingManager(this);
+        // IMPORTANT: Call parent create() first to get all BaseScene functionality
+        super.create();
+        
+        this.cameras.main.scrollY = 0;
 
         this.createBackgroundEffect();
 
