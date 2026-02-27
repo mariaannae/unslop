@@ -105,7 +105,6 @@ export default class BaseGameScene extends BaseScene {
         this.suggestionBoxes = [];
         this.suggestionTexts = [];
         this.cursorVisible = true;
-        this.activeTimeout = null;
         this.cursorTimer = null;
         this.promptTextBox = null;
         this.promptText = null;
@@ -303,21 +302,14 @@ export default class BaseGameScene extends BaseScene {
         this.createMenuBar();
         console.log("[DEBUG] Menu bar created, menuBarHeight:", this.menuBarHeight);
         
-        // Clear camera background color for mobile to allow background images to show through
-        if (this.isMobile) {
-            this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
-            console.log("[DEBUG] Mobile: Cleared camera background color");
-        }
+
         
         // Now that there are no child scenes, call relayoutScene directly to build the UI
         this.relayoutScene(this.sys.game.canvas.width, this.cameras.main.height, this.sys.game.config.orientation === Phaser.Scale.PORTRAIT);
         // Force background creation here for debugging
-        console.log("[DEBUG] About to call updateBackgroundForLevel");
-        console.log("[DEBUG] typeof this.updateBackgroundForLevel:", typeof this.updateBackgroundForLevel);
-        console.log("[DEBUG] this.updateBackgroundForLevel exists:", !!this.updateBackgroundForLevel);
+
         try {
             this.updateBackgroundForLevel();
-            console.log("[DEBUG] updateBackgroundForLevel call completed successfully");
         } catch (error) {
             console.error("[DEBUG] Error calling updateBackgroundForLevel:", error);
             console.error("[DEBUG] Error stack:", error.stack);
@@ -336,38 +328,6 @@ export default class BaseGameScene extends BaseScene {
         });
     }
     
-    /**
-     * Force calculate UI positions directly
-     */
-    forceCalculateUIPositions() {
-        console.log("[DEBUG] forceCalculateUIPositions called");
-        try {
-            const width = this.sys.game.canvas.width;
-            const height = this.cameras.main.height;
-            const positions = this.calculateUIPositions(width, height);
-            this._calculateUIPositionsCalled = true;
-            console.log("[DEBUG] forceCalculateUIPositions - positions calculated:", positions);
-            
-            // If we got valid positions, try to create the UI
-            if (positions && positions.statsBoxWidth > 0) {
-                console.log("[DEBUG] Creating UI elements with forced positions");
-                
-                // Destroy existing UI first
-                this.destroyExistingUI();
-                
-                // Create UI elements
-                const promptBoxInfo = this.createPromptSection(positions.promptY);
-                this.createInputSection(positions, promptBoxInfo);
-                this.createButtonSection(positions);
-                this.createStatsDisplay(positions.statsBoxWidth, positions.statsX, positions.statsY);
-                this.finalizeLayout();
-            }
-        } catch (error) {
-            console.error("[DEBUG] Error in forceCalculateUIPositions:", error);
-            console.error("[DEBUG] Error stack:", error.stack);
-        }
-    }
-
     /**
      * Calculate all UI element positions based on screen dimensions
      * @returns {object} Object containing all calculated positions and dimensions
@@ -893,11 +853,6 @@ createButtonSection(positions) {
             this.cursorTimer = null;
         }
         
-        if (this.activeTimeout) {
-            clearTimeout(this.activeTimeout);
-            this.activeTimeout = null;
-        }
-        
         if (this.timerEvent) {
             this.timerEvent.remove();
             this.timerEvent = null;
@@ -1059,7 +1014,70 @@ createButtonSection(positions) {
         if (this.inputText) {
             this.inputText.setText('_');
         }
-        // We no longer need to clear autocompleteText separately
+        // Generate a fresh AI answer for the current prompt
+        if (!this.isShuttingDown) {
+            this.generateInitialAnswer();
+        }
+    }
+
+    /**
+     * Show a blinking "generating..." popup while waiting for AI text generation.
+     */
+    _showGeneratingPopup() {
+        this._dismissGeneratingPopup();
+
+        const centerX = this.cameras.main.centerX;
+        const centerY = this.inputBoxY
+            ? this.inputBoxY + (this.inputBoxHeight || 0) / 2
+            : this.cameras.main.centerY;
+
+        // Background rectangle
+        this._generatingBg = this.add.rectangle(centerX, centerY, 230, 60, 0x000000, 0.85)
+            .setDepth(2000)
+            .setStrokeStyle(2, 0xffffff, 0.6);
+
+        // Loading text
+        const deviceType = detectDeviceType();
+        const uiScale = this.registry?.get('uiScale') || 1;
+        const textStyle = getTextStyle('button', deviceType, this.mode || 'basic', uiScale);
+        this._generatingText = this.add.text(centerX, centerY, 'generating...', {
+            ...textStyle,
+            fill: '#ffffff',
+            align: 'center'
+        }).setOrigin(0.5).setDepth(2001);
+
+        // Blink the text
+        this._generatingTween = this.tweens.add({
+            targets: this._generatingText,
+            alpha: { from: 1, to: 0.15 },
+            duration: 500,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.InOut'
+        });
+    }
+
+    /**
+     * Dismiss the generating popup if it exists.
+     */
+    _dismissGeneratingPopup() {
+        if (this._generatingTween) {
+            this._generatingTween.stop();
+            this._generatingTween = null;
+        }
+        if (this._generatingBg) {
+            this._generatingBg.destroy();
+            this._generatingBg = null;
+        }
+        if (this._generatingText) {
+            this._generatingText.destroy();
+            this._generatingText = null;
+        }
+        // Also clean up old container approach if it exists
+        if (this._generatingPopup) {
+            this._generatingPopup.destroy();
+            this._generatingPopup = null;
+        }
     }
 
     async onDoneButtonClick() {
@@ -1259,7 +1277,10 @@ createButtonSection(positions) {
      * Uses the same web-llm engine as suggestion generation, but with up to 200 tokens.
      */
     async generateInitialAnswer() {
-        if (!this.currentPrompt || this.isShuttingDown) return;
+        if (!this.currentPrompt || this.isShuttingDown) {
+            this._dismissGeneratingPopup();
+            return;
+        }
 
         const llmEngine = registryManager.get('llmEngine');
         const isValidEngine = llmEngine &&
@@ -1270,8 +1291,12 @@ createButtonSection(positions) {
 
         if (!isValidEngine) {
             console.warn('[generateInitialAnswer] LLM engine not available.');
+            this._dismissGeneratingPopup();
             return;
         }
+
+        // Show the popup now — we know an actual async API call is about to happen
+        this._showGeneratingPopup();
 
         try {
             const response = await llmEngine.chat.completions.create({
@@ -1290,7 +1315,10 @@ createButtonSection(positions) {
                 stream: false
             });
 
-            if (this.isShuttingDown) return;
+            if (this.isShuttingDown) {
+                this._dismissGeneratingPopup();
+                return;
+            }
 
             const answer = response.choices?.[0]?.message?.content?.trim() || '';
             if (answer) {
@@ -1302,8 +1330,10 @@ createButtonSection(positions) {
                 this.updateCursor();
                 this.updateWordCountDisplay();
             }
+            this._dismissGeneratingPopup();
         } catch (error) {
             console.error('[generateInitialAnswer] Error:', error);
+            this._dismissGeneratingPopup();
         }
     }
 
@@ -1406,143 +1436,6 @@ createButtonSection(positions) {
             boxHeight: boxHeight
         };
     }
-
-    createInputTextBox() {
-        const sm = this.scalingManager;
-        // Set padding separately for mobile vs desktop, and always scale
-        const padding = this.isMobile ? sm.scaleValue(28) : sm.scaleValue(20);
-
-        // Calculate stats box width based on content, always scaled
-        // Use the same logic as createWordCountDisplay for consistency
-        // Create temporary text objects to measure content width
-        const deviceType = detectDeviceType();
-        const uiScale = sm.uiScale || 1;
-        const labelStyle = getTextStyle('tooltip', deviceType, this.mode || 'basic', uiScale);
-        const countStyle = getTextStyle('button', deviceType, this.mode || 'basic', uiScale);
-
-        // Labels with maximum expected values
-        const labels = [
-            { text: "Original Words:", value: "999" },
-            { text: "AI Words:", value: "999" },
-            { text: "Current Streak:", value: "999" },
-            { text: "Best Streak:", value: "999" }
-        ];
-
-        // Create temporary text objects to measure
-        const tempTexts = [];
-        const titleTemp = this.add.text(0, 0, "WORD STATS", { ...labelStyle, fontStyle: 'bold', fill: '#ffffff' });
-        tempTexts.push(titleTemp);
-
-        let maxLabelWidth = 0;
-        labels.forEach(({ text, value }) => {
-            const labelTemp = this.add.text(0, 0, text, { ...labelStyle, fill: '#ffffff' });
-            const valueTemp = this.add.text(0, 0, value, { ...countStyle, fontStyle: 'bold' });
-            const iconSpace = sm.scaleValue(35);
-            const rowWidth = iconSpace + labelTemp.width + valueTemp.width + padding;
-            maxLabelWidth = Math.max(maxLabelWidth, rowWidth);
-            tempTexts.push(labelTemp, valueTemp);
-        });
-
-        // Clean up temporary text objects
-        tempTexts.forEach(text => text.destroy());
-
-        // Calculate stats box width: content width + scaled padding, min/max enforced
-        const minBoxWidth = sm.scaleValue(this.isMobile ? 300 : 180); // Consistent mobile minimum of 300
-        const customWidth = Math.max(maxLabelWidth + padding * 2, minBoxWidth);
-
-        // Use this width for layout below
-        this.uiBoxWidth = customWidth;
-
-        const textBoxHeight = SCENE_CONFIG.BOX_DIMENSIONS.INPUT_HEIGHT;
-
-        // Calculate position below Word Stats panel and prompt box
-        const statsBoxHeight = sm.scaleValue(130);
-        const statsDisplayY = this.menuBarHeight + padding;
-        const statsBottomEdge = statsDisplayY + statsBoxHeight;
-
-        // Use configuration constants for offsets WITH SCALING
-        const promptOffset = this.isMobile 
-            ? sm.scaleValue(SCENE_CONFIG.LAYOUT.MOBILE_PROMPT_OFFSET_BELOW_STATS)
-            : sm.scaleValue(SCENE_CONFIG.LAYOUT.PROMPT_OFFSET_BELOW_STATS);
-        const promptY = statsBottomEdge + promptOffset;
-        const promptBoxHeight = sm.scaleValue(80);
-        const promptBottomEdge = promptY + promptBoxHeight;
-
-        // Use configuration constants for input offset WITH SCALING
-        const inputOffset = this.isMobile 
-            ? sm.scaleValue(SCENE_CONFIG.LAYOUT.MOBILE_INPUT_OFFSET_BELOW_PROMPT)
-            : sm.scaleValue(SCENE_CONFIG.LAYOUT.INPUT_OFFSET_BELOW_PROMPT);
-        const textBoxY = promptBottomEdge + inputOffset;
-
-        // Clear any existing elements first
-        if (this.inputTextBorder) {
-            this.inputTextBorder.destroy();
-            this.inputTextBorder = null;
-        }
-
-        if (this.inputText) {
-            this.inputText.destroy();
-            this.inputText = null;
-        }
-
-        if (this.autocompleteText) {
-            this.autocompleteText.destroy();
-            this.autocompleteText = null;
-        }
-
-        // Create a fresh border
-        const boxStyle = this.getInputBoxStyle();
-        this.inputTextBorder = this.add.graphics();
-        this.inputTextBorder.fillStyle(boxStyle.fillColor, boxStyle.fillAlpha);
-        this.inputTextBorder.fillRoundedRect(
-            this.cameras.main.centerX - this.uiBoxWidth / 2,
-            textBoxY,
-            this.uiBoxWidth,
-            textBoxHeight,
-            boxStyle.cornerRadius
-        ).setDepth(19);
-
-        if (boxStyle.hasOutline) {
-            this.inputTextBorder.lineStyle(boxStyle.outlineWidth, boxStyle.outlineColor, 1);
-            this.inputTextBorder.strokeRoundedRect(
-                this.cameras.main.centerX - this.uiBoxWidth / 2,
-                textBoxY,
-                this.uiBoxWidth,
-                textBoxHeight,
-                boxStyle.cornerRadius
-            ).setDepth(20);
-        }
-
-        // Get input text style from textStyles.js (same approach as prompt text)
-        const inputTextStyle = this.getInputTextStyle();
-        const textStyle = {
-            ...inputTextStyle,
-            wordWrap: { width: this.uiBoxWidth - padding * 2 }
-        };
-
-        // Use scaled padding for text position
-        this.inputText = this.add.rexBBCodeText(
-            this.cameras.main.centerX - this.uiBoxWidth / 2 + padding,
-            textBoxY + padding,
-            "_",
-            textStyle
-        ).setOrigin(0, 0);
-
-        // Ensure visibility and proper depth
-        this.inputText.setVisible(true).setDepth(25);
-
-        // Reset user input
-        this.userInput = '';
-
-        // Force an immediate cursor update to ensure text is visible
-        this.cursorVisible = true;
-
-        this.updateCursor();
-
-        // Set up input handlers after text objects are created
-        this.setupInputHandlers();
-    }
-
 
     setupInputHandlers() {
         // Ensure text is initialized
@@ -2377,48 +2270,6 @@ createButtonSection(positions) {
     }
 
     /**
-     * Handle level slider value changes
-     */
-    handleLevelSliderChange(pointerX, minX, maxX, handle, label) {
-        pointerX = Phaser.Math.Clamp(pointerX, minX, maxX);
-        handle.x = pointerX;
-        const newLevel = Math.round(Phaser.Math.Linear(1, 3, (pointerX - minX) / (maxX - minX)));
-        
-        // Update the fill for the level slider track
-        const levelSlider = handle.getData('sliderTrack');
-        if (levelSlider) {
-            const sliderTrackHeight = this.isMobile ? this.scalingManager.scaleValue(20) : this.scalingManager.scaleValue(12);
-            const sliderX = handle.getData('sliderX');
-            const sliderY = handle.y;
-            
-            // Clear previous fill
-            levelSlider.clear();
-            
-            // Draw the background track
-            levelSlider.fillStyle(0x444444, 1);
-            levelSlider.fillRect(sliderX, sliderY - sliderTrackHeight / 2, maxX - minX + 10, sliderTrackHeight);
-            
-        // Draw the filled portion up to the handle position
-        const fillWidth = handle.x - sliderX;
-        if (fillWidth > 0) {
-            // Use the same color as the mode toggle
-            levelSlider.fillStyle(BASIC_COLORS_HEX.HIGHLIGHT, 1);
-            levelSlider.fillRect(sliderX, sliderY - sliderTrackHeight / 2, fillWidth, sliderTrackHeight);
-        }
-            
-            // Draw the outline
-            levelSlider.lineStyle(2, 0xffffff, 0.3);
-            levelSlider.strokeRect(sliderX, sliderY - sliderTrackHeight / 2, maxX - minX + 10, sliderTrackHeight);
-        }
-        
-        if (newLevel !== this.levelValue) {
-            this.levelValue = newLevel;
-            label.setText(`Level: ${this.levelValue}`);
-            this.onLevelChange();
-        }
-    }
-
-    /**
      * Handle level change
      */
     onLevelChange() {
@@ -2459,6 +2310,11 @@ createButtonSection(positions) {
         
         // Update cursor to show the cleared state
         this.updateCursor();
+        
+        // Generate a fresh AI answer for the new prompt
+        if (!this.isShuttingDown) {
+            this.generateInitialAnswer();
+        }
     }
 
     /**
@@ -2618,209 +2474,6 @@ createButtonSection(positions) {
                 if (isMobileDevice) {
                     tempSliderHandle.emit('pointerdown', pointer);
                     this.input.emit('dragstart', pointer, tempSliderHandle);
-                }
-            });
-    }
-
-    /**
-     * Handle temperature slider value changes
-     */
-    handleTemperatureSliderChange(pointerX, minX, maxX, handle, label) {
-        pointerX = Phaser.Math.Clamp(pointerX, minX, maxX);
-        handle.x = pointerX;
-        // Map slider position to temperature (0.1 to 1.5)
-        const newTemp = Phaser.Math.Linear(0.1, 1.5, (pointerX - minX) / (maxX - minX));
-        
-        // Update the fill for the temperature slider track
-        const tempSlider = handle.getData('sliderTrack');
-        if (tempSlider) {
-            const sliderTrackHeight = this.isMobile ? this.scalingManager.scaleValue(20) : this.scalingManager.scaleValue(12);
-            const sliderX = handle.getData('sliderX');
-            const sliderY = handle.y;
-            
-            // Clear previous fill
-            tempSlider.clear();
-            
-            // Draw the background track
-            tempSlider.fillStyle(0x444444, 1);
-            tempSlider.fillRect(sliderX, sliderY - sliderTrackHeight / 2, maxX - minX + 10, sliderTrackHeight);
-            
-                    // Draw the filled portion up to the handle position
-                    const fillWidth = handle.x - sliderX;
-                    if (fillWidth > 0) {
-                        // Use the same color as the mode toggle
-                        tempSlider.fillStyle(BASIC_COLORS_HEX.HIGHLIGHT, 1);
-                        tempSlider.fillRect(sliderX, sliderY - sliderTrackHeight / 2, fillWidth, sliderTrackHeight);
-                    }
-            
-            // Draw the outline
-            tempSlider.lineStyle(2, 0xffffff, 0.3);
-            tempSlider.strokeRect(sliderX, sliderY - sliderTrackHeight / 2, maxX - minX + 10, sliderTrackHeight);
-        }
-        
-        if (Math.abs(newTemp - this.temperature) > 0.01) {
-            this.temperature = newTemp;
-            label.setText(`Randomness: `);//${Math.round(this.temperature * 100)}%`);
-        }
-    }
-
-    /**
-     * Create the frequency penalty slider
-     */
-    createFrequencyPenaltySlider(popupX, popupY, popupWidth, popupHeight) {
-        const sm = this.scalingManager || new ScalingManager(this);
-        const sliderWidth = sm.scaleValue(150);
-        const gap = sm.scaleValue(20);
-        const bannerHeight = sm.scaleValue(54);
-        const gap1 = sm.scaleValue(24);
-        const sliderRowHeight = sm.scaleValue(44);
-        const gap2 = sm.scaleValue(SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
-        const sliderRowHeight2 = sm.scaleValue(44);
-        const gap3 = sm.scaleValue(SCENE_CONFIG.SETTINGS_POPUP.STANDARD_GAP);
-
-        let yCursor = popupY + bannerHeight + gap1 + sliderRowHeight + gap2 + sliderRowHeight2 + gap3;
-
-        // Frequency penalty slider row
-        const freqLabelX = popupX + sm.scaleValue(30);
-        const freqLabelY = yCursor + sm.scaleValue(22);
-        const deviceType = detectDeviceType();
-        const uiScale = this.registry && this.registry.get && this.registry.get('uiScale') || 1;
-        const labelStyle = getTextStyle('settings', deviceType, this.mode || 'basic', uiScale);
-        const freqLabel = this.add.text(
-            freqLabelX, freqLabelY,
-            `Word Variety: `,
-            {
-                ...labelStyle,
-                fontSize: `${parseInt(labelStyle.fontSize)}px`,
-                fill: '#ffffff'
-            }
-        ).setOrigin(0, 0.5);
-        this.settingsPopup.add(freqLabel);
-
-        const freqSliderX = freqLabelX + freqLabel.displayWidth + gap;
-        const freqSliderY = freqLabelY;
-
-        // Create slider track
-        const isMobileDevice = this.isMobile;
-        const sliderTrackHeight = isMobileDevice ? sm.scaleValue(20) : sm.scaleValue(12);
-        const freqSlider = this.add.graphics();
-        // Draw the full track (background)
-        freqSlider.fillStyle(0x444444, 1);
-        freqSlider.fillRect(freqSliderX, freqSliderY - sliderTrackHeight / 2, sliderWidth, sliderTrackHeight);
-        // Draw the filled portion up to the handle (frequency penalty ranges from 0.0 to 2.0)
-        const freqT = this.frequencyPenalty / 2.0;
-        const freqFillWidth = sliderWidth * freqT;
-        if (freqFillWidth > 0) {
-            freqSlider.fillStyle(BASIC_COLORS_HEX.HIGHLIGHT, 1);
-            freqSlider.fillRect(freqSliderX, freqSliderY - sliderTrackHeight / 2, freqFillWidth, sliderTrackHeight);
-        }
-        freqSlider.lineStyle(2, 0xffffff, 0.3);
-        freqSlider.strokeRect(freqSliderX, freqSliderY - sliderTrackHeight / 2, sliderWidth, sliderTrackHeight);
-        this.settingsPopup.add(freqSlider);
-
-        // Create slider handle
-        const freqSliderHandle = this.createFrequencyPenaltySliderHandle(freqSliderX, freqSliderY, sliderWidth);
-        this.settingsPopup.add(freqSliderHandle);
-
-        // Setup slider interactions
-        this.setupFrequencyPenaltySliderInteractions(freqSlider, freqSliderHandle, freqLabel, freqSliderX, freqSliderY, sliderWidth);
-
-        return { freqSliderHandle, freqLabel };
-    }
-
-    /**
-     * Create a frequency penalty slider handle
-     */
-    createFrequencyPenaltySliderHandle(sliderX, sliderY, sliderWidth) {
-        const sm = this.scalingManager || new ScalingManager(this);
-        const isMobileDevice = this.isMobile;
-        // Map frequency penalty (0.0 to 2.0) to slider position (0 to 1)
-        const freqT = this.frequencyPenalty / 2.0;
-        const freqSliderMinX = sliderX + sm.scaleValue(5);
-        const freqSliderMaxX = sliderX + sliderWidth - sm.scaleValue(5);
-        const freqHandleX = Phaser.Math.Linear(freqSliderMinX, freqSliderMaxX, freqT);
-
-        // Create a simple sprite for the handle
-        const handleSize = isMobileDevice ? sm.scaleValue(24) : sm.scaleValue(20);
-        
-        // Reuse the texture if it exists, or create it
-        if (!this.textures.exists('freqSliderHandle')) {
-            const graphics = this.make.graphics({ x: 0, y: 0 }, false);
-            graphics.fillStyle(BASIC_COLORS_HEX.ACCENT, 1);
-            graphics.fillCircle(handleSize/2, handleSize/2, handleSize/2);
-            graphics.lineStyle(2, 0xffffff, 1);
-            graphics.strokeCircle(handleSize/2, handleSize/2, handleSize/2);
-            graphics.generateTexture('freqSliderHandle', handleSize, handleSize);
-            graphics.destroy();
-        }
-        
-        // Create the sprite from the generated texture
-        const handle = this.add.sprite(freqHandleX, sliderY, 'freqSliderHandle');
-        handle.setDepth(3);
-        
-        // Set up interactive and draggable
-        const hitArea = isMobileDevice ? 44 : 60;
-        handle.setInteractive({ 
-            hitArea: new Phaser.Geom.Circle(handleSize/2, handleSize/2, hitArea/2), 
-            hitAreaCallback: Phaser.Geom.Circle.Contains,
-            draggable: true,
-            useHandCursor: true
-        });
-
-        // Visual feedback
-        handle.on('pointerover', () => {
-            handle.setScale(1.2);
-            handle.setTint(0xffff00);
-        });
-        
-        handle.on('pointerout', () => {
-            if (!handle.getData('isDragging')) {
-                handle.setScale(1);
-                handle.clearTint();
-            }
-        });
-
-        return handle;
-    }
-
-    /**
-     * Setup frequency penalty slider interactions
-     */
-    setupFrequencyPenaltySliderInteractions(freqSlider, freqSliderHandle, freqLabel, sliderX, sliderY, sliderWidth) {
-        const freqSliderMinX = sliderX + 5;
-        const freqSliderMaxX = sliderX + sliderWidth - 5;
-        const isMobileDevice = this.isMobile;
-        const sliderTrackHeight = isMobileDevice ? this.scalingManager.scaleValue(20) : this.scalingManager.scaleValue(12);
-        
-        // Store bounds and references on the handle for drag functionality
-        freqSliderHandle.setData('minX', freqSliderMinX);
-        freqSliderHandle.setData('maxX', freqSliderMaxX);
-        freqSliderHandle.setData('type', 'frequency');
-        freqSliderHandle.setData('sliderTrack', freqSlider);
-        freqSliderHandle.setData('sliderX', sliderX);
-        freqSliderHandle.setData('sliderWidth', sliderWidth);
-        freqSliderHandle.setData('sliderTrackHeight', sliderTrackHeight);
-        
-        // Handle clicks on slider track
-        const sliderBarHitHeight = isMobileDevice ? 44 : 20;
-        freqSlider.setInteractive(new Phaser.Geom.Rectangle(sliderX, sliderY - sliderBarHitHeight / 2, sliderWidth, sliderBarHitHeight), Phaser.Geom.Rectangle.Contains)
-            .on('pointerdown', (pointer) => {
-                const clampedX = Phaser.Math.Clamp(pointer.x, freqSliderMinX, freqSliderMaxX);
-                freqSliderHandle.x = clampedX;
-                // Map slider position to frequency penalty (0.0 to 2.0)
-                const newFreq = Phaser.Math.Linear(0.0, 2.0, (clampedX - freqSliderMinX) / (freqSliderMaxX - freqSliderMinX));
-                
-                // Update the fill
-                this.updateSliderFill(freqSliderHandle);
-                
-                if (Math.abs(newFreq - this.frequencyPenalty) > 0.01) {
-                    this.frequencyPenalty = newFreq;
-                    freqLabel.setText(`Word Variety: `);
-                }
-                
-                if (isMobileDevice) {
-                    freqSliderHandle.emit('pointerdown', pointer);
-                    this.input.emit('dragstart', pointer, freqSliderHandle);
                 }
             });
     }
@@ -3520,85 +3173,6 @@ this.aiCountText = this.add.text(
         this.settingsButton = settingsIcon;
     }
 
-    createFailsCounter() {
-        if (this.failsCounter) {
-            this.failsCounter.clear();
-        } else {
-            this.failsCounter = this.add.graphics();
-        }
-        
-        if (this.failsText) {
-            this.failsText.destroy();
-        }
-    
-        // Calculate width to match two buttons plus spacing
-        const scoreWidth = DESIGN.UI.BUTTON.WIDTH * 2 + DESIGN.UI.BUTTON.SPACING;
-        const scoreHeight = DESIGN.UI.BUTTON.HEIGHT;
-        
-        // Calculate position using the new layout calculation
-        const statsBoxWidth = 180;
-        const statsBoxHeight = 130;
-        const statsDisplayY = this.menuBarHeight + 20;
-        const statsBottomEdge = statsDisplayY + statsBoxHeight;
-        
-        // Use configuration constants for prompt offset
-        const promptOffset = this.isMobile 
-            ? SCENE_CONFIG.LAYOUT.MOBILE_PROMPT_OFFSET_BELOW_STATS 
-            : SCENE_CONFIG.LAYOUT.PROMPT_OFFSET_BELOW_STATS;
-        const promptY = statsBottomEdge + promptOffset;
-        const promptBoxHeight = 80;
-        const promptBottomEdge = promptY + promptBoxHeight;
-        
-        // Input box is 20px below prompt box
-        const inputBoxY = promptBottomEdge + 20;
-        const inputBoxHeight = 240;
-        const inputBoxBottomEdge = inputBoxY + inputBoxHeight;
-        
-
-        const buttonPadding = 70; // Standard padding used for buttons
-        
-        // Set X position with the same padding as buttons have from right side
-        const scoreX = this.cameras.main.centerX - this.uiBoxWidth / 2 + buttonPadding;
-        const scoreY = inputBoxBottomEdge + DESIGN.UI.BUTTON.BELOW_TEXTBOX_GAP;
-
-        // Set depth and position
-        this.failsCounter.setPosition(scoreX, scoreY).setDepth(50);
-        
-        // Add tooltip for the score bar (progress bar)
-        this.failsCounter.setInteractive(
-            new Phaser.Geom.Rectangle(0, 0, scoreWidth, scoreHeight),
-            Phaser.Geom.Rectangle.Contains
-        )
-        .on('pointerover', () => {
-            this.showTooltip(
-                "Progress Bar:\nWrite original words to fill the bar.\nUsing AI words reduces progress.",
-                scoreX + scoreWidth / 2,
-                scoreY - 10
-            );
-        })
-        .on('pointerout', () => {
-            this.hideTooltips();
-        });
-        
-        // Get text style from textStyles.js
-        const deviceType = detectDeviceType();
-        const uiScale = this.scalingManager?.uiScale || 1;
-        const textStyle = getTextStyle('prompt', deviceType, this.mode || 'basic', uiScale);
-        
-        this.failsText = this.add.text(
-            scoreX + scoreWidth / 2,
-            scoreY + scoreHeight / 2,
-            ' ',
-            {
-                ...textStyle,
-                fill: '#ffffff',
-                align: 'center'
-            }
-        ).setOrigin(0.5).setDepth(51);
-
-
-    }
-
     showTooltip(text, x, y) {
         // Hide any existing tooltips
         this.hideTooltips();
@@ -3706,171 +3280,6 @@ this.aiCountText = this.add.text(
         this.updateStreakCounter(success);
     }
     
-    /**
-     * Create particle burst for successful word entry
-     * REMOVED: Performance optimization
-     */
-    createWordSuccessParticles() {
-        // Method removed for performance optimization
-        return;
-    }
-
-    /**
-     * Create a floating effect for a successfully typed word
-     * REMOVED: Performance optimization
-     */
-    createRisingWordEffect(word) {
-        // Calculate cursor position based on current text
-        let cursorX, cursorY;
-        
-        if (this.inputText && this.inputText.x && this.inputText.y) {
-            // Get the input text style properties
-            const fontSize = parseInt(this.inputText.style.fontSize);
-            const lineHeight = fontSize * 1.2;
-            const padding = this.isMobile ? 20 : 28; // Match the padding from createInputSection
-            
-            // Calculate how many lines the text spans
-            const textWidth = this.inputBoxWidth - padding * 2; // Available width for text
-            
-            // Create a temporary text object with word wrap to measure properly
-            const tempText = this.add.text(0, 0, this.userInput, {
-                fontFamily: this.inputText.style.fontFamily,
-                fontSize: this.inputText.style.fontSize,
-                fontStyle: this.inputText.style.fontStyle || 'normal',
-                wordWrap: { width: textWidth }
-            });
-            
-            // Get the number of lines
-            const lines = tempText.getWrappedText(this.userInput);
-            const currentLineIndex = lines.length - 1; // We're at the end of the text
-            
-            // Get the text on the current (last) line
-            const currentLineText = lines[currentLineIndex] || '';
-            
-            // Measure just the current line's width
-            tempText.setText(currentLineText);
-            const currentLineWidth = tempText.width;
-            
-            // Calculate cursor X position (at the end of the current line)
-            cursorX = this.inputText.x + currentLineWidth;
-            
-            // Calculate cursor Y position (accounting for line number)
-            // Start from the top of the first line and add line height for each line
-            cursorY = this.inputText.y + (currentLineIndex * lineHeight) + lineHeight / 2;
-            
-            // Clean up temporary text
-            tempText.destroy();
-            
-            // Clamp cursor position to stay within input box bounds
-            const inputBoxRight = this.inputBoxX + this.inputBoxWidth - padding;
-            cursorX = Math.min(cursorX, inputBoxRight);
-            
-            // Also clamp Y position to stay within input box
-            const inputBoxBottom = this.inputBoxY + this.inputBoxHeight - padding;
-            cursorY = Math.min(cursorY, inputBoxBottom - lineHeight / 2);
-        } else {
-            // Fallback to center if inputText is not available
-            cursorX = this.cameras.main.centerX;
-            cursorY = this.inputBoxY + this.inputBoxHeight / 2;
-        }
-        
-        // Calculate a dynamic color based on streak
-        let colors;
-        if (this.wordStreak >= 20) {
-            // Mostly green with hint of white for high streaks
-            colors = [0x00ff00, 0x22ff22, 0x44ff44, 0xeeffee];
-        } else if (this.wordStreak >= 15) {
-            // More white, transitioning to green
-            colors = [0xffffff, 0xeeffff, 0xddffdd, 0xaaffaa];
-        } else if (this.wordStreak >= 10) {
-            // Mostly white with hints of teal and green
-            colors = [0xffffff, 0xf0ffff, 0xe0ffff, 0xd0ffd0];
-        } else if (this.wordStreak >= 5) {
-            // White with more teal
-            colors = [0xeeffff, 0xccffff, 0xaaffff, 0xffffff];
-        } else {
-            // Mostly teal with a bit of white for low/no streak
-            colors = [0x20e3e3, 0x40e3e3, 0x60e3e3, 0xf0ffff];
-        }
-        
-        // Create more particles but much smaller
-        const particleCount = 20 + Math.min(this.wordStreak * 2, 45);
-        for (let i = 0; i < particleCount; i++) {
-            const size = Phaser.Math.Between(2, 6); // Double the size (2-6 pixels)
-            const color = colors[Phaser.Math.Between(0, colors.length - 1)];
-            const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-            const speed = Phaser.Math.FloatBetween(200, 400); // Double the speed for larger explosion area
-            
-            const particle = this.add.circle(
-                cursorX,
-                cursorY,
-                size,
-                color,
-                0.9 // Slightly transparent
-            ).setDepth(500);
-            
-            // Calculate velocity
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            
-            // Animate the particle
-            this.tweens.add({
-                targets: particle,
-                x: particle.x + vx,
-                y: particle.y + vy,
-                alpha: { from: 0.9, to: 0 },
-                scale: { from: 1, to: 0.5 }, // Scale down for subtle effect
-                duration: Phaser.Math.Between(600, 1500),
-                ease: 'Cubic.Out',
-                onComplete: () => particle.destroy()
-            });
-        }
-        
-        // Add a subtle flash effect at the cursor position
-        const flash = this.add.circle(
-            cursorX,
-            cursorY,
-            30, // Double the flash size
-            colors[0],
-            0.4
-        ).setDepth(499);
-        
-        // Animate the flash
-        this.tweens.add({
-            targets: flash,
-            scale: { from: 0.5, to: 4 }, // Double the scale animation range
-            alpha: { from: 0.4, to: 0 },
-            duration: 300,
-            ease: 'Expo.Out',
-            onComplete: () => flash.destroy()
-        });
-    }
-
-    // Visual effects for progress bar: scale pop, color flash, shake
-    animateProgressBarChange(type) {
-        if (!this.failsCounter) return;
-        const bar = this.failsCounter;
-        const scene = this;
-
-        // Store original position for shake reset
-        if (bar.originalX === undefined) {
-            bar.originalX = bar.x;
-        }
-
-        // Shake
-        scene.tweens.add({
-            targets: bar,
-            x: bar.originalX + (type === "increment" ? 2 : -2),
-            yoyo: true,
-            repeat: 3,
-            duration: 40,
-            onComplete: () => {
-                bar.x = bar.originalX;
-            }
-        });
- 
-    }
-
     // Get appropriate color based on streak count
     getStreakColor(streak) {
         if (streak >= 10) return 0xffd700; // Gold
@@ -4203,218 +3612,6 @@ this.aiCountText = this.add.text(
         }
     }
     
-    // Particle burst for progress bar
-    emitProgressBarParticles(type) {
-        if (!this.failsCounter) return;
-        const bar = this.failsCounter;
-        const scene = this;
-
-        // Get bar position (center of progress bar)
-        const scoreWidth = scene.DESIGN?.UI?.BUTTON?.WIDTH * 2 + scene.DESIGN?.UI?.BUTTON?.SPACING || 180;
-        const scoreHeight = scene.DESIGN?.UI?.BUTTON?.HEIGHT || 40;
-        const barX = bar.x + scoreWidth / 2;
-        const barY = bar.y + scoreHeight / 2;
-
-        // Particle color
-        const color = type === "increment" ? 0xffff00 : 0xff0000;
-
-        // Only use graphics-based burst (draw circles and animate them)
-        for (let i = 0; i < 16; i++) {
-            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(0, 360));
-            const distance = Phaser.Math.Between(30, 80);
-            const size = Phaser.Math.Between(6, 14);
-            const startX = barX;
-            const startY = barY;
-            const endX = startX + Math.cos(angle) * distance;
-            const endY = startY + Math.sin(angle) * distance;
-            const circle = scene.add.circle(startX, startY, size, color, 0.8).setDepth(199);
-            scene.tweens.add({
-                targets: circle,
-                x: endX,
-                y: endY,
-                alpha: 0,
-                scale: { from: 1, to: 0 },
-                duration: 500,
-                ease: 'Quad.Out',
-                onComplete: () => circle.destroy()
-            });
-        }
-    }
-
-    // Custom celebration effect without using particle emitters
-    celebrateSuccess() {
-        // Get positions based on the progress bar
-
-        const scoreWidth = DESIGN.UI.BUTTON.WIDTH * 2 + DESIGN.UI.BUTTON.SPACING;
-        const scoreHeight = DESIGN.UI.BUTTON.HEIGHT;
-        const inputBoxY = this.cameras.main.centerY - 240 / 2;
-        const inputBoxHeight = 240;
-        const padding = 20;
-        const scoreX = this.cameras.main.centerX - this.uiBoxWidth / 2 + 70;
-        const scoreY = inputBoxY + inputBoxHeight + padding;
-        
-        // Create celebration text
-        const deviceType = detectDeviceType();
-        const uiScale = this.scalingManager?.uiScale || 1;
-        const textStyle = getTextStyle('transitionText', deviceType, this.mode || 'basic', uiScale);
-        
-        const text = this.add.text(
-            scoreX + scoreWidth/2,
-            scoreY,
-            'Reluctant approval granted.',
-            {
-                ...textStyle,
-                fill: '#7cfc00', // Bright green
-                stroke: '#ffffff',
-                strokeThickness: 2
-            }
-        ).setOrigin(0.5).setDepth(200);
-        
-        // Create multiple circles that expand outward in place of particles
-        for (let i = 0; i < 20; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * 60 + 20;
-            const size = Math.random() * 8 + 4;
-            const startX = scoreX + scoreWidth/2;
-            const startY = scoreY + scoreHeight/2;
-            
-            const circle = this.add.circle(
-                startX,
-                startY,
-                size,
-                0x7cfc00, // Green
-                0.8
-            ).setDepth(199);
-            
-            this.tweens.add({
-                targets: circle,
-                x: startX + Math.cos(angle) * distance,
-                y: startY + Math.sin(angle) * distance,
-                alpha: 0,
-                scale: { from: 1, to: 0 },
-                duration: 1000,
-                ease: 'Quad.Out',
-                onComplete: () => circle.destroy()
-            });
-        }
-        
-        // Animate text
-        this.tweens.add({
-            targets: text,
-            y: text.y - 80,
-            scale: { from: 1, to: 1.5 },
-            alpha: { from: 1, to: 0 },
-            duration: 1200,
-            ease: 'Cubic.Out',
-            onComplete: () => text.destroy()
-        });
-        
-        // Screen flash with green
-        const flash = this.add.rectangle(
-            0, 0,
-            this.sys.game.canvas.width,
-            this.cameras.main.height,
-            0x7cfc00, // Green
-            0.2
-        ).setOrigin(0).setDepth(100);
-
-        this.tweens.add({
-            targets: flash,
-            alpha: 0,
-            duration: 500,
-            ease: 'Cubic.Out',
-            onComplete: () => flash.destroy()
-        });
-    }
-
-    // Custom celebration effect without using particle emitters for "Needs Work" state
-    celebrateNeedsWork() {
-        // Get positions based on the progress bar
-        const scoreWidth = DESIGN.UI.BUTTON.WIDTH * 2 + DESIGN.UI.BUTTON.SPACING;
-        const scoreHeight = DESIGN.UI.BUTTON.HEIGHT;
-        const inputBoxY = this.cameras.main.centerY - 240 / 2;
-        const inputBoxHeight = 240;
-        const padding = 20;
-        const scoreX = this.cameras.main.centerX - this.uiBoxWidth / 2 + 70;
-        const scoreY = inputBoxY + inputBoxHeight + padding;
-        
-        // Create celebration text
-        const deviceType = detectDeviceType();
-        const uiScale = this.scalingManager?.uiScale || 1;
-        const textStyle = getTextStyle('transitionText', deviceType, this.mode || 'basic', uiScale);
-        
-        const text = this.add.text(
-            scoreX + scoreWidth/2,
-            scoreY,
-            'Utterly disappointing.',
-            {
-                ...textStyle,
-                fill: DESIGN.COLORS.AUTOCOMPLETE, // Red color
-                stroke: '#ffffff',
-                strokeThickness: 2
-            }
-        ).setOrigin(0.5).setDepth(200);
-        
-        // Create multiple circles that expand outward in place of particles
-        for (let i = 0; i < 20; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * 60 + 20;
-            const size = Math.random() * 8 + 4;
-            const startX = scoreX + scoreWidth/2;
-            const startY = scoreY + scoreHeight/2;
-            
-            const circle = this.add.circle(
-                startX,
-                startY,
-                size,
-                DESIGN.UI.PROGRESS_BAR.COLORS.WARNING, // orange color
-                0.8
-            ).setDepth(199);
-            
-            this.tweens.add({
-                targets: circle,
-                x: startX + Math.cos(angle) * distance,
-                y: startY + Math.sin(angle) * distance,
-                alpha: 0,
-                scale: { from: 1, to: 0 },
-                duration: 1000,
-                ease: 'Quad.Out',
-                onComplete: () => circle.destroy()
-            });
-        }
-        
-        // Animate text
-        this.tweens.add({
-            targets: text,
-            y: text.y - 80,
-            scale: { from: 1, to: 1.5 },
-            alpha: { from: 1, to: 0 },
-            duration: 1200,
-            ease: 'Cubic.Out',
-            onComplete: () => text.destroy()
-        });
-        
-        // Screen flash with red
-        const flash = this.add.rectangle(
-            0, 0,
-            this.sys.game.canvas.width,
-            this.cameras.main.height,
-            DESIGN.UI.PROGRESS_BAR.COLORS.DANGER, // Red color
-            0.2
-        ).setOrigin(0).setDepth(100);
-
-        this.tweens.add({
-            targets: flash,
-            alpha: 0,
-            duration: 500,
-            ease: 'Cubic.Out',
-            onComplete: () => flash.destroy()
-        });
-    }
-
-
-
-
     preload() {
         // Ensure mobile background images are loaded
         // This is a backup in case they weren't loaded in Preloader
@@ -4491,12 +3688,6 @@ this.aiCountText = this.add.text(
         this.promptText = null;
         this.failsCounter = null;
         this.failsText = null;
-        
-        // Clear any active timeouts
-        if (this.activeTimeout) {
-            clearTimeout(this.activeTimeout);
-            this.activeTimeout = null;
-        }
         
         // Clean up any existing hidden input element
         if (this._hiddenInput) {
