@@ -17,8 +17,8 @@ ALLOWED_ORIGINS = "https://unslop.app,http://localhost:5173"
 #   wrangler kv namespace create RATE_LIMIT
 [[kv_namespaces]]
 binding = "TASK_CACHE"
-id = "local-task-cache"
+id = "ba96c388c36c469db6d99deb00af3108"
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "local-rate-limit"
+id = "79d3e541df584ee88ff80057d5fae4ff"
