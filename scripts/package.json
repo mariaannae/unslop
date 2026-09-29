@@ -1,0 +1,22 @@
+{
+  "name": "@unslop/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "corpus": "tsx buildHumanCorpus.ts",
+    "harness": "tsx evalHarness.ts",
+    "generate": "tsx generateBank.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@unslop/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

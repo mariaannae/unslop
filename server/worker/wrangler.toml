@@ -1,0 +1,24 @@
+name = "unslop-worker"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Requests per client IP per minute for /api/task.
+RATE_LIMIT_PER_MINUTE = "30"
+# How long a successful task result stays in KV (30 days).
+CACHE_TTL_SECONDS = "2592000"
+# Browser origins allowed to call the API (spec Appendix B.8).
+ALLOWED_ORIGINS = "https://unslop.app,http://localhost:5173"
+
+# `wrangler dev` runs KV locally and accepts any id. Before `wrangler deploy`,
+# create real namespaces and paste their ids here:
+#   wrangler kv namespace create TASK_CACHE
+#   wrangler kv namespace create RATE_LIMIT
+[[kv_namespaces]]
+binding = "TASK_CACHE"
+id = "local-task-cache"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "local-rate-limit"

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.tsbuildinfo
+.DS_Store
+
+# script artefacts: raw downloads and cached model results
+scripts/.cache/
