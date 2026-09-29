@@ -27,17 +27,30 @@ export class TaskClientError extends Error {
 }
 
 export type TaskClientOptions = {
-  /** Base URL of the API, without a trailing slash. */
+  /** Origin of the Worker (for example "https://unslop-worker.example.workers.dev"). Empty means same origin. */
   baseUrl?: string;
   fetch?: typeof fetch;
 };
 
-/** Build-time override for split hosting (spec B.8); the default hits the Vite proxy. */
-export const DEFAULT_API_BASE_URL: string =
-  (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") || "/api";
+/**
+ * Turns whatever was configured into a bare origin: trailing slashes and a
+ * trailing "/api" are stripped, so both "https://host" and "https://host/api/"
+ * end up posting to "https://host/api/task".
+ */
+export function normalizeApiOrigin(value: string | undefined): string {
+  return (value ?? "")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/, "");
+}
+
+/** Build-time override for split hosting (spec B.8). Empty means same origin, which the Vite proxy serves in dev. */
+export const DEFAULT_API_ORIGIN: string = normalizeApiOrigin(
+  import.meta.env?.VITE_API_BASE_URL as string | undefined,
+);
 
 export function createTaskClient(options: TaskClientOptions = {}): TaskClient {
-  const baseUrl = options.baseUrl ?? DEFAULT_API_BASE_URL;
+  const origin = normalizeApiOrigin(options.baseUrl ?? DEFAULT_API_ORIGIN);
   const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
 
   return {
@@ -45,7 +58,7 @@ export function createTaskClient(options: TaskClientOptions = {}): TaskClient {
       const body: TaskRequest = { taskId, payload };
       let response: Response;
       try {
-        response = await fetchFn(`${baseUrl}/task`, {
+        response = await fetchFn(`${origin}/api/task`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),

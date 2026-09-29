@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTaskClient, TaskClientError } from "./taskClient";
+import { createTaskClient, normalizeApiOrigin, TaskClientError } from "./taskClient";
 
 function fetchReturning(status: number, body: unknown) {
   return vi.fn(
@@ -9,7 +9,7 @@ function fetchReturning(status: number, body: unknown) {
 }
 
 describe("task client", () => {
-  it("posts {taskId, payload} to <base>/task and returns the result", async () => {
+  it("posts {taskId, payload} to <origin>/api/task and returns the result", async () => {
     const fetch = fetchReturning(200, {
       ok: true,
       taskId: "score-v1",
@@ -17,7 +17,7 @@ describe("task client", () => {
       result: { score: 3 },
       cached: true,
     });
-    const client = createTaskClient({ baseUrl: "https://api.test/api", fetch });
+    const client = createTaskClient({ baseUrl: "https://api.test", fetch });
 
     const out = await client.run("score-v1", { original: "a", current: "b" });
 
@@ -70,7 +70,15 @@ describe("task client", () => {
     ).rejects.toMatchObject({ code: "bad_response" });
   });
 
-  it("defaults to /api when no base URL is configured", async () => {
+  it("accepts an origin with a trailing slash or a trailing /api", () => {
+    expect(normalizeApiOrigin("https://w.example/")).toBe("https://w.example");
+    expect(normalizeApiOrigin("https://w.example/api")).toBe("https://w.example");
+    expect(normalizeApiOrigin("https://w.example/api/")).toBe("https://w.example");
+    expect(normalizeApiOrigin(" ")).toBe("");
+    expect(normalizeApiOrigin(undefined)).toBe("");
+  });
+
+  it("defaults to the same origin when no base URL is configured", async () => {
     const fetch = fetchReturning(200, {
       ok: true,
       taskId: "t",

@@ -1568,3 +1568,7 @@ The Worker parses the model output before caching and returns the typed result. 
 - Player-facing provider errors are generic ("The judge is unavailable right now (HTTP n). Try again in a moment.") with full detail only in the Worker log, so raw provider JSON never reaches the UI.
 - Deployment (`.github/workflows/deploy.yml`): every push to `main` runs lint, typecheck, tests, and the web build, then deploys `apps/web/dist` to GitHub Pages and the Worker to Cloudflare with `wrangler deploy`. Pull requests run the verify job only. The default branch was renamed from `master` to `main`.
 - Required GitHub settings: Pages source set to "GitHub Actions"; repository variable `VITE_API_BASE_URL` (the Worker URL plus `/api`); secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Required Cloudflare setup: real KV namespace ids in `wrangler.toml` (the checked-in ids are local placeholders) and `wrangler secret put ANTHROPIC_API_KEY`. The CNAME file in `apps/web/public` pins the custom domain `unslop.app`; DNS for it must point at GitHub Pages.
+
+## B.12 API base URL is an origin (2026-09-29)
+
+The first production deploy failed because `VITE_API_BASE_URL` was set to the Worker origin while the client expected origin plus `/api`. The client now treats the variable as an origin only and always posts to `<origin>/api/task`, stripping a trailing slash or a trailing `/api` if present. Empty means same origin, which the Vite proxy serves in development. This supersedes the base-URL wording in B.8 and B.9.

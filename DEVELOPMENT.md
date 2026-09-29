@@ -50,6 +50,6 @@ Bump a task's `version` in `packages/shared/src/tasks` after changing its prompt
 
 `.github/workflows/deploy.yml` runs on every push to `main`: verify (lint, typecheck, test, build), then deploy the app to GitHub Pages at unslop.app and the Worker to Cloudflare. One-time setup:
 
-1. GitHub: Settings → Pages → Source "GitHub Actions". Add repository variable `VITE_API_BASE_URL` (Worker URL + `/api`) and secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+1. GitHub: Settings → Pages → Source "GitHub Actions". Add repository variable `VITE_API_BASE_URL` (the Worker origin, no path; the client appends `/api/task`) and secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 2. Cloudflare: `wrangler kv namespace create TASK_CACHE` and `... RATE_LIMIT`, paste the ids into `server/worker/wrangler.toml`, then `wrangler secret put ANTHROPIC_API_KEY`. After the first deploy, add the Worker's origin to `ALLOWED_ORIGINS` only if it differs from the defaults.
 3. DNS: point `unslop.app` at GitHub Pages and enable HTTPS in the Pages settings.

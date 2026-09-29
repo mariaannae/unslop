@@ -4,6 +4,8 @@ dist/
 .dev.vars
 *.tsbuildinfo
 .DS_Store
+*.md
+
 
 # script artefacts: raw downloads and cached model results
 scripts/.cache/
