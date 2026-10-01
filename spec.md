@@ -1308,7 +1308,7 @@ The `llm-basic` scorer maps the parsed result to `{ score, tells, raw: parsed }`
 
 ## A.3 `generate-v1` — passage generation task (scripts only)
 
-Model: a Sonnet-class model. Used only by `scripts/generateBank.ts`; never registered as a callable task in the Worker.
+Model: `generationModel` in `web/src/config.ts`, one of `GENERATE_V1_MODELS` in `scripts/generateV1.ts` (default Claude Haiku 4.5; see B.16). Every model gets the same prompt. Used only by `scripts/generateBank.ts`; never registered as a callable task in the Worker.
 
 System prompt (draft):
 
@@ -1342,7 +1342,7 @@ Bank entry format produced by the script:
   "topic": "sourdough starter",
   "register": "recipe intro",
   "text": "...",
-  "generatedWith": { "task": "generate-v1", "scoredWith": "score-v1@1", "score": 9 }
+  "generatedWith": { "task": "generate-v1@3", "model": "claude-haiku-4-5", "scoredWith": "score-v1@1", "score": 9 }
 }
 ```
 
@@ -1484,3 +1484,20 @@ The structure prescribed by §5 and §8 had grown to 95 files in 4 packages, wit
 ## B.15 generate-v1 lives in scripts (2026-09-30)
 
 `generateV1.ts` and its test moved from `shared/` to `scripts/`, because `scripts/generateBank.ts` is its only user; every file left in `shared/` is used by at least two of `web/`, `worker/` and `scripts/`. It stays a separate file rather than being merged into `generateBank.ts`, because that script runs on import and its tests could not load it. Since nothing in `worker/` or `shared/` imports from `scripts/`, the Worker can no longer serve `generate-v1` even by mistake; the test that checks `callableTasks` stays as a second guard. The task's id and version are unchanged, so cached generations stay valid. `countWords`, which existed in both `generateV1.ts` and `buildHumanCorpus.ts`, is now one function in `scripts/common.ts`; the web app keeps its own copy for the length-ratio guardrail.
+
+## B.16 Choosing the generation model (2026-09-30)
+
+`web/src/config.ts` exports `generationModel`, the model `pnpm generate` writes passages with, next to `gameConfig` but outside it, because the game engine never reads it. `scripts/generateBank.ts` imports it from there. That import runs the game config's modules in Node, which works because none of them touches the browser on load (`import.meta.env` is read with `?.`); `scripts/tsconfig.json` adds the `vite/client` types so the scripts' typecheck accepts it. `web/src/config.ts` imports the `GenerationModel` type from `scripts/generateV1.ts`, so an unknown model is a type error; a type-only import adds nothing to the browser bundle. The options and their request settings are in `GENERATE_V1_MODELS` in `scripts/generateV1.ts`, and `createGenerateV1Task(model)` replaces the fixed `generateV1Task`. The prompt is the same for every model; only the model, and the request settings it requires, change:
+
+| Model | Temperature | max_tokens | Why it is on the list |
+| --- | --- | --- | --- |
+| `claude-haiku-4-5` (default) | 0 | 512 | Smallest and fastest; the model the current bank was made with. |
+| `claude-sonnet-4-6` | 0 | 512 | Mid-size, previous generation. |
+| `claude-opus-4-6` | 0 | 512 | Largest of the previous generation; the last tier that accepts temperature 0. |
+| `claude-sonnet-5-5` | default | 16000 | Current Sonnet. Rejects a non-default temperature and thinks by default. |
+| `claude-opus-5-5` | default | 16000 | Current Opus. Rejects temperature, always thinks, default effort `medium`. |
+
+- Thinking and effort are left at each model's default; the higher `max_tokens` on the Claude 5.5 models only makes room for thinking tokens, which count against it.
+- No refusal fallback is configured: a fallback would answer with a different model, which defeats comparing models. A refusal fails that one attempt, which the generator already rejects and replaces.
+- The cache key (`task:<id>@<version>:<sha256>`) does not name the model, and changing that would invalidate every cached `score-v1` result. So generations are cached per model under `scripts/.cache/generations/<model>/`, while scoring keeps `scripts/.cache/results/`. The 60 cached Haiku generations for `generate-v1@3` were moved there, and the task version stays 3.
+- Bank entries record the model in `generatedWith.model`. Entries written before this change have no `model` field; all 60 in the current bank were made with `claude-haiku-4-5` (`generate-v1@3`).

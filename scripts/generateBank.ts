@@ -2,7 +2,8 @@
  * Bank generator (SPEC §19 Milestone 3b, Appendix A.3). Generates candidate
  * passages with `generate-v1`, scores each with the active scoring task, and
  * keeps those at or above --min-score that the judge also marks fluent and
- * meaning-preserving. Writes data/passages.json with provenance.
+ * meaning-preserving. Writes data/passages.json with provenance. The generation
+ * model is set in web/src/config.ts.
  *
  *   pnpm generate [--count 60] [--min-score 8] [--out data/passages.json] [--append] [--concurrency 3]
  */
@@ -19,7 +20,8 @@ import {
   mapWithConcurrency,
   readArgs,
 } from "./common";
-import { GENERATE_V1_REGISTERS, generateV1Task } from "./generateV1";
+import { generationModel } from "../web/src/config";
+import { createGenerateV1Task, GENERATE_V1_REGISTERS } from "./generateV1";
 
 const TOPICS = [
   "sourdough starter",
@@ -103,12 +105,19 @@ type BankEntry = {
   topic: string;
   register: string;
   text: string;
-  generatedWith: { task: string; scoredWith: string; score: number };
+  generatedWith: { task: string; model: string; scoredWith: string; score: number };
 };
 
-const deps: RunTaskDeps = {
-  provider: createScriptProvider(),
+const generateV1Task = createGenerateV1Task(generationModel);
+const provider = createScriptProvider();
+const scoreDeps: RunTaskDeps = {
+  provider,
   cache: createDiskCache(path.join(cacheDir, "results")),
+};
+// generate-v1's cache key doesn't name the model, so each model gets its own cache.
+const generateDeps: RunTaskDeps = {
+  provider,
+  cache: createDiskCache(path.join(cacheDir, "generations", generationModel)),
 };
 
 const existing: BankEntry[] = args.append
@@ -137,14 +146,15 @@ type Attempt = {
 async function attempt(i: number): Promise<Attempt> {
   const { topic, register } = combo(i);
   try {
-    const gen = (await runTask(generateV1Task, { topic, register }, deps)).result;
+    const gen = (await runTask(generateV1Task, { topic, register }, generateDeps)).result;
     if (gen.wordCount < 80 || gen.wordCount > 140) {
       return { topic, register, text: gen.text, keep: false, why: `length ${gen.wordCount} words` };
     }
     if (usedTexts.has(gen.text))
       return { topic, register, text: gen.text, keep: false, why: "duplicate" };
-    const scored = (await runTask(scoreV1Task, { original: gen.text, current: gen.text }, deps))
-      .result;
+    const scored = (
+      await runTask(scoreV1Task, { original: gen.text, current: gen.text }, scoreDeps)
+    ).result;
     if (scored.score < minScore) {
       return {
         topic,
@@ -176,6 +186,7 @@ async function attempt(i: number): Promise<Attempt> {
   }
 }
 
+console.error(`generating with ${generationModel}`);
 const kept: BankEntry[] = [...existing];
 let attempts = 0;
 const rejected: Attempt[] = [];
@@ -194,6 +205,7 @@ while (kept.length < count && attempts < maxAttempts) {
         text: r.text,
         generatedWith: {
           task: `${generateV1Task.id}@${generateV1Task.version}`,
+          model: generateV1Task.model,
           scoredWith: `${scoreV1Task.id}@${scoreV1Task.version}`,
           score: r.score!,
         },

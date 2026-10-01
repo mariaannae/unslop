@@ -6,10 +6,10 @@ One pnpm package, TypeScript everywhere, no build step for shared code. Tests si
 
 | Folder     | Role                                                                                                                                                                                                                                                                  |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `web/`     | Vite + React + Tailwind v4 game client. `src/config.ts` picks the scorer and guardrails, `src/game.ts` is the engine (check sequence and game state), `src/scorers.ts` holds the scorers and the one function that calls the Worker, `src/App.tsx` only renders state.                                                         |
+| `web/`     | Vite + React + Tailwind v4 game client. `src/config.ts` picks the scorer and guardrails (and the model `pnpm generate` uses), `src/game.ts` is the engine (check sequence and game state), `src/scorers.ts` holds the scorers and the one function that calls the Worker, `src/App.tsx` only renders state.                                                         |
 | `worker/`  | Cloudflare Worker: `POST /api/task`, KV cache, per-IP rate limit, CORS. `index.ts` is the entry and router, `task.ts` the handler. The only code that holds an API key.                                                                                              |
 | `shared/`  | The `score-v1` task definition (`scoreV1.ts`: prompt, model, schema, parser), the `/api/task` wire types (`api.ts`), the task runner and cache key (`runTask.ts`), and the Anthropic adapter (`anthropic.ts`). The web app imports only types from here.        |
-| `scripts/` | Node scripts run with tsx: eval harness, bank generator (with its `generate-v1` task in `generateV1.ts`), human-corpus builder. They call the provider directly with `ANTHROPIC_API_KEY` from the environment and never go through the Worker. Helpers are in `common.ts`.                                            |
+| `scripts/` | Node scripts run with tsx: eval harness, bank generator (with its `generate-v1` task in `generateV1.ts`), human-corpus builder. They call the provider directly with `ANTHROPIC_API_KEY` from the environment and never go through the Worker. Helpers are in `common.ts`.                                           |
 | `data/`    | `passages.json` (the bank the game draws from) and `human_corpus.json` (the harness's human baseline).                                                                                                                                                              |
 
 Hosting: GitHub Pages at unslop.app for the app, Cloudflare for the Worker (spec Appendix B.8).
@@ -46,9 +46,11 @@ pnpm harness --bank data/passages.new.json    # separation report for it; add --
 mv data/passages.new.json data/passages.json  # when both targets PASS, the game uses it
 ```
 
+`generate` writes with `generationModel` from `web/src/config.ts` (Haiku 4.5 by default; the options are listed there). Every model gets the same prompt. Each bank entry records its model in `generatedWith.model`.
+
 `generate` writes its output file even when it keeps fewer passages than requested, so write to a new file and replace `data/passages.json` only after the harness passes. The harness makes no model calls for passages the generator already scored.
 
-Model results are cached under `scripts/.cache/results`. Bump a task's `version` in `shared/scoreV1.ts` or `scripts/generateV1.ts` after changing its prompt; that invalidates both the Worker's KV cache and the scripts' disk cache.
+Model results are cached under `scripts/.cache/results`, except generations, which are cached per model under `scripts/.cache/generations/<model>` so switching models never returns another model's passages. Bump a task's `version` in `shared/scoreV1.ts` or `scripts/generateV1.ts` after changing its prompt; that invalidates both the Worker's KV cache and the scripts' disk cache.
 
 ## Deploy
 

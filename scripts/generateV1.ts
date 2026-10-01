@@ -6,7 +6,28 @@ import { countWords } from "./common";
  *
  * Scripts only. It lives next to `generateBank.ts`, its only user, rather than
  * in `shared/`, so the Worker can never serve it (spec B.15).
+ *
+ * The model is picked in scripts/config.ts (spec B.16). Because the task's id and
+ * version don't name the model, generateBank.ts keeps a separate cache per model.
  */
+
+/**
+ * Models `generate-v1` can run on. Every model gets the same prompt. Models that
+ * accept a sampling temperature run at 0. The Claude 5.5 models reject one, so
+ * they run at their default; they also think before answering, and thinking
+ * tokens count against max_tokens, so they get more room.
+ */
+export const GENERATE_V1_MODELS = {
+  "claude-haiku-4-5": { temperature: 0, maxTokens: 512 },
+  "claude-sonnet-4-6": { temperature: 0, maxTokens: 512 },
+  "claude-opus-4-6": { temperature: 0, maxTokens: 512 },
+  "claude-sonnet-5-5": { maxTokens: 16000 },
+  "claude-opus-5-5": { maxTokens: 16000 },
+} as const satisfies Record<string, GenerationSettings>;
+
+type GenerationSettings = { temperature?: number; maxTokens: number };
+
+export type GenerationModel = keyof typeof GENERATE_V1_MODELS;
 
 export type GenerateV1Payload = {
   topic: string;
@@ -63,47 +84,52 @@ function requireShortText(input: Record<string, unknown>, field: string): string
   return value.trim();
 }
 
-export const generateV1Task: TaskDefinition<GenerateV1Payload, GenerateV1Result> = {
-  id: "generate-v1",
-  version: 3,
-  model: "claude-haiku-4-5",
+export function createGenerateV1Task(
+  model: GenerationModel,
+): TaskDefinition<GenerateV1Payload, GenerateV1Result> {
+  const settings: GenerationSettings = GENERATE_V1_MODELS[model];
+  return {
+    id: "generate-v1",
+    version: 3,
+    model,
 
-  validatePayload(input: unknown): GenerateV1Payload {
-    if (!input || typeof input !== "object" || Array.isArray(input)) {
-      throw new TaskError("invalid_payload", "payload must be an object");
-    }
-    const record = input as Record<string, unknown>;
-    return {
-      topic: requireShortText(record, "topic"),
-      register: requireShortText(record, "register"),
-    };
-  },
+    validatePayload(input: unknown): GenerateV1Payload {
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        throw new TaskError("invalid_payload", "payload must be an object");
+      }
+      const record = input as Record<string, unknown>;
+      return {
+        topic: requireShortText(record, "topic"),
+        register: requireShortText(record, "register"),
+      };
+    },
 
-  buildRequest(payload: GenerateV1Payload): ProviderRequest {
-    return {
-      model: this.model,
-      system: GENERATE_V1_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildGenerateV1UserMessage(payload) }],
-      maxTokens: 512,
-      temperature: 0,
-    };
-  },
+    buildRequest(payload: GenerateV1Payload): ProviderRequest {
+      return {
+        model,
+        system: GENERATE_V1_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildGenerateV1UserMessage(payload) }],
+        maxTokens: settings.maxTokens,
+        temperature: settings.temperature,
+      };
+    },
 
-  parse(raw: unknown): GenerateV1Result {
-    if (typeof raw !== "string") {
-      throw new TaskError("parse_error", "response is not text");
-    }
-    const text = raw
-      .trim()
-      .replace(/^```[a-z]*\s*/i, "")
-      .replace(/\s*```$/, "")
-      .replace(/^["“]|["”]$/g, "")
-      .replace(/\s*\n\s*/g, " ")
-      .trim();
-    if (text.length === 0) throw new TaskError("parse_error", "response is empty");
-    if (/^\s*[-*#]/m.test(raw)) {
-      throw new TaskError("parse_error", "response contains markdown structure");
-    }
-    return { text, wordCount: countWords(text) };
-  },
-};
+    parse(raw: unknown): GenerateV1Result {
+      if (typeof raw !== "string") {
+        throw new TaskError("parse_error", "response is not text");
+      }
+      const text = raw
+        .trim()
+        .replace(/^```[a-z]*\s*/i, "")
+        .replace(/\s*```$/, "")
+        .replace(/^["“]|["”]$/g, "")
+        .replace(/\s*\n\s*/g, " ")
+        .trim();
+      if (text.length === 0) throw new TaskError("parse_error", "response is empty");
+      if (/^\s*[-*#]/m.test(raw)) {
+        throw new TaskError("parse_error", "response contains markdown structure");
+      }
+      return { text, wordCount: countWords(text) };
+    },
+  };
+}
