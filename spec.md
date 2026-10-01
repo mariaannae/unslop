@@ -1539,3 +1539,19 @@ jevslop skips its stock-vocabulary and em-dash tells on texts under 150 words. E
 - On a short text, one hit is a high rate (one phrase in 120 words is 8.3 per 1,000 words, full strength), so a single stock word makes this tell fire. For the game that is acceptable: the word is shown as the tell's quote, and the player can remove it.
 - The win threshold is unchanged at 1.5, where 50% of bank passages still score as won before any edit (62% under version 1). Lowering it is a separate decision.
 
+## B.21 `score-jev` skips long-form tells on short texts (2026-10-01)
+
+Some jevslop tells look for essay structure or formatting that a one-paragraph passage doesn't have. On a short text they cannot fire, but they still count in the weighted mean at strength 0 and pull every score down. These four are now marked `longForm` in `shared/scoreJev.ts` and skipped (strength `null`, left out of the mean, and not asked of Jev) on texts under `LONG_TEXT_WORDS` = 200 words:
+
+- reasons-list structure (one item per paragraph)
+- fence-sitting balance (an essay that surveys sides and takes none)
+- bold labels and lead-ins
+- emoji bullets and headings
+
+From 200 words up, every tell applies, so the scorer still works as jevslop does on longer texts. `score-jev` is now version 3.
+
+- The cutoff is on words, not paragraphs, so a player cannot unlock these tells (and dilute the score) by adding paragraph breaks. The longest bank passage has 132 words and `length-ratio` allows 1.3 times the original, so game passages never reach 200.
+- Other tells that rarely fired on the bank (chatbot residue, scene-setting opener, rhetorical questions, vague attribution) were kept for short texts, because nothing about a short text prevents them.
+- The recap-conclusion question still refers to "the last paragraph". On one-paragraph passages, Jev answers it about the ending, and it is one of the strongest tells there, so it was kept.
+- On the Haiku bank and the human corpus, the mean bank score rose from 1.6 to 1.9, and separation (AUC) went from 0.89 to 0.90. At the unchanged 1.5 threshold, 33% of bank passages score as won before any edit (50% under version 2), and 92% of human texts score at or below 1.5 (97% before). jevslop's 225-word slop sample keeps every tell and still scores 5.4.
+

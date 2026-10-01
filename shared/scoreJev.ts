@@ -8,8 +8,9 @@ import { ProviderError, TaskError, type CallTask } from "./types";
  * all tell strengths is a 0–100 composite. The game score is that divided by 10.
  *
  * Questions, weights and thresholds are copied from jevslop's tells.py; the
- * weights are its hand-picked starting points, not calibrated. One change so far:
- * stock vocabulary and em dashes are counted at any length (spec B.20). Bump
+ * weights are its hand-picked starting points, not calibrated. Changes so far:
+ * stock vocabulary and em dashes are counted at any length (spec B.20), and the
+ * `longForm` tells are skipped on texts under LONG_TEXT_WORDS (spec B.21). Bump
  * `version` when any of them change.
  */
 
@@ -22,6 +23,19 @@ const YES = 0.5;
 /** Paragraphs shorter than this (in words) are not asked the paragraph tells. */
 const MIN_PARAGRAPH_WORDS = 12;
 
+/**
+ * Texts with fewer words than this skip the `longForm` tells, which look for
+ * essay structure or formatting that a one-paragraph passage doesn't have. A tell
+ * that cannot fire would still count at strength 0 and drag the score down.
+ * Game passages stay below this: the longest has 132 words and length-ratio
+ * allows 1.3 times that, so a player cannot cross it.
+ */
+const LONG_TEXT_WORDS = 200;
+
+function isLong(text: string): boolean {
+  return words(text).length >= LONG_TEXT_WORDS;
+}
+
 type NoulTell = {
   id: string;
   name: string;
@@ -29,6 +43,8 @@ type NoulTell = {
   instructions: string;
   true: string;
   false: string;
+  /** Only asked of texts with LONG_TEXT_WORDS or more. */
+  longForm?: boolean;
 };
 
 /** A Jev Score question. `levels` run from least to most slop-like. */
@@ -44,7 +60,16 @@ type ScoreTell = {
  * Measured in code. Strength is 0 at `lo` and 1 at `hi`, linear in between;
  * lo > hi means a low value is the tell.
  */
-type CodeTell = { id: string; name: string; weight: number; lo: number; hi: number; unit: string };
+type CodeTell = {
+  id: string;
+  name: string;
+  weight: number;
+  lo: number;
+  hi: number;
+  unit: string;
+  /** Only measured on texts with LONG_TEXT_WORDS or more. */
+  longForm?: boolean;
+};
 
 /** Asked of each paragraph; strength is the share of paragraphs that show the tell. */
 const PARAGRAPH_TELLS: NoulTell[] = [
@@ -189,6 +214,7 @@ const DOCUMENT_TELLS: NoulTell[] = [
     name: "Fence-sitting balance",
     // Low: encyclopedic writing is neutral by policy.
     weight: 0.5,
+    longForm: true,
     instructions:
       "Does `text` lay out several sides or pros and cons of a question and " +
       "then end without the author committing to a position of their own?",
@@ -199,6 +225,7 @@ const DOCUMENT_TELLS: NoulTell[] = [
     id: "reasons_list",
     name: "Reasons-list structure",
     weight: 1.5,
+    longForm: true,
     instructions:
       "Is `text` organised as a list of separate reasons, factors, benefits " +
       "or tips, where each paragraph presents one item and the paragraphs " +
@@ -257,8 +284,8 @@ const CODE_TELLS: CodeTell[] = [
   { id: "em_dash", name: "Em-dash habit", weight: 0.7, lo: 2.0, hi: 10.0, unit: "per 1k words" },
   { id: "low_burstiness", name: "Uniform sentence length", weight: 1.0, lo: 0.6, hi: 0.3, unit: "coefficient of variation" },
   { id: "uniform_paragraphs", name: "Uniform paragraph length", weight: 0.4, lo: 0.3, hi: 0.1, unit: "coefficient of variation" },
-  { id: "bold_labels", name: "Bold labels and lead-ins", weight: 1.0, lo: 0.0, hi: 3.0, unit: "paragraphs" },
-  { id: "emoji_bullets", name: "Emoji bullets/headings", weight: 1.0, lo: 0.0, hi: 2.0, unit: "lines" },
+  { id: "bold_labels", name: "Bold labels and lead-ins", weight: 1.0, lo: 0.0, hi: 3.0, unit: "paragraphs", longForm: true },
+  { id: "emoji_bullets", name: "Emoji bullets/headings", weight: 1.0, lo: 0.0, hi: 2.0, unit: "lines", longForm: true },
 ]; // prettier-ignore
 
 /**
@@ -374,13 +401,12 @@ export function measure(text: string): {
     emoji_bullets: [lines.filter((l) => EMOJI.test(l)).length, true],
   };
 
+  const long = isLong(text);
   const tells: Record<string, Measurement> = {};
   for (const tell of CODE_TELLS) {
     const [value, enough] = raw[tell.id]!;
-    tells[tell.id] = {
-      value,
-      strength: enough && value !== null ? ramp(value, tell.lo, tell.hi) : null,
-    };
+    const applies = enough && value !== null && (long || !tell.longForm);
+    tells[tell.id] = { value, strength: applies ? ramp(value, tell.lo, tell.hi) : null };
   }
   return { tells, stockHits };
 }
@@ -485,7 +511,7 @@ function answer(answers: JevAnswers | undefined, id: string): number {
 
 export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
   id: "score-jev",
-  version: 2,
+  version: 3,
   model: "jev-1.13.0",
 
   // Same {original, current} payload as score-v1; only `current` is scored.
@@ -500,8 +526,9 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
     const ask = (state: Record<string, string>, questions: Record<string, JevQuestion>) =>
       systemOne(typesafeApiKey, this.model, state, questions);
 
+    const long = isLong(payload.current);
     const docQuestions = Object.fromEntries([
-      ...DOCUMENT_TELLS.map((t) => [t.id, noul(t)]),
+      ...DOCUMENT_TELLS.filter((t) => long || !t.longForm).map((t) => [t.id, noul(t)]),
       ...SCORE_TELLS.map((t) => [t.id, score(t)]),
     ]);
     const paraQuestions = Object.fromEntries(PARAGRAPH_TELLS.map((t) => [t.id, noul(t)]));
@@ -522,11 +549,15 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
       throw new TaskError("parse_error", "Jev result is missing its paragraph answers");
     }
     const paras = jev.paragraphs;
+    const long = isLong(payload.current);
     const { tells: measured, stockHits } = measure(payload.current);
 
     const breakdown: ScoreJevResult["breakdown"] = [
       ...CODE_TELLS.map((t) => ({ id: t.id, name: t.name, weight: t.weight, ...measured[t.id]! })),
-      ...DOCUMENT_TELLS.map((t) => ({ ...pick(t), strength: answer(jev.doc, t.id) })),
+      ...DOCUMENT_TELLS.map((t) => ({
+        ...pick(t),
+        strength: long || !t.longForm ? answer(jev.doc, t.id) : null,
+      })),
       ...SCORE_TELLS.map((t) => ({
         ...pick(t),
         strength: answer(jev.doc, t.id) / (t.levels.length - 1),

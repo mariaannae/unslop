@@ -5,6 +5,9 @@ import { ProviderError, TaskError } from "./types";
 
 const P1 = "My starter smells like beer, and I still do not trust it to raise a loaf.";
 const P2 = "The second rise took nine hours because the kitchen sat at sixty degrees.";
+/** One paragraph of 208 words: over the 200-word line for the long-form tells. */
+const LONG = Array(13).fill(P1).join(" ");
+const LONG_FORM = ["fence_sitting", "reasons_list", "bold_labels", "emoji_bullets"];
 
 /**
  * Replaces fetch with a fake Jev that answers every noul with `noul(id, state)`
@@ -44,17 +47,15 @@ afterEach(() => {
 });
 
 describe("measure", () => {
-  it("skips the rhythm tells on short text but still counts vocabulary and em dashes", () => {
+  it("skips rhythm and long-form tells on short text but counts vocabulary and em dashes", () => {
     const { tells, stockHits } = measure(`${P1} It is crucial — truly.`);
     // 20 words: one stock phrase and one em dash are each 50 per 1,000 words.
     expect(stockHits).toEqual(["crucial"]);
     expect(tells.stock_vocab).toEqual({ value: 50, strength: 1 });
     expect(tells.em_dash).toEqual({ value: 50, strength: 1 });
-    for (const id of ["low_burstiness", "uniform_paragraphs"]) {
+    for (const id of ["low_burstiness", "uniform_paragraphs", "bold_labels", "emoji_bullets"]) {
       expect(tells[id]!.strength).toBeNull();
     }
-    expect(tells.bold_labels).toEqual({ value: 0, strength: 0 });
-    expect(tells.emoji_bullets).toEqual({ value: 0, strength: 0 });
   });
 
   it("counts stock vocabulary and em dashes per 1,000 words", () => {
@@ -71,8 +72,10 @@ describe("measure", () => {
       value: 0,
       strength: 1,
     });
-    expect(measure("- **Speed:** fast\n- **Cost:** low").tells.bold_labels!.value).toBe(2);
-    expect(measure("✅ Done\n🚀 Shipped").tells.emoji_bullets).toEqual({ value: 2, strength: 1 });
+    const bold = measure(`- **Speed:** fast\n- **Cost:** low\n\n${LONG}`).tells.bold_labels;
+    expect(bold).toEqual({ value: 2, strength: 2 / 3 });
+    const emoji = measure(`✅ Done\n🚀 Shipped\n\n${LONG}`).tells.emoji_bullets;
+    expect(emoji).toEqual({ value: 2, strength: 1 });
   });
 });
 
@@ -110,12 +113,28 @@ describe("score-jev", () => {
       () => 1,
       (id) => (id === "no_voice" ? 2 : 3),
     );
-    // Jev weights 7 + 2.6 + 8.8 at strength 1; stock vocabulary, em dash, bold and emoji
-    // (weight 4.2) at 0: 18.4 / 22.6.
+    // Short text, so no long-form tells. Jev weights 5 + 2.6 + 8.8 at strength 1; stock
+    // vocabulary and em dash (weight 2.2) at 0: 16.4 / 18.6.
     const result = await scoreText(P1);
-    expect(result.composite).toBe(81.4);
-    expect(result.score).toBe(8.1);
-    expect(result.tells).toHaveLength(16);
+    expect(result.composite).toBe(88.2);
+    expect(result.score).toBe(8.8);
+    expect(result.tells).toHaveLength(14);
+  });
+
+  it("asks and measures the long-form tells only from 200 words up", async () => {
+    const fetch = stubJev(() => 1);
+    const short = await scoreText(P1);
+    const long = await scoreText(LONG);
+
+    const asked = fetch.mock.calls.map(([, i]) => JSON.parse(i!.body as string).questions);
+    expect(asked[0]).not.toHaveProperty("reasons_list");
+    expect(asked[0]).not.toHaveProperty("fence_sitting");
+    expect(asked[2]).toHaveProperty("reasons_list");
+    expect(asked[2]).toHaveProperty("fence_sitting");
+    const strengths = (r: typeof short) =>
+      LONG_FORM.map((id) => r.breakdown.find((t) => t.id === id)!.strength);
+    expect(strengths(short)).toEqual([null, null, null, null]);
+    expect(strengths(long)).toEqual([1, 1, 0, 0]);
   });
 
   it("scores a paragraph tell as the share of paragraphs that show it", async () => {
