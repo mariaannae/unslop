@@ -23,7 +23,7 @@ export type ScoreV1Result = {
   score: number;
   tells: ScoreV1Tell[];
   meaning_preserved: boolean;
-  fluent: boolean;
+  grammatically_correct: boolean;
   /** Parser notes (for example a defaulted field). Empty on a clean response. */
   warnings: string[];
 };
@@ -33,14 +33,14 @@ export const SCORE_V1_MAX_TELLS = 8;
 
 export const SCORE_V1_SYSTEM_PROMPT = `You are the judge in a game. Players are given a passage that was written by an AI assistant and edit it until it reads like a human wrote it. Rate how strongly the CURRENT passage still reads as AI-assistant prose to a careful, experienced reader.
 
-Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is fluent, grammatical English. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark fluent=false or meaning_preserved=false instead of lowering the score.
+Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is grammatically correct. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark grammatically_correct=false or meaning_preserved=false instead of lowering the score.
 
 Respond with JSON only:
 {
   "score": <integer 0-10; 10 = obviously AI-assistant prose, 0 = unmistakably human>,
   "tells": [ { "label": "<short-kebab-label>", "quote": "<exact short quote from CURRENT passage>" } ],
   "meaning_preserved": <true|false>,
-  "fluent": <true|false>
+  "grammatically_correct": <true|false>
 }
 List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.`;
 
@@ -82,9 +82,9 @@ export const SCORE_V1_RESPONSE_SCHEMA: Record<string, unknown> = {
       },
     },
     meaning_preserved: { type: "boolean" },
-    fluent: { type: "boolean" },
+    grammatically_correct: { type: "boolean" },
   },
-  required: ["score", "tells", "meaning_preserved", "fluent"],
+  required: ["score", "tells", "meaning_preserved", "grammatically_correct"],
   additionalProperties: false,
 };
 
@@ -205,7 +205,7 @@ export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
       score: clampScore(json.score),
       tells: sanitizeTells(json.tells, payload.current),
       meaning_preserved: booleanOrDefault(json, "meaning_preserved", warnings),
-      fluent: booleanOrDefault(json, "fluent", warnings),
+      grammatically_correct: booleanOrDefault(json, "grammatically_correct", warnings),
       warnings,
     };
   },
