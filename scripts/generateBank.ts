@@ -165,7 +165,7 @@ async function attempt(i: number): Promise<Attempt> {
         why: `score ${scored.score} < ${minScore}`,
       };
     }
-    if (!scored.fluent || !scored.meaning_preserved) {
+    if (!scored.grammatically_correct || !scored.meaning_preserved) {
       return {
         topic,
         register,
