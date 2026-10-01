@@ -50,6 +50,8 @@ export const mock: Scorer = {
  * Score and tells are returned as game values; the full task result rides along
  * in `raw` for remote guardrails (see meaningFluency in guardrails.ts). Errors
  * propagate so the game can report them without spending a Check.
+ * 
+ * offline scorer scorers.mock is rules based
  */
 export const llmBasic: Scorer = {
   async score(ctx) {

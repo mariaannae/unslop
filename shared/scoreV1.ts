@@ -33,6 +33,19 @@ export const SCORE_V1_MAX_TELLS = 8;
 
 export const SCORE_V1_SYSTEM_PROMPT = `You are the judge in a game. Players are given a passage that was written by an AI assistant and edit it until it reads like a human wrote it. Rate how strongly the CURRENT passage still reads as AI-assistant prose to a careful, experienced reader.
 
+Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is fluent, grammatical English. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark fluent=false or meaning_preserved=false instead of lowering the score.
+
+Respond with JSON only:
+{
+  "score": <integer 0-10; 10 = obviously AI-assistant prose, 0 = unmistakably human>,
+  "tells": [ { "label": "<short-kebab-label>", "quote": "<exact short quote from CURRENT passage>" } ],
+  "meaning_preserved": <true|false>,
+  "fluent": <true|false>
+}
+List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.`;
+
+/*export const SCORE_V1_SYSTEM_PROMPT = `You are the judge in a game. Players are given a passage that was written by an AI assistant and edit it until it reads like a human wrote it. Rate how strongly the CURRENT passage still reads as AI-assistant prose to a careful, experienced reader.
+
 Signals of AI-assistant prose include: generic importance-framing openers; "it's not X, it's Y" constructions; lists of exactly three parallel items; frequent em dashes; overused vocabulary (delve, tapestry, testament, pivotal, foster, landscape, robust, navigate, underscore, crucial, seamless, multifaceted, leverage, realm, embark); vague attribution ("experts agree"); false ranges ("from X to Y" with no real spectrum); puffery about significance; uniform sentence rhythm; a closing sentence that restates the opening. Human prose tends to have specific detail, uneven rhythm, idiosyncratic word choice, and no summarizing closer.
 
 Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is fluent, grammatical English. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark fluent=false or meaning_preserved=false instead of lowering the score.
@@ -44,7 +57,9 @@ Respond with JSON only:
   "meaning_preserved": <true|false>,
   "fluent": <true|false>
 }
-List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.`;
+List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.`;*/
+
+
 
 /**
  * JSON Schema for the provider's structured-output mode. Numeric range and array
