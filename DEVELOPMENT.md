@@ -24,7 +24,7 @@ pnpm dev:web        # http://localhost:5173, proxies /api to the worker
 pnpm dev:worker     # http://localhost:8787, needs worker/.dev.vars
 ```
 
-The game scores through the Worker by default, so run both commands. To play with no server, set `scorer: scorers.mock` in `web/src/config.ts`. The `meaning-fluency` guardrail can stay: it passes when the scorer reports no judge verdict.
+The game scores through the Worker by default, so run both commands. To play with no server, set `scorer: scorers.mock` in `web/src/config.ts`. The `meaning` and `grammar` guardrails can stay: they pass when the scorer reports no judge verdict.
 
 ## Verify
 

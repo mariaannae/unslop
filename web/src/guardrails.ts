@@ -16,7 +16,8 @@ export function countWords(text: string): number {
 
 /**
  * Local: current word count / original word count must fall inside [min, max]
- * (spec §10.3). A cheap validity check, not a semantic one.
+ * (spec §10.3). A cheap validity check, not a semantic one. Blank text passes,
+ * because not-empty already reports it.
  */
 export function lengthRatio({ min, max }: { min: number; max: number }): Guardrail {
   if (!(min > 0) || !(max >= min)) {
@@ -28,7 +29,7 @@ export function lengthRatio({ min, max }: { min: number; max: number }): Guardra
     async check(ctx) {
       const originalWords = countWords(ctx.original);
       const currentWords = countWords(ctx.current);
-      if (originalWords === 0) return { pass: true };
+      if (originalWords === 0 || currentWords === 0) return { pass: true };
       const ratio = currentWords / originalWords;
       if (ratio < min) {
         return {
@@ -48,21 +49,25 @@ export function lengthRatio({ min, max }: { min: number; max: number }): Guardra
 }
 
 export const MEANING_CHANGED_REASON = "The judge thinks the meaning changed.";
-export const NOT_FLUENT_REASON = "The judge thinks this isn't fluent English.";
+export const NOT_GRAMMATICAL_REASON = "The judge thinks this isn't grammatically correct.";
 
 /**
- * Remote (spec §23): reads `meaning_preserved` and `fluent` from the scorer's
- * raw payload, so it costs no extra call. It only fails on an explicit `false`;
- * if the payload is missing either field, it passes and the judgement rests on
- * the score alone. That also makes it harmless with the mock scorer.
+ * Remote (spec §23): reads one of the judge's verdicts from the scorer's raw
+ * payload, so it costs no extra call. It only fails on an explicit `false`; if
+ * the payload is missing the field, it passes and the judgement rests on the
+ * score alone. That also makes it harmless with the mock scorer.
  */
-export const meaningFluency: Guardrail = {
-  id: "meaning-fluency",
-  local: false,
-  async check(_ctx, score) {
-    const raw = (score?.raw ?? {}) as { meaning_preserved?: unknown; fluent?: unknown };
-    if (raw.meaning_preserved === false) return { pass: false, reason: MEANING_CHANGED_REASON };
-    if (raw.fluent === false) return { pass: false, reason: NOT_FLUENT_REASON };
-    return { pass: true };
-  },
-};
+function judgeVerdict(id: string, field: string, reason: string): Guardrail {
+  return {
+    id,
+    local: false,
+    async check(_ctx, score) {
+      const raw = (score?.raw ?? {}) as Record<string, unknown>;
+      if (raw[field] === false) return { pass: false, reason };
+      return { pass: true };
+    },
+  };
+}
+
+export const meaning = judgeVerdict("meaning", "meaning_preserved", MEANING_CHANGED_REASON);
+export const grammar = judgeVerdict("grammar", "grammatically_correct", NOT_GRAMMATICAL_REASON);

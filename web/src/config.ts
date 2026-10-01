@@ -19,7 +19,8 @@ export const gameConfig: GameConfig = {
   guardrails: [
     guardrails.notEmpty,
     guardrails.lengthRatio({ min: 0.7, max: 1.3 }),
-    guardrails.meaningFluency,
+    guardrails.meaning,
+    guardrails.grammar,
   ],
 
   win: {

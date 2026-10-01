@@ -17,7 +17,7 @@ const valid = {
   score: 3,
   tells: [{ label: "generic-opener", quote: "My starter" }],
   meaning_preserved: true,
-  fluent: true,
+  grammatically_correct: true,
 };
 
 describe("score-v1 parse", () => {
@@ -131,33 +131,33 @@ describe("score-v1 parse", () => {
     });
   });
 
-  describe("meaning_preserved / fluent defaults", () => {
+  describe("meaning_preserved / grammatically_correct defaults", () => {
     it("defaults both to true with a warning when absent", () => {
       const result = scoreV1Task.parse({ score: 5 }, payload);
       expect(result.meaning_preserved).toBe(true);
-      expect(result.fluent).toBe(true);
+      expect(result.grammatically_correct).toBe(true);
       expect(result.warnings).toHaveLength(2);
       expect(result.warnings[0]).toMatch(/meaning_preserved/);
-      expect(result.warnings[1]).toMatch(/fluent/);
+      expect(result.warnings[1]).toMatch(/grammatically_correct/);
     });
 
     it("treats non-boolean values as absent", () => {
       const result = scoreV1Task.parse(
-        { score: 5, meaning_preserved: "false", fluent: 0 },
+        { score: 5, meaning_preserved: "false", grammatically_correct: 0 },
         payload,
       );
       expect(result.meaning_preserved).toBe(true);
-      expect(result.fluent).toBe(true);
+      expect(result.grammatically_correct).toBe(true);
       expect(result.warnings).toHaveLength(2);
     });
 
     it("preserves explicit false values without warnings", () => {
       const result = scoreV1Task.parse(
-        { score: 5, meaning_preserved: false, fluent: false },
+        { score: 5, meaning_preserved: false, grammatically_correct: false },
         payload,
       );
       expect(result.meaning_preserved).toBe(false);
-      expect(result.fluent).toBe(false);
+      expect(result.grammatically_correct).toBe(false);
       expect(result.warnings).toEqual([]);
     });
   });

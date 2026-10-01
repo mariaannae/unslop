@@ -10,7 +10,7 @@
 >
 > Future sophistication is deliberately described below so that the initial implementation leaves appropriate seams for it, but **future systems should not be implemented prematurely**.
 >
-> **Changes in v1.1:** removed the daily-passage concept entirely (passages are drawn at random from the library via a button on the game page); added an evaluation harness milestone; made meaning/fluency a v1-gameplay guardrail; specified how remote guardrails receive scorer output; added Appendix A with starting prompts and the bank-generation script.
+> **Changes in v1.1:** removed the daily-passage concept entirely (passages are drawn at random from the library via a button on the game page); added an evaluation harness milestone; made meaning/grammatical correctness a v1-gameplay guardrail; specified how remote guardrails receive scorer output; added Appendix A with starting prompts and the bank-generation script.
 
 ---
 
@@ -244,7 +244,7 @@ The repository is one pnpm package with four top-level folders (Appendix B.13). 
 │       ├── config.ts         the game settings: passage source, scorer, guardrails, win, budget
 │       ├── game.ts           domain types, runCheck, game store
 │       ├── scorers.ts        mock, llm-basic, and callTask (POST /api/task)
-│       ├── guardrails.ts     not-empty, length-ratio, meaning-fluency
+│       ├── guardrails.ts     not-empty, length-ratio, meaning, grammar
 │       ├── passages.ts       static bank
 │       ├── App.tsx           the whole UI: screen, editor, outcome panel, score meter
 │       └── main.tsx, index.css, *.test.ts
@@ -339,10 +339,10 @@ Examples:
 - non-empty text,
 - acceptable length ratio,
 - meaning preserved,
-- fluent/grammatical,
+- grammatically correct,
 - semantic similarity.
 
-The framework supports both local and remote guardrails. A **remote** guardrail runs after the scorer and receives the scorer's `ScoreResult` as a second argument, so it may derive its verdict from `score.raw` (for example, `meaning_preserved` and `fluent` fields returned by the same LLM call) without making a second network request. A remote guardrail may instead make its own call; the pipeline does not care which.
+The framework supports both local and remote guardrails. A **remote** guardrail runs after the scorer and receives the scorer's `ScoreResult` as a second argument, so it may derive its verdict from `score.raw` (for example, `meaning_preserved` and `grammatically_correct` fields returned by the same LLM call) without making a second network request. A remote guardrail may instead make its own call; the pipeline does not care which.
 
 ## 6.5 Referee (future)
 
@@ -404,7 +404,8 @@ export const gameConfig: GameConfig = {
   guardrails: [
     guardrails.notEmpty,
     guardrails.lengthRatio({ min: 0.7, max: 1.3 }),
-    guardrails.meaningFluency,
+    guardrails.meaning,
+    guardrails.grammar,
   ],
   win: { scoreAtOrBelow: 2 },
   budget: { checksPerPuzzle: 6 },
@@ -548,6 +549,8 @@ Initial default:
 ```
 
 This is a simple anti-cheating/validity constraint, not a semantic guarantee.
+
+Blank text passes this guardrail, because `not-empty` already reports it; the player gets one message instead of two (B.18).
 
 ## 10.4 No referee
 
@@ -911,7 +914,7 @@ Add:
 - structured response parsing,
 - error handling,
 - cache,
-- the `meaning-fluency` remote guardrail (§23), reading `meaning_preserved` and `fluent` from `score.raw`.
+- the `meaning` and `grammar` remote guardrails (§23), reading `meaning_preserved` and `grammatically_correct` from `score.raw`.
 
 Change config from:
 
@@ -1183,7 +1186,7 @@ The first framework is complete when all of the following are true:
 After the framework is complete:
 
 - Replace the mock scorer with the first LLM scorer.
-- Enable the `meaning-fluency` remote guardrail. Without it, a player can win by replacing sentences with unrelated but human-sounding prose of similar length, or with coherent nonsense. The guardrail reads `meaning_preserved` and `fluent` from the scorer's `raw` payload (Appendix A.2) and fails with a player-readable reason ("The judge thinks the meaning changed" / "The judge thinks this isn't fluent English"). A check that fails this guardrail still consumes a Check, since the scorer ran.
+- Enable the `meaning` and `grammar` remote guardrails. Without them, a player can win by replacing sentences with unrelated but human-sounding prose of similar length, or with coherent nonsense. They read `meaning_preserved` and `grammatically_correct` respectively from the scorer's `raw` payload (Appendix A.2), and each fails with its own player-readable reason ("The judge thinks the meaning changed" / "The judge thinks this isn't grammatically correct"). A check that fails either one still consumes a Check, since the scorer ran.
 - Provide a bank of at least 50 pre-generated AI-ish passages validated by the harness (Milestone 3b).
 - Display a simple 0–10 score/meter.
 - Optionally display scorer-provided tells.
@@ -1275,14 +1278,14 @@ You are the judge in a game. Players are given a passage that was written by an 
 
 Signals of AI-assistant prose include: generic importance-framing openers; "it's not X, it's Y" constructions; lists of exactly three parallel items; frequent em dashes; overused vocabulary (delve, tapestry, testament, pivotal, foster, landscape, robust, navigate, underscore, crucial, seamless, multifaceted, leverage, realm, embark); vague attribution ("experts agree"); false ranges ("from X to Y" with no real spectrum); puffery about significance; uniform sentence rhythm; a closing sentence that restates the opening. Human prose tends to have specific detail, uneven rhythm, idiosyncratic word choice, and no summarizing closer.
 
-Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is fluent, grammatical English. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark fluent=false or meaning_preserved=false instead of lowering the score.
+Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is grammatically correct. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark grammatically_correct=false or meaning_preserved=false instead of lowering the score.
 
 Respond with JSON only:
 {
   "score": <integer 0-10; 10 = obviously AI-assistant prose, 0 = unmistakably human>,
   "tells": [ { "label": "<short-kebab-label>", "quote": "<exact short quote from CURRENT passage>" } ],
   "meaning_preserved": <true|false>,
-  "fluent": <true|false>
+  "grammatically_correct": <true|false>
 }
 List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.
 ```
@@ -1302,7 +1305,7 @@ Parser rules:
 - Reject (throw) if the response is not valid JSON or lacks a numeric `score`.
 - Clamp `score` to an integer in 0–10.
 - Drop any tell whose `quote` is not a case-sensitive substring of `current` after trimming; cap tells at 8; default to `[]` if absent.
-- Default `meaning_preserved` and `fluent` to `true` if absent, and log a warning; the `meaning-fluency` guardrail reads them from `ScoreResult.raw`.
+- Default `meaning_preserved` and `grammatically_correct` to `true` if absent, and log a warning; the `meaning` and `grammar` guardrails read them from `ScoreResult.raw`.
 
 The `llm-basic` scorer maps the parsed result to `{ score, tells, raw: parsed }`.
 
@@ -1380,7 +1383,7 @@ Open questions resolved during implementation. Each entry proposes a default tha
 
 ## B.1 Milestone numbering (2026-09-29)
 
-The implementation request labelled "Milestone 1" as workspace init + `score-v1` task + Cloudflare Worker, which is the server half of §19 Milestone 3. The mock framework (§19 Milestone 1), its tests (Milestone 2), and the `llm-basic` scorer + `meaning-fluency` guardrail (client half of Milestone 3) follow next, in that order. §19 is unchanged; this log records the mapping.
+The implementation request labelled "Milestone 1" as workspace init + `score-v1` task + Cloudflare Worker, which is the server half of §19 Milestone 3. The mock framework (§19 Milestone 1), its tests (Milestone 2), and the `llm-basic` scorer + `meaning` and `grammar` guardrails (client half of Milestone 3) follow next, in that order. §19 is unchanged; this log records the mapping.
 
 ## B.2 Package layout and naming (2026-09-29)
 
@@ -1434,10 +1437,10 @@ The Worker parses the model output before caching and returns the typed result. 
 
 ## B.9 Milestone 3 decisions (2026-09-29)
 
-- `mock` stays the default scorer until Milestone 3b delivers a harness-validated bank; `llm-basic` and `meaning-fluency` are registered and opt-in via `game.config.ts`.
+- `mock` stays the default scorer until Milestone 3b delivers a harness-validated bank; `llm-basic`, `meaning` and `grammar` are registered and opt-in via `game.config.ts`.
 - `providers/taskClient.ts` is the browser's only route to a model. It reads `VITE_API_BASE_URL` at build time (default `/api`, which the Vite proxy forwards to the local Worker) and converts the Worker's structured errors into `TaskClientError { code, retryable }`. Network and non-JSON failures are marked retryable.
 - `llm-basic` maps one `score-v1` result onto `{ score, tells, raw }`; the whole task result is the `raw` payload. Client errors propagate unchanged so game state reports them and spends no Check (spec §17).
-- `meaning-fluency` fails only on an explicit `false`. A raw payload missing either field passes, so a future scorer that lacks those fields does not block every win.
+- `meaning` and `grammar` fail only on an explicit `false`. A raw payload missing the field passes, so a future scorer that lacks those fields does not block every win.
 - Worker CORS: `ALLOWED_ORIGINS` var (comma-separated) in `wrangler.toml`, defaulting to `https://unslop.app,http://localhost:5173`. Preflights answer 204; unlisted origins get no CORS headers rather than an error.
 
 ## B.10 Milestone 3b decisions (2026-09-29)
@@ -1447,8 +1450,8 @@ The Worker parses the model output before caching and returns the typed result. 
 - Scripts keep a disk cache of parsed results under `scripts/.cache/results` (git-ignored) keyed exactly like the Worker's KV cache, so reruns while tuning are free until a task version is bumped. Raw Gutenberg and Wikipedia downloads are cached under `scripts/.cache/raw`.
 - `data/human_corpus.json` was built by `scripts/buildHumanCorpus.ts` on 2026-09-29: 5 paragraphs from each of 12 Gutenberg books (narrative, informal, explanatory, persuasive) plus the first in-range paragraph from 35 Wikipedia articles on everyday topics, 95 entries total. Selection is deterministic; each entry carries `source` and `register`. The builder sends a generic User-Agent with no personal contact details.
 - First harness run with the untouched Appendix A.2 prompt met both targets (bank ≥8: 100%, human ≥6: 2.1%), so `score-v1` stays at version 1 with no tuning.
-- `scripts/generateBank.ts` pairs 60 topics with the ten A.3 registers deterministically, rejects candidates outside 80–140 words or flagged by the judge as non-fluent, and writes provenance per entry. The first run kept 60 of 60 candidates. The five hand-written passages were replaced; the runtime `Passage` type ignores the extra `register` and `generatedWith` fields.
-- `game.config.ts` now defaults to `llm-basic` with `meaning-fluency` enabled, which completes the spec §23 checklist except for the mobile pass. Local development therefore needs `pnpm dev:worker` running; switching back to `mock` is a one-line config change.
+- `scripts/generateBank.ts` pairs 60 topics with the ten A.3 registers deterministically, rejects candidates outside 80–140 words or flagged by the judge as not grammatically correct, and writes provenance per entry. The first run kept 60 of 60 candidates. The five hand-written passages were replaced; the runtime `Passage` type ignores the extra `register` and `generatedWith` fields.
+- `game.config.ts` now defaults to `llm-basic` with `meaning` and `grammar` enabled, which completes the spec §23 checklist except for the mobile pass. Local development therefore needs `pnpm dev:worker` running; switching back to `mock` is a one-line config change.
 
 ## B.11 Milestone 4 and deployment decisions (2026-09-29)
 
@@ -1501,3 +1504,19 @@ The structure prescribed by §5 and §8 had grown to 95 files in 4 packages, wit
 - No refusal fallback is configured: a fallback would answer with a different model, which defeats comparing models. A refusal fails that one attempt, which the generator already rejects and replaces.
 - The cache key (`task:<id>@<version>:<sha256>`) does not name the model, and changing that would invalidate every cached `score-v1` result. So generations are cached per model under `scripts/.cache/generations/<model>/`, while scoring keeps `scripts/.cache/results/`. The 60 cached Haiku generations for `generate-v1@3` were moved there, and the task version stays 3.
 - Bank entries record the model in `generatedWith.model`. Entries written before this change have no `model` field; all 60 in the current bank were made with `claude-haiku-4-5` (`generate-v1@3`).
+
+## B.17 The judge checks grammatical correctness (2026-10-01)
+
+`score-v1` asks the judge whether the current passage is grammatically correct and returns the verdict as `grammatically_correct`, in the prompt, the response schema, the parser and the tests. The remote guardrail that reads it is now `grammar` (in `web/src/guardrails.ts`; separate from `meaning` since B.18) and fails with "The judge thinks this isn't grammatically correct." `scripts/generateBank.ts` rejects candidates the judge marks as not grammatically correct. Earlier wording in this spec, including B.1, B.9 and B.10, uses the new names.
+
+- Until this change the guardrail still read the old field name, which the scorer no longer returned, so it never failed on grammar.
+- `score-v1` is now version 2. Results cached under version 1 lack `grammatically_correct`, so the guardrail would pass them without a grammar verdict and `generateBank.ts` would reject every one. Version 2 starts fresh caches in Worker KV and `scripts/.cache/results`, so the next `pnpm harness` or `pnpm generate` makes new model calls. The earlier prompt revisions also went out under version 1, so B.10's harness figures describe the original A.2 prompt, not the current one.
+- The current bank's `scoredWith: "score-v1@1"` provenance is left unchanged, because version 1 is what scored it.
+
+## B.18 One guardrail per problem (2026-10-01)
+
+The feedback box lists one line per failed guardrail, so each guardrail now covers one problem. `meaning-grammar` is split into two remote guardrails: `meaning` reads `meaning_preserved` and fails with "The judge thinks the meaning changed." `grammar` reads `grammatically_correct` and fails with "The judge thinks this isn't grammatically correct." Both read the same scorer result, so the split adds no model call. When the judge flags both, the player sees both lines; before, the meaning message hid the grammar one. Earlier wording in this spec uses the new names.
+
+`length-ratio` now passes blank text, which `not-empty` already reports. An empty passage used to show "The passage is empty." and "Too short: 0 words, needs at least N." together; it now shows only the first.
+
+- If `not-empty` is removed from the config, blank text gets past both local guardrails and the Worker rejects it (`"current" must not be empty`). The game shows that as an error and no Check is spent.

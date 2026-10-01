@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { runCheck, type EvalContext } from "./game";
 import {
   countWords,
+  grammar,
   lengthRatio,
+  meaning,
   MEANING_CHANGED_REASON,
-  meaningFluency,
-  NOT_FLUENT_REASON,
+  NOT_GRAMMATICAL_REASON,
   notEmpty,
 } from "./guardrails";
 
@@ -60,55 +61,71 @@ describe("length-ratio", () => {
     });
   });
 
+  it("leaves blank text to not-empty, so the player gets one message", async () => {
+    expect(await guardrail.check(ctx({ original: ten, current: " \n" }))).toEqual({ pass: true });
+    const outcome = await runCheck(ctx({ original: ten, current: "" }), {
+      scorer: { score: async () => ({ score: 0 }) },
+      guardrails: [notEmpty, guardrail],
+      win: { scoreAtOrBelow: 2 },
+    });
+    expect(outcome.guardrails.filter((g) => !g.result.pass)).toEqual([
+      { id: "not-empty", result: { pass: false, reason: "The passage is empty." } },
+    ]);
+  });
+
   it("rejects bad bounds when it is created", () => {
     expect(() => lengthRatio({ min: 2, max: 1 })).toThrow(/invalid bounds/);
     expect(() => lengthRatio({ min: 0, max: 1 })).toThrow(/invalid bounds/);
   });
 });
 
-describe("meaning-fluency", () => {
-  it("runs after the scorer, so the judge's verdict can block a winning score", async () => {
-    const scorer = {
-      score: async () => ({ score: 0, raw: { meaning_preserved: false, fluent: true } }),
-    };
-    const outcome = await runCheck(ctx(), {
-      scorer,
-      guardrails: [meaningFluency],
-      win: { scoreAtOrBelow: 2 },
-    });
+describe("meaning and grammar", () => {
+  const judged = (raw: Record<string, unknown>) => ({
+    scorer: { score: async () => ({ score: 0, raw }) },
+    guardrails: [meaning, grammar],
+    win: { scoreAtOrBelow: 2 },
+  });
+
+  it("run after the scorer, so the judge's verdict can block a winning score", async () => {
+    const outcome = await runCheck(
+      ctx(),
+      judged({ meaning_preserved: false, grammatically_correct: true }),
+    );
     expect(outcome.win).toBe(false);
     expect(outcome.guardrails).toEqual([
-      { id: "meaning-fluency", result: { pass: false, reason: MEANING_CHANGED_REASON } },
+      { id: "meaning", result: { pass: false, reason: MEANING_CHANGED_REASON } },
+      { id: "grammar", result: { pass: true } },
     ]);
   });
 
-  it("passes when both flags are true", async () => {
-    const result = await meaningFluency.check(ctx(), {
-      score: 0,
-      raw: { meaning_preserved: true, fluent: true },
-    });
-    expect(result).toEqual({ pass: true });
+  it("report each problem separately when both fail", async () => {
+    const outcome = await runCheck(
+      ctx(),
+      judged({ meaning_preserved: false, grammatically_correct: false }),
+    );
+    expect(outcome.guardrails).toEqual([
+      { id: "meaning", result: { pass: false, reason: MEANING_CHANGED_REASON } },
+      { id: "grammar", result: { pass: false, reason: NOT_GRAMMATICAL_REASON } },
+    ]);
   });
 
-  it("fails with the meaning reason first when meaning is not preserved", async () => {
-    const result = await meaningFluency.check(ctx(), {
+  it("each fail only on their own field", async () => {
+    const onlyGrammar = {
       score: 0,
-      raw: { meaning_preserved: false, fluent: false },
+      raw: { meaning_preserved: true, grammatically_correct: false },
+    };
+    expect(await meaning.check(ctx(), onlyGrammar)).toEqual({ pass: true });
+    expect(await grammar.check(ctx(), onlyGrammar)).toEqual({
+      pass: false,
+      reason: NOT_GRAMMATICAL_REASON,
     });
-    expect(result).toEqual({ pass: false, reason: MEANING_CHANGED_REASON });
   });
 
-  it("fails with the fluency reason when only fluency is false", async () => {
-    const result = await meaningFluency.check(ctx(), {
-      score: 0,
-      raw: { meaning_preserved: true, fluent: false },
-    });
-    expect(result).toEqual({ pass: false, reason: NOT_FLUENT_REASON });
-  });
-
-  it("passes when the score or raw payload is missing or lacks the fields", async () => {
-    expect(await meaningFluency.check(ctx())).toEqual({ pass: true });
-    expect(await meaningFluency.check(ctx(), { score: 0 })).toEqual({ pass: true });
-    expect(await meaningFluency.check(ctx(), { score: 0, raw: {} })).toEqual({ pass: true });
+  it("pass when the score or raw payload is missing or lacks the fields", async () => {
+    for (const guardrail of [meaning, grammar]) {
+      expect(await guardrail.check(ctx())).toEqual({ pass: true });
+      expect(await guardrail.check(ctx(), { score: 0 })).toEqual({ pass: true });
+      expect(await guardrail.check(ctx(), { score: 0, raw: {} })).toEqual({ pass: true });
+    }
   });
 });

@@ -49,7 +49,7 @@ const taskResult = {
   score: 4,
   tells: [{ label: "em-dash", quote: "—" }],
   meaning_preserved: false,
-  fluent: true,
+  grammatically_correct: true,
   warnings: [],
 };
 

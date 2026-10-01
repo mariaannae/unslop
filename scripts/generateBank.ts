@@ -1,9 +1,9 @@
 /**
  * Bank generator (SPEC §19 Milestone 3b, Appendix A.3). Generates candidate
  * passages with `generate-v1`, scores each with the active scoring task, and
- * keeps those at or above --min-score that the judge also marks fluent and
- * meaning-preserving. Writes data/passages.json with provenance. The generation
- * model is set in web/src/config.ts.
+ * keeps those at or above --min-score that the judge also marks grammatically
+ * correct and meaning-preserving. Writes data/passages.json with provenance. The
+ * generation model is set in web/src/config.ts.
  *
  *   pnpm generate [--count 60] [--min-score 8] [--out data/passages.json] [--append] [--concurrency 3]
  */
@@ -172,7 +172,7 @@ async function attempt(i: number): Promise<Attempt> {
         text: gen.text,
         score: scored.score,
         keep: false,
-        why: "judge flagged fluency/meaning",
+        why: "judge flagged grammar/meaning",
       };
     }
     return { topic, register, text: gen.text, score: scored.score, keep: true, why: "kept" };

@@ -48,9 +48,9 @@ export const mock: Scorer = {
 /**
  * First real scorer (spec §15): one `score-v1` task call through the Worker.
  * Score and tells are returned as game values; the full task result rides along
- * in `raw` for remote guardrails (see meaningFluency in guardrails.ts). Errors
+ * in `raw` for remote guardrails (see meaning and grammar in guardrails.ts). Errors
  * propagate so the game can report them without spending a Check.
- * 
+ *
  * offline scorer scorers.mock is rules based
  */
 export const llmBasic: Scorer = {

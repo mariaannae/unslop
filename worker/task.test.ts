@@ -42,7 +42,7 @@ const goodJson = JSON.stringify({
   score: 4,
   tells: [{ label: "beer", quote: "smells like beer" }],
   meaning_preserved: true,
-  fluent: true,
+  grammatically_correct: true,
 });
 
 function fakeProvider(respond: () => Promise<string>): Provider & { calls: number } {
@@ -88,13 +88,13 @@ describe("POST /api/task", () => {
     expect(body).toEqual({
       ok: true,
       taskId: "score-v1",
-      version: 1,
+      version: 2,
       cached: false,
       result: {
         score: 4,
         tells: [{ label: "beer", quote: "smells like beer" }],
         meaning_preserved: true,
-        fluent: true,
+        grammatically_correct: true,
         warnings: [],
       },
     });
