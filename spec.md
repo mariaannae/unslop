@@ -1520,3 +1520,22 @@ The feedback box lists one line per failed guardrail, so each guardrail now cove
 `length-ratio` now passes blank text, which `not-empty` already reports. An empty passage used to show "The passage is empty." and "Too short: 0 words, needs at least N." together; it now shows only the first.
 
 - If `not-empty` is removed from the config, blank text gets past both local guardrails and the Worker rejects it (`"current" must not be empty`). The game shows that as an error and no Check is spent.
+
+## B.19 `score-jev`: jevslop on TypeSafe's Jev (2026-10-01)
+
+`score-v1` gives one holistic 0–10 rating, and its tells are reported separately from the score. `score-jev` (`shared/scoreJev.ts`) ports jevslop (github.com/togelius/various, folder `jevslop`). It asks TypeSafe's Jev narrow questions, 8 per paragraph of 12 or more words and 8 about the whole text, and measures 6 more tells in code. The score is the weighted mean of the tell strengths, so fixing a tell lowers it by a predictable amount. `scorers.jev` is now the default in `web/src/config.ts`.
+
+- **Unchanged from jevslop:** every question, every weight and threshold, the stock-phrase list, the regexes, the length gates and the composite formula. The code-measured tells were checked against jevslop's Python on its two samples plus every bank and human-corpus passage (157 texts), and the composite on identical Jev answers for 177 texts. Both matched. Because of the length gates, stock vocabulary, em dashes and uniform paragraph length are skipped on the 125-word bank passages, and uniform sentence length runs on only some of them. These gates are the first thing to revisit.
+- **Model:** pinned to `jev-1.13.0`. jevslop sends `jev-latest`, which pointed to it on this date. The cache key does not name the model, so moving to a new model needs a version bump.
+- **Score:** the 0–100 composite divided by 10, with one decimal. `ScoreResult.score` is no longer always an integer. The win threshold is now `scoreAtOrBelow: 1.5`, about jevslop's "probably human" band (below 15). Blatant slop shows about 5–6 on the meter. Tells with strength 0.5 or more are shown, strongest first, as labels with no quote (Jev does not quote), except stock vocabulary, which lists the matched phrases. `Tell.quote` is therefore optional.
+- **Guardrails:** Jev gives no meaning or grammar verdict, so `scorers.jev` runs `score-v1` in parallel and copies only its `meaning_preserved` and `grammatically_correct` into `raw`. Each Check now makes two Worker requests, so the per-IP limit of 30 a minute allows 15 Checks a minute.
+- **Plumbing:** `CallTask` in `shared/types.ts` is a task that makes its own API calls instead of building one Anthropic request. `runTask` handles both kinds. The Worker and the harness pass `TYPESAFE_API_KEY` through as `typesafeApiKey`, and a missing key is reported as a provider error. Jev is called with `fetch`, not TypeSafe's SDK, and with no retries; a failed call spends no Check.
+
+## B.20 `score-jev` counts stock vocabulary and em dashes at any length (2026-10-01)
+
+jevslop skips its stock-vocabulary and em-dash tells on texts under 150 words. Every bank passage is shorter (104–132 words), so under B.19 these two tells never counted. They are now counted at any length, with the same per-1,000-word rates and ramps. The rhythm tells keep their gates (8 sentences, 4 paragraphs). This is the first change to jevslop's metrics. `score-jev` is now version 2.
+
+- On the Haiku bank and the human corpus, stock vocabulary averages 0.37 on the AI passages and 0.01 on the human texts. The most frequent hits are "vibrant", "serves as", "enhance" and "fostering". Em dashes average 0.04 on AI and 0.09 on human, because the Gutenberg texts use them. Separation (AUC of the composite) rose from 0.87 to 0.89.
+- On a short text, one hit is a high rate (one phrase in 120 words is 8.3 per 1,000 words, full strength), so a single stock word makes this tell fire. For the game that is acceptable: the word is shown as the tell's quote, and the player can remove it.
+- The win threshold is unchanged at 1.5, where 50% of bank passages still score as won before any edit (62% under version 1). Lowering it is a separate decision.
+

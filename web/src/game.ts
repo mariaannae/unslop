@@ -11,11 +11,11 @@ export type EvalContext = {
 
 export type Tell = {
   label: string;
-  quote: string;
+  quote?: string;
 };
 
 export type ScoreResult = {
-  /** Integer 0–10. 10 = strongly AI-like, 0 = strongly human-like, per the active scorer. */
+  /** 0–10. 10 = strongly AI-like, 0 = strongly human-like, per the active scorer. */
   score: number;
   tells?: Tell[];
   /** Scorer-specific payload. Only remote guardrails may read it. */

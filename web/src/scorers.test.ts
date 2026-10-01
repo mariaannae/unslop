@@ -83,6 +83,27 @@ describe("llm-basic scorer", () => {
   });
 });
 
+describe("jev scorer", () => {
+  it("runs score-jev and score-v1 together and copies score-v1's verdicts into raw", async () => {
+    const jevResult = { score: 1.2, composite: 12, tells: [{ label: "Generic filler" }] };
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const { taskId } = JSON.parse(init!.body as string) as { taskId: string };
+      const result = taskId === "score-jev" ? jevResult : taskResult;
+      return new Response(JSON.stringify({ ok: true, taskId, version: 1, result, cached: false }));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const result = await scorers.jev.score({ original: "orig", current: "cur" });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      score: 1.2,
+      tells: jevResult.tells,
+      raw: { ...jevResult, meaning_preserved: false, grammatically_correct: true },
+    });
+  });
+});
+
 describe("callTask", () => {
   it("posts {taskId, payload} as JSON to /api/task and returns the result", async () => {
     const fetch = stubFetch(200, {

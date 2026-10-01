@@ -1,4 +1,5 @@
 import type { TaskRequest, TaskResponse } from "../../shared/api";
+import type { ScoreJevResult } from "../../shared/scoreJev";
 import type { ScoreV1Result } from "../../shared/scoreV1";
 import type { Scorer, Tell } from "./game";
 
@@ -60,6 +61,30 @@ export const llmBasic: Scorer = {
       current: ctx.current,
     });
     return { score: result.score, tells: result.tells, raw: result };
+  },
+};
+
+/**
+ * The jevslop port (shared/scoreJev.ts): Jev's composite score and tells. Jev has
+ * no meaning or grammar verdict, so score-v1 runs alongside it and only its two
+ * verdicts are copied into `raw` for the meaning and grammar guardrails.
+ */
+export const jev: Scorer = {
+  async score(ctx) {
+    const payload = { original: ctx.original, current: ctx.current };
+    const [result, judge] = await Promise.all([
+      callTask<ScoreJevResult>("score-jev", payload),
+      callTask<ScoreV1Result>("score-v1", payload),
+    ]);
+    return {
+      score: result.score,
+      tells: result.tells,
+      raw: {
+        ...result,
+        meaning_preserved: judge.meaning_preserved,
+        grammatically_correct: judge.grammatically_correct,
+      },
+    };
   },
 };
 

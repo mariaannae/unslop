@@ -4,6 +4,7 @@ import { ProviderError, TaskError, type Provider } from "../shared/types";
 
 export type TaskHandlerDeps = {
   provider: Provider;
+  typesafeApiKey?: string;
   cache: TaskCache;
   rateLimiter: RateLimiter;
   log?: (message: string, detail?: unknown) => void;

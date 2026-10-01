@@ -11,9 +11,9 @@ import * as scorers from "./scorers";
 export const gameConfig: GameConfig = {
   drawPassage: createStaticBank(),
 
-  // scorers.llmBasic scores through the Worker (run `pnpm dev:worker` alongside the app).
-  // scorers.mock plays offline with no server at all.
-  scorer: scorers.llmBasic,
+  // scorers.jev and scorers.llmBasic score through the Worker (run `pnpm dev:worker`
+  // alongside the app). scorers.mock plays offline with no server at all.
+  scorer: scorers.jev,
 
   // Local guardrails run before the scorer and cost no Check; remote ones read its result.
   guardrails: [
@@ -24,7 +24,7 @@ export const gameConfig: GameConfig = {
   ],
 
   win: {
-    scoreAtOrBelow: 2,
+    scoreAtOrBelow: 1.5,
   },
 
   budget: {
@@ -43,4 +43,4 @@ export const gameConfig: GameConfig = {
  *   "claude-sonnet-5-5"   current Sonnet, default temperature, thinks first
  *   "claude-opus-5-5"     current Opus, default temperature, thinks first
  */
-export const generationModel: GenerationModel = "claude-opus-5-5";
+export const generationModel: GenerationModel = "claude-haiku-4-5";

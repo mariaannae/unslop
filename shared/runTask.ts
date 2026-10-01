@@ -1,5 +1,12 @@
+import { scoreJevTask } from "./scoreJev";
 import { scoreV1Task } from "./scoreV1";
-import { TaskError, type AnyTask, type Provider, type TaskDefinition } from "./types";
+import {
+  TaskError,
+  type AnyTask,
+  type CallTask,
+  type Provider,
+  type TaskDefinition,
+} from "./types";
 
 /**
  * Tasks the Worker is allowed to execute. Anything not listed here is rejected
@@ -8,6 +15,7 @@ import { TaskError, type AnyTask, type Provider, type TaskDefinition } from "./t
  */
 export const callableTasks: ReadonlyMap<string, AnyTask> = new Map<string, AnyTask>([
   [scoreV1Task.id, scoreV1Task],
+  [scoreJevTask.id, scoreJevTask],
 ]);
 
 /** Where parsed results are kept: KV in the Worker, files on disk in the scripts. */
@@ -18,19 +26,22 @@ export interface TaskCache {
 
 export type RunTaskDeps = {
   provider: Provider;
+  /** Key for TypeSafe's Jev, used only by tasks that call it (`score-jev`). */
+  typesafeApiKey?: string;
   cache: TaskCache;
   log?: (message: string, detail?: unknown) => void;
 };
 
 /**
- * Runs one task: validate payload -> cache lookup -> provider call -> parse ->
- * cache store. The Worker and the Node scripts both use this.
+ * Runs one task: validate payload -> cache lookup -> provider call (or the
+ * task's own `call`) -> parse -> cache store. The Worker and the Node scripts
+ * both use this.
  *
  * Only successfully parsed results are cached, so a provider or parse failure
  * never poisons the cache. TaskError and ProviderError propagate to the caller.
  */
 export async function runTask<Payload, Result>(
-  task: TaskDefinition<Payload, Result>,
+  task: TaskDefinition<Payload, Result> | CallTask<Payload, Result>,
   input: unknown,
   deps: RunTaskDeps,
 ): Promise<{ result: Result; cached: boolean }> {
@@ -39,14 +50,17 @@ export async function runTask<Payload, Result>(
   const hit = await deps.cache.get(key);
   if (hit !== undefined) return { result: hit as Result, cached: true };
 
-  const response = await deps.provider.complete(task.buildRequest(payload));
+  const raw =
+    "call" in task
+      ? await task.call(payload, deps)
+      : (await deps.provider.complete(task.buildRequest(payload))).text;
 
   let result: Result;
   try {
-    result = task.parse(response.text, payload);
+    result = task.parse(raw, payload);
   } catch (error) {
     if (error instanceof TaskError) {
-      deps.log?.("parse error", { message: error.message, text: response.text });
+      deps.log?.("parse error", { message: error.message, raw });
     }
     throw error;
   }

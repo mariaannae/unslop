@@ -55,6 +55,7 @@ async function loadItems(file: string): Promise<Item[]> {
 
 const deps: RunTaskDeps = {
   provider: createScriptProvider(),
+  typesafeApiKey: process.env.TYPESAFE_API_KEY,
   cache: args["no-cache"] ? noCache : createDiskCache(path.join(cacheDir, "results")),
 };
 

@@ -11,6 +11,8 @@ import {
 export interface Env {
   /** Secret. Local: `worker/.dev.vars`. Production: `wrangler secret put ANTHROPIC_API_KEY`. */
   ANTHROPIC_API_KEY?: string;
+  /** Secret for the score-jev task. Local: `worker/.dev.vars`. Production: `wrangler secret put TYPESAFE_API_KEY`. */
+  TYPESAFE_API_KEY?: string;
   RATE_LIMIT_PER_MINUTE?: string;
   CACHE_TTL_SECONDS?: string;
   /** Comma-separated browser origins allowed to call the API. */
@@ -43,6 +45,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
     return handleTask(request, {
       provider: createAnthropicProvider(env.ANTHROPIC_API_KEY),
+      typesafeApiKey: env.TYPESAFE_API_KEY,
       cache: createKvTaskCache(env.TASK_CACHE, intVar(env.CACHE_TTL_SECONDS, 30 * 24 * 3600)),
       rateLimiter: createKvRateLimiter(env.RATE_LIMIT, {
         limit: intVar(env.RATE_LIMIT_PER_MINUTE, 30),

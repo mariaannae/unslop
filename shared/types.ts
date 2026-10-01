@@ -57,8 +57,20 @@ export interface TaskDefinition<Payload, Result> {
   parse(raw: unknown, payload: Payload): Result;
 }
 
+/**
+ * A task that makes its own API calls (for example `score-jev`, which calls
+ * TypeSafe's Jev) instead of building one Anthropic request. `call` returns the
+ * raw result that `parse` turns into the typed result.
+ */
+export interface CallTask<Payload, Result> extends Omit<
+  TaskDefinition<Payload, Result>,
+  "buildRequest"
+> {
+  call(payload: Payload, deps: { typesafeApiKey?: string }): Promise<unknown>;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyTask = TaskDefinition<any, any>;
+export type AnyTask = TaskDefinition<any, any> | CallTask<any, any>;
 
 /** Narrow adapter over an LLM provider. Task running only depends on this. */
 export interface Provider {

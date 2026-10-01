@@ -199,7 +199,7 @@ function OutcomePanel(props: {
                 <span className="rounded bg-neutral-200 px-1.5 text-xs leading-5 text-neutral-700">
                   {tell.label}
                 </span>
-                <q className="text-neutral-800">{tell.quote}</q>
+                {tell.quote ? <q className="text-neutral-800">{tell.quote}</q> : null}
               </li>
             ))}
           </ul>
