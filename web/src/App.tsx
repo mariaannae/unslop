@@ -45,7 +45,7 @@ export function App() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-white font-sans text-neutral-900">
       <header className="flex items-baseline justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
-        <h1 className="text-xl font-semibold tracking-tight">De-AI</h1>
+        <h1 className="text-xl font-semibold tracking-tight">UNSLOP</h1>
         <p className="text-sm text-neutral-600" aria-live="polite">
           Checks left: <span className="font-semibold text-neutral-900">{checksLeft}</span> /{" "}
           {state.checksPerPuzzle}
