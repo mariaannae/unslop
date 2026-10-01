@@ -5,12 +5,11 @@
  * inputs always select the same paragraphs. Raw downloads are cached under
  * scripts/.cache/raw so reruns are offline.
  *
- *   pnpm --filter @unslop/scripts corpus [--per-book 5] [--out data/human_corpus.json]
+ *   pnpm corpus [--per-book 5] [--out data/human_corpus.json]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { intArg, readArgs } from "./lib/args";
-import { cacheDir, dataDir } from "./lib/paths";
+import { cacheDir, countWords, dataDir, intArg, readArgs } from "./common";
 
 const USER_AGENT = "unslop-corpus-builder/0.1 (https://unslop.app)";
 const MIN_WORDS = 90;
@@ -109,10 +108,6 @@ const args = readArgs({
 });
 const perBook = intArg(args["per-book"], 5);
 const outFile = path.resolve(args.out ?? path.join(dataDir, "human_corpus.json"));
-
-function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
 
 async function fetchCached(name: string, url: string): Promise<string> {
   const file = path.join(cacheDir, "raw", name);

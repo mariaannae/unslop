@@ -59,7 +59,7 @@ Build the smallest complete framework that can support the game loop while keepi
 - Passage source
 - Scorer
 - Guardrails
-- Referee
+- Referee (a future slot; none is implemented, see §6.5)
 - Game configuration
 - LLM/API provider
 
@@ -115,30 +115,13 @@ if scorer === "openai" ...
 if guardrail === "embedding" ...
 ```
 
-Module selection belongs in configuration/registry code.
+Module selection belongs in configuration code (`web/src/config.ts`).
 
 ## 3.2 Configuration-driven experimentation
 
-The active implementations must be selected by a single configuration object.
+The active implementations must be selected by a single configuration object (§7).
 
-Example:
-
-```ts
-export const gameConfig = {
-  passageSource: "static-bank",
-  scorer: "mock",
-  guardrails: ["not-empty", "length-ratio"],
-  referee: "none",
-  win: {
-    scoreAtOrBelow: 2,
-  },
-  budget: {
-    checksPerPuzzle: 6,
-  },
-};
-```
-
-Changing a scorer, guardrail, or referee should not require changes to core game logic or UI components.
+Changing a scorer or guardrail should not require changes to core game logic or UI components; it is a one-line edit in `web/src/config.ts`.
 
 ## 3.3 Keep the first scorer simple
 
@@ -182,7 +165,7 @@ The editor and controls must work with touch input.
 The first milestones should establish:
 
 1. types/interfaces,
-2. registry/configuration,
+2. configuration,
 3. pipeline,
 4. mock implementations,
 5. tests,
@@ -245,55 +228,43 @@ A richer editor can be substituted later behind a UI component boundary.
 
 # 5. Repository architecture
 
-Use a structure approximately like this:
+The repository is one pnpm package with four top-level folders (Appendix B.13). Keep it flat: one readable file per concept, with tests next to the file they test.
 
 ```text
 .
-├── SPEC.md
-├── package.json
-├── apps/
-│   └── web/
-│       └── src/
-│           ├── config/
-│           │   └── game.config.ts
-│           ├── core/
-│           │   ├── types.ts
-│           │   ├── registry.ts
-│           │   ├── pipeline.ts
-│           │   └── gameState.ts
-│           ├── scorers/
-│           │   └── mockScorer.ts
-│           ├── guardrails/
-│           │   ├── notEmpty.ts
-│           │   └── lengthRatio.ts
-│           ├── referees/
-│           │   └── none.ts
-│           ├── passages/
-│           │   └── staticBank.ts
-│           ├── providers/
-│           │   └── taskClient.ts
-│           └── ui/
-│               ├── App.tsx
-│               ├── GameView.tsx
-│               └── ...
-├── packages/
-│   └── shared/
-│       └── src/
-│           └── tasks/
-│               └── ...                 (added in Milestone 3)
-├── server/
-│   └── worker/
-│       └── src/
-│           └── index.ts                (added in Milestone 3)
-├── scripts/
-│   ├── evalHarness.ts                  (added in Milestone 3b)
-│   └── generateBank.ts                 (added in Milestone 3b)
-└── data/
-    ├── passages.json
-    └── human_corpus.json               (added in Milestone 3b)
+├── spec.md, DEVELOPMENT.md
+├── package.json              one package: all dependencies and scripts
+├── tsconfig.json             shared options; type-checks shared/ + worker/
+├── data/
+│   ├── passages.json
+│   └── human_corpus.json
+├── web/                      Vite + React app (GitHub Pages)
+│   ├── index.html, vite.config.ts, tsconfig.json, public/CNAME
+│   └── src/
+│       ├── config.ts         the game settings: passage source, scorer, guardrails, win, budget
+│       ├── game.ts           domain types, runCheck, game store
+│       ├── scorers.ts        mock, llm-basic, and callTask (POST /api/task)
+│       ├── guardrails.ts     not-empty, length-ratio, meaning-fluency
+│       ├── passages.ts       static bank
+│       ├── App.tsx           the whole UI: screen, editor, outcome panel, score meter
+│       └── main.tsx, index.css, *.test.ts
+├── worker/                   Cloudflare Worker, the only holder of the API key
+│   ├── wrangler.toml, .dev.vars.example
+│   ├── index.ts              entry, routing, CORS
+│   └── task.ts               /api/task handler, KV cache, rate limit
+├── shared/                   used by worker and scripts; web imports types only
+│   ├── api.ts                /api/task wire types
+│   ├── types.ts              task and provider contract
+│   ├── runTask.ts            the task sequence, cache key, callable tasks
+│   ├── scoreV1.ts            the score-v1 task (the only task the Worker runs)
+│   └── anthropic.ts          provider adapter
+└── scripts/                  Node scripts run with tsx
+    ├── evalHarness.ts, generateBank.ts, buildHumanCorpus.ts
+    ├── generateV1.ts         the generate-v1 task (scripts only)
+    └── common.ts             flags, paths, word count, provider, disk cache, stats
 ```
 
-Do not create files solely for future concepts unless there is a concrete interface or test that benefits from their existence. Files marked with a milestone do not exist until that milestone.
+Do not create files solely for future concepts unless there is a concrete interface or test that benefits from their existence.
 
 ---
 
@@ -305,16 +276,14 @@ The core game should operate on domain objects, not provider-specific objects.
 
 ```ts
 export type EvalContext = {
-  puzzleId: string;
   original: string;
   current: string;
-  checksUsed: number;
 };
 ```
 
-This object contains enough information for a scorer/guardrail/referee to evaluate a state.
+This object contains enough information for a scorer or guardrail to evaluate a state.
 
-It may be extended later, but avoid placing provider-specific data here.
+It may be extended when an implementation needs more (for example the passage id or the checks used so far), but avoid placing provider-specific data here.
 
 ## 6.2 Tell
 
@@ -375,7 +344,9 @@ Examples:
 
 The framework supports both local and remote guardrails. A **remote** guardrail runs after the scorer and receives the scorer's `ScoreResult` as a second argument, so it may derive its verdict from `score.raw` (for example, `meaning_preserved` and `fluent` fields returned by the same LLM call) without making a second network request. A remote guardrail may instead make its own call; the pipeline does not care which.
 
-## 6.5 Referee result
+## 6.5 Referee (future)
+
+A referee is an optional final adjudicator that could inspect an otherwise winning result. None is implemented: the original `none` referee always approved, which is the same as having no referee, so it was removed (B.13). When a real referee exists, `runCheck` calls it after the remote guardrails and only for a would-be win, and it returns:
 
 ```ts
 export type RefereeResult = {
@@ -383,10 +354,6 @@ export type RefereeResult = {
   reasons: string[];
 };
 ```
-
-A referee is an optional final adjudicator that can inspect an otherwise winning result.
-
-The initial implementation uses a `none` referee.
 
 ## 6.6 Passage
 
@@ -406,7 +373,6 @@ Those can be added later.
 
 ```ts
 export interface Scorer {
-  id: string;
   score(ctx: EvalContext): Promise<ScoreResult>;
 }
 
@@ -416,78 +382,42 @@ export interface Guardrail {
   check(ctx: EvalContext, score?: ScoreResult): Promise<GuardrailResult>;
 }
 
-export interface Referee {
-  id: string;
-  verify(ctx: EvalContext, score: ScoreResult): Promise<RefereeResult>;
-}
-
-export interface PassageSource {
-  id: string;
-  getRandom(excludeId?: string): Promise<Passage>;
-}
+export type DrawPassage = (excludeId?: string) => Promise<Passage>;
 ```
+
+A guardrail's `id` labels its feedback in the check outcome.
 
 The `local` property on guardrails exists so the pipeline can distinguish no-network checks from checks that require a model/API. Local guardrails are called without a `score` argument; remote guardrails are called with one.
 
-`PassageSource` has a single method. `excludeId` lets the caller avoid immediately repeating the passage just played. There is no date-based method.
+`DrawPassage` is a plain function. `excludeId` lets the caller avoid immediately repeating the passage just played. There is no date-based variant.
 
 ---
 
 # 7. Configuration
 
-Create one authoritative game configuration.
-
-Example:
+There is one authoritative game configuration, `web/src/config.ts`:
 
 ```ts
-export const gameConfig = {
-  passageSource: "static-bank",
-
-  scorer: "mock",
-
-  guardrails: ["not-empty", "length-ratio"],
-
-  referee: "none",
-
-  win: {
-    scoreAtOrBelow: 2,
-  },
-
-  budget: {
-    checksPerPuzzle: 6,
-  },
-
-  guardrailParams: {
-    "length-ratio": {
-      min: 0.7,
-      max: 1.3,
-    },
-  },
-} as const;
+export const gameConfig: GameConfig = {
+  drawPassage: createStaticBank(),
+  scorer: scorers.llmBasic, // scorers.mock plays offline
+  guardrails: [
+    guardrails.notEmpty,
+    guardrails.lengthRatio({ min: 0.7, max: 1.3 }),
+    guardrails.meaningFluency,
+  ],
+  win: { scoreAtOrBelow: 2 },
+  budget: { checksPerPuzzle: 6 },
+};
 ```
-
-The exact field names may change if the implementation has a good reason, but preserve the concept and use `passageSource` consistently.
 
 The UI should not hard-code the scorer name or guardrail list.
 
 ---
 
-# 8. Registry
+# 8. Selection by import
 
-Create a registry mapping configuration IDs to implementations.
-
-Conceptually:
-
-```ts
-getScorer(id);
-getReferee(id);
-getGuardrails(ids);
-getPassageSource(id);
-```
-
-Unknown IDs should fail early and clearly.
-
-Do not allow the application to silently fall back to another implementation when configuration is invalid.
+There is no registry. `web/src/config.ts` imports the implementations it uses and lists them, and `createGame(gameConfig)` wires them in. An unknown or misspelled implementation is a type error, so invalid configuration fails before the app runs and can never fall back silently to another implementation. (This replaced an id-based registry; see B.13.)
 
 ---
 
@@ -530,29 +460,18 @@ Run configured remote guardrails, passing the `ScoreResult` from Step 2 as the s
 
 A remote guardrail may derive its verdict from `score.raw` or may make its own call. The pipeline must not assume either strategy and must not inspect `raw` itself.
 
-## Step 4 — referee
-
-Only if:
-
-- all required guardrails pass,
-- the score is at or below the configured threshold,
-- and a referee is configured,
-
-invoke the referee.
-
-## Step 5 — win decision
+## Step 4 — win decision
 
 Win only if:
 
 ```text
 all active guardrails passed
 AND score <= configured threshold
-AND referee is absent OR referee approved
 ```
 
-Return a complete `CheckOutcome`.
+A future referee (§6.5) would run between Step 3 and this decision, only for a would-be win.
 
-Example:
+Return a complete `CheckOutcome`:
 
 ```ts
 export type CheckOutcome = {
@@ -561,8 +480,8 @@ export type CheckOutcome = {
     result: GuardrailResult;
   }>;
   score?: ScoreResult;
-  referee?: RefereeResult;
   win: boolean;
+  checkConsumed: boolean;
 };
 ```
 
@@ -581,9 +500,7 @@ Purpose: test the entire framework without an API.
 For example:
 
 ```ts
-const mockScorer: Scorer = {
-  id: "mock",
-
+const mock: Scorer = {
   async score(ctx) {
     return {
       score: someDeterministicFunction(ctx.current),
@@ -632,22 +549,9 @@ Initial default:
 
 This is a simple anti-cheating/validity constraint, not a semantic guarantee.
 
-## 10.4 `none` referee
+## 10.4 No referee
 
-Always approve.
-
-```ts
-const noneReferee: Referee = {
-  id: "none",
-
-  async verify() {
-    return {
-      approved: true,
-      reasons: [],
-    };
-  },
-};
-```
+The original `none` referee always approved, which is the same as having no referee, so it was removed (B.13). See §6.5 for where a real one would go.
 
 ---
 
@@ -669,10 +573,10 @@ Example:
 ]
 ```
 
-The passage source loads the bank and provides:
+`createStaticBank()` loads the bank and returns a draw function:
 
 ```text
-getRandom(excludeId?)
+drawPassage(excludeId?)
 ```
 
 Selection is uniformly random over the bank, excluding `excludeId` when the bank has more than one entry. Randomness lives only in the passage source; nothing else in the core is random.
@@ -725,7 +629,7 @@ Those belong in the core/config/provider layers.
 
 Pressing **New passage**:
 
-- asks core game state for `passageSource.getRandom(currentPassageId)`,
+- asks core game state to draw a new passage (`drawPassage(currentPassageId)`),
 - resets the editor to the new passage's text,
 - resets the Check budget,
 - clears the previous score, tells, and win/loss state.
@@ -764,8 +668,6 @@ Use:
 score <= 2
 AND
 all configured guardrails pass
-AND
-referee is absent OR approved
 ```
 
 The numeric threshold is intentionally configuration rather than hard-coded game logic.
@@ -879,7 +781,7 @@ score-human-calibrated-v1
 
 Do not make the game logic depend on these specific names.
 
-Each task definition (prompt, model, response schema, parser) lives in `packages/shared/src/tasks` and is imported by both the Worker (to build the provider request) and the client or scripts (to parse and type the response). The task's `version` is part of the cache key.
+Each task definition (prompt, model, response schema, parser) lives in its own file next to the code that runs it: `shared/scoreV1.ts`, used by the Worker, the scripts and (for its result type) the client, and `scripts/generateV1.ts`, used only by the scripts. The task's `version` is part of the cache key.
 
 ---
 
@@ -919,29 +821,19 @@ Use Vitest.
 
 At minimum, test:
 
-## Registry
-
-- known scorer ID resolves correctly,
-- unknown scorer ID fails clearly,
-- known guardrail IDs resolve,
-- unknown guardrail IDs fail,
-- referee selection works.
-
 ## Pipeline ordering
 
 - local guardrail failure prevents scorer call,
 - local guardrail failure does not consume budget,
 - scorer runs when local checks pass,
 - remote guardrails run after scorer and receive the `ScoreResult`,
-- referee runs only for a would-be win,
-- referee does not run for clearly losing scores.
+- a failing remote guardrail blocks the win but still spends the Check.
 
 ## Win logic
 
-- score below threshold + guardrails pass + no referee => win,
+- score at or below threshold + guardrails pass => win,
 - score above threshold => not win,
-- guardrail failure => not win,
-- referee rejection => not win.
+- guardrail failure => not win.
 
 ## Budget
 
@@ -953,8 +845,8 @@ At minimum, test:
 
 ## Passage source
 
-- `getRandom` returns a passage from the bank,
-- `getRandom(excludeId)` never returns the excluded passage when the bank has more than one entry.
+- `drawPassage()` returns a passage from the bank,
+- `drawPassage(excludeId)` never returns the excluded passage when the bank has more than one entry.
 
 ## Parsing
 
@@ -1156,13 +1048,12 @@ Guardrails should remain independent modules.
 
 Possible future referees:
 
-- none
 - stricter LLM judge
 - second-model judge
 - ensemble disagreement resolver
 - human-calibrated final validator
 
-A referee is optional.
+A referee is optional. None is implemented today; §6.5 says where one plugs in.
 
 ## 20.6 Passage generation
 
@@ -1231,7 +1122,7 @@ When this is eventually added, keep analytics independent from core scoring logi
 
 ## 20.10 Daily puzzles and sharing
 
-If a daily puzzle is ever wanted, it is a second `PassageSource` implementation (`"daily-bank"`) plus a mode switch in the UI, not a change to the interface. Nothing in v1 should anticipate it.
+If a daily puzzle is ever wanted, it is a second draw function (for example `createDailyBank()`) selected in `config.ts` plus a mode switch in the UI, not a change to the engine. Nothing in v1 should anticipate it.
 
 ---
 
@@ -1248,7 +1139,7 @@ When implementing this project:
 - keep game rules in the core pipeline,
 - use deterministic tests,
 - use meaningful names,
-- keep functions small,
+- keep functions small, but do not split a short sequence into one-line helpers or separate files; prefer one readable file per concept (B.13),
 - preserve future replacement points,
 - document non-obvious decisions.
 
@@ -1279,10 +1170,9 @@ The first framework is complete when all of the following are true:
 - The core pipeline invokes the configured scorer.
 - The score determines a provisional win/loss.
 - Guardrails can block a win.
-- A referee can be disabled through configuration.
 - Check budget is enforced by core logic and reset by New passage.
-- Changing scorer IDs in configuration changes the implementation used.
-- Tests verify the registry, pipeline, budget, passage source, and win behavior.
+- Changing the scorer in configuration changes the implementation used.
+- Tests verify the check sequence, budget, passage source, and win behavior.
 - No API key is exposed in the browser.
 - The application works on a narrow mobile viewport.
 
@@ -1360,7 +1250,7 @@ Everything in this appendix is a **first draft to be tuned with the evaluation h
 
 ## A.1 Task definition shape
 
-Each file in `packages/shared/src/tasks` exports:
+Each task file (`shared/scoreV1.ts`, `scripts/generateV1.ts`) exports:
 
 ```ts
 export const task = {
@@ -1372,7 +1262,7 @@ export const task = {
 };
 ```
 
-The Worker rejects any `taskId` not present in the task registry. The client never sends prompt text.
+The Worker rejects any `taskId` not listed in `callableTasks` (`shared/runTask.ts`). The client never sends prompt text.
 
 ## A.2 `score-v1` — scoring task
 
@@ -1553,7 +1443,7 @@ The Worker parses the model output before caching and returns the typed result. 
 ## B.10 Milestone 3b decisions (2026-09-29)
 
 - The Anthropic adapter moved from the Worker into `packages/shared/src/providers` and is exposed as the `@unslop/shared/anthropic` subpath, so the Worker and the Node scripts share one provider implementation. The `Provider` interface and `ProviderError` are exported from the package root; the SDK-backed adapter is not, so the web bundle never pulls in the SDK.
-- `ProviderRequest.temperature` is optional. `score-v1` still pins 0; `generate-v1` omits it because Claude Sonnet 5.5 rejects non-default sampling parameters. `generate-v1` uses `claude-sonnet-5-5` with `max_tokens` 2048 to leave room for adaptive thinking, and is exported from the shared package but never registered in `callableTasks`.
+- `ProviderRequest.temperature` is optional. `score-v1` still pins 0; `generate-v1` also pins 0, so it uses `claude-haiku-4-5` (Claude 5 models reject non-default sampling parameters) with `max_tokens` 512, and is exported from the shared package but never registered in `callableTasks`.
 - Scripts keep a disk cache of parsed results under `scripts/.cache/results` (git-ignored) keyed exactly like the Worker's KV cache, so reruns while tuning are free until a task version is bumped. Raw Gutenberg and Wikipedia downloads are cached under `scripts/.cache/raw`.
 - `data/human_corpus.json` was built by `scripts/buildHumanCorpus.ts` on 2026-09-29: 5 paragraphs from each of 12 Gutenberg books (narrative, informal, explanatory, persuasive) plus the first in-range paragraph from 35 Wikipedia articles on everyday topics, 95 entries total. Selection is deterministic; each entry carries `source` and `register`. The builder sends a generic User-Agent with no personal contact details.
 - First harness run with the untouched Appendix A.2 prompt met both targets (bank ≥8: 100%, human ≥6: 2.1%), so `score-v1` stays at version 1 with no tuning.
@@ -1572,3 +1462,25 @@ The Worker parses the model output before caching and returns the typed result. 
 ## B.12 API base URL is an origin (2026-09-29)
 
 The first production deploy failed because `VITE_API_BASE_URL` was set to the Worker origin while the client expected origin plus `/api`. The client now treats the variable as an origin only and always posts to `<origin>/api/task`, stripping a trailing slash or a trailing `/api` if present. Empty means same origin, which the Vite proxy serves in development. This supersedes the base-URL wording in B.8 and B.9.
+
+## B.13 Flatter layout for human editing (2026-09-30)
+
+The structure prescribed by §5 and §8 had grown to 95 files in 4 packages, with lookup tables and interfaces that each had a single implementation. To make the code easier to edit by hand:
+
+- **One package.** A single root `package.json` and four top-level folders: `web/` (Vite app), `worker/` (Cloudflare Worker), `shared/` (task definitions, wire types, provider adapter) and `scripts/` (Node scripts). Folders import each other by relative path; the `@unslop/*` package names and the `@unslop/shared/anthropic` subpath are gone. The SDK stays out of the browser bundle because only `worker/index.ts` and `scripts/common.ts` import `shared/anthropic.ts`, and the web app imports only types from `shared/`. This supersedes the package layout in B.2 and the subpath export in B.10.
+- **Type environments.** The root `tsconfig.json` checks `shared/` and `worker/` against Workers types (no DOM, no Node); `web/tsconfig.json` (DOM) and `scripts/tsconfig.json` (Node) extend it. `pnpm typecheck` runs all three. One `vitest run` at the root runs every test; none needs a DOM.
+- **Selection by import, no registry.** `web/src/config.ts` imports the scorer and guardrails and lists them, so a misspelling is a type error. The id-based registry (`core/registry.ts`, `config/registry.ts`, `UnknownIdError`, `guardrailParams`) is removed, and `length-ratio` takes its bounds as an argument. This supersedes the original §8 and the registry parts of B.7.
+- **Removed single-option slots.** The `none` referee always approved, so wins are unchanged without it; `Referee`, `RefereeResult` and `CheckOutcome.referee` are gone until a real referee exists (§6.5). `PassageSource` became a `DrawPassage` function. `Scorer.id`, `EvalContext.puzzleId` and `EvalContext.checksUsed` were never read and are removed. The guardrail `local` flag stays because it decides the check order.
+- **One task runner.** `shared/runTask.ts` holds the validate, cache lookup, provider call, parse and cache store sequence that the Worker handler and `scripts/lib/runTask.ts` each implemented. Cache keys are unchanged (`task:<id>@<version>:<sha256>` in KV, `scripts/.cache/results/<id>@<version>/<sha256>.json` on disk) and pinned by a golden test, so existing caches stay valid; a cached harness run reproduced the B.10 figures exactly.
+- **Files.** The web app is eight flat files in `web/src`, with the engine in `game.ts`, the settings in `config.ts` and the whole UI in `App.tsx`. The Worker is `index.ts` (entry, routing, CORS) and `task.ts` (handler, KV cache, rate limit). Script helpers are in `scripts/common.ts`. Tests sit next to the file they test. 18 tests that only covered the removed plumbing were dropped and 2 cache-key tests added (143 to 127); folding the task client in below brought it to 126.
+- **Task client.** The browser's route to the Worker is one function, `callTask()`, in `web/src/scorers.ts` next to `llmBasic`, its only caller. It throws a plain `Error` with a player-safe message, because the app only ever showed the message and never read the error code, `retryable` flag, `version` or `cached`. This supersedes the `TaskClientError` part of B.9. `VITE_API_BASE_URL` handling (B.12) is unchanged.
+- **Deploy.** CI builds with `pnpm build`, publishes `web/dist`, bundles the Worker with `wrangler deploy --dry-run` on every run, and deploys with `--config worker/wrangler.toml` from the repo root. Cloudflare settings (Worker name, KV ids, secret) are unchanged. `worker/.dev.vars` sits next to `wrangler.toml`, where wrangler looks for it.
+- `@anthropic-ai/sdk` is pinned to `^0.129.0` instead of `latest`, so a lockfile refresh cannot silently upgrade it.
+
+## B.14 Scripts read the key from worker/.dev.vars (2026-09-30)
+
+`pnpm generate` and `pnpm harness` run tsx with `--env-file-if-exists=worker/.dev.vars`, so the scripts use the same git-ignored key file as the local Worker and nobody has to export or paste the key. A key already exported in the shell takes precedence, and a missing file is not an error. The flag needs Node 22.9 or newer, so `engines.node` is now `>=22.9` (CI uses Node 22). `pnpm corpus` makes no model calls and does not load the file.
+
+## B.15 generate-v1 lives in scripts (2026-09-30)
+
+`generateV1.ts` and its test moved from `shared/` to `scripts/`, because `scripts/generateBank.ts` is its only user; every file left in `shared/` is used by at least two of `web/`, `worker/` and `scripts/`. It stays a separate file rather than being merged into `generateBank.ts`, because that script runs on import and its tests could not load it. Since nothing in `worker/` or `shared/` imports from `scripts/`, the Worker can no longer serve `generate-v1` even by mistake; the test that checks `callableTasks` stays as a second guard. The task's id and version are unchanged, so cached generations stay valid. `countWords`, which existed in both `generateV1.ts` and `buildHumanCorpus.ts`, is now one function in `scripts/common.ts`; the web app keeps its own copy for the length-ratio guardrail.

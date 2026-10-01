@@ -4,25 +4,45 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.34.6",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   },
   "scripts": {
-    "build": "pnpm -r --if-present build",
-    "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:web": "vite web",
+    "dev:worker": "wrangler dev --config worker/wrangler.toml",
+    "build": "tsc -p web && vite build web",
+    "preview": "vite preview web",
+    "deploy:worker": "wrangler deploy --config worker/wrangler.toml",
+    "test": "vitest run",
+    "typecheck": "tsc && tsc -p web && tsc -p scripts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev:web": "pnpm --filter @unslop/web dev",
-    "dev:worker": "pnpm --filter @unslop/worker dev"
+    "corpus": "tsx scripts/buildHumanCorpus.ts",
+    "harness": "tsx --env-file-if-exists=worker/.dev.vars scripts/evalHarness.ts",
+    "generate": "tsx --env-file-if-exists=worker/.dev.vars scripts/generateBank.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
     "@eslint/js": "^9.17.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.17.0",
     "prettier": "^3.4.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.19.0",
-    "vitest": "^3.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

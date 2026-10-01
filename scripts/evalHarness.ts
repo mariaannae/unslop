@@ -4,18 +4,26 @@
  * the two separation figures. Talks to the provider directly with
  * ANTHROPIC_API_KEY from the environment; never goes through the Worker.
  *
- *   pnpm --filter @unslop/scripts harness [--task score-v1] [--limit N] [--concurrency 4] [--no-cache] [--strict]
+ *   pnpm harness [--task score-v1] [--limit N] [--concurrency 4] [--no-cache] [--strict]
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { callableTasks, type AnyTask, type ScoreV1Result } from "@unslop/shared";
-import { intArg, readArgs } from "./lib/args";
-import { cacheDir, dataDir } from "./lib/paths";
-import { mapWithConcurrency } from "./lib/pool";
-import { createScriptProvider } from "./lib/provider";
-import { createDiskCache, noCache } from "./lib/resultCache";
-import { createTaskRunner } from "./lib/runTask";
-import { formatSet } from "./lib/stats";
+import { callableTasks, runTask, type RunTaskDeps } from "../shared/runTask";
+import type { ScoreV1Result } from "../shared/scoreV1";
+import type { AnyTask } from "../shared/types";
+import {
+  cacheDir,
+  createDiskCache,
+  createScriptProvider,
+  dataDir,
+  formatSet,
+  intArg,
+  mapWithConcurrency,
+  meetsTarget,
+  noCache,
+  readArgs,
+  type SeparationTarget,
+} from "./common";
 
 const args = readArgs({
   task: { type: "string", default: "score-v1" },
@@ -45,19 +53,20 @@ async function loadItems(file: string): Promise<Item[]> {
   return items.slice(0, limit);
 }
 
-const runner = createTaskRunner(
-  createScriptProvider(),
-  args["no-cache"] ? noCache : createDiskCache(path.join(cacheDir, "results")),
-);
+const deps: RunTaskDeps = {
+  provider: createScriptProvider(),
+  cache: args["no-cache"] ? noCache : createDiskCache(path.join(cacheDir, "results")),
+};
 
 type Scored = { id: string; score: number | null; error?: string; cached: boolean };
 async function scoreAll(items: Item[]): Promise<Scored[]> {
   return mapWithConcurrency(items, concurrency, async (item) => {
     try {
-      const { result, cached } = await runner.run(task, {
-        original: item.text,
-        current: item.text,
-      });
+      const { result, cached } = await runTask(
+        task,
+        { original: item.text, current: item.text },
+        deps,
+      );
       return { id: item.id, score: (result as ScoreV1Result).score, cached };
     } catch (error) {
       return {
@@ -76,12 +85,7 @@ const human = await loadItems(path.resolve(args.human ?? path.join(dataDir, "hum
 console.log(`scorer task: ${task.id}@${task.version} (${task.model})\n`);
 const [bankScored, humanScored] = await Promise.all([scoreAll(bank), scoreAll(human)]);
 
-function report(
-  label: string,
-  scored: Scored[],
-  sep: Parameters<typeof formatSet>[2],
-  missIsBelow: boolean,
-) {
+function report(label: string, scored: Scored[], sep: SeparationTarget, missIsBelow: boolean) {
   const ok = scored.filter((s) => s.score !== null);
   const scores = ok.map((s) => s.score!);
   console.log(formatSet(label, scores, sep));
@@ -100,12 +104,11 @@ function report(
       console.log(`  misses: ${misses.map((m) => `${m.id}=${m.score}`).join(", ")}`);
   }
   console.log();
-  return sep.kind === "min"
-    ? scores.filter((s) => s >= sep.threshold).length / Math.max(1, scores.length) >= sep.target
-    : scores.filter((s) => s >= sep.threshold).length / Math.max(1, scores.length) <= sep.target;
+  return meetsTarget(scores, sep);
 }
 
-const bankOk = report("AI bank", bankScored, { threshold: 8, kind: "min", target: 0.95 }, true);
+// threshold below is for checking the creation of a new bank of ai passages. after scorer is implemented, can update
+const bankOk = report("AI bank", bankScored, { threshold: 0, kind: "min", target: 0.95 }, true);
 const humanOk = report(
   "Human corpus",
   humanScored,

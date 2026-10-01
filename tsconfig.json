@@ -1,0 +1,22 @@
+{
+  // Options shared by every folder. On its own this file type-checks shared/ and
+  // worker/ against the Workers runtime (no DOM, no Node), so shared code stays
+  // portable. web/ and scripts/ extend it with their own environment.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["shared", "worker"]
+}

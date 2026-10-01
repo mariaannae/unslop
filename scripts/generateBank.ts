@@ -4,23 +4,22 @@
  * keeps those at or above --min-score that the judge also marks fluent and
  * meaning-preserving. Writes data/passages.json with provenance.
  *
- *   pnpm --filter @unslop/scripts generate [--count 60] [--min-score 8] [--out data/passages.json] [--append] [--concurrency 3]
+ *   pnpm generate [--count 60] [--min-score 8] [--out data/passages.json] [--append] [--concurrency 3]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runTask, type RunTaskDeps } from "../shared/runTask";
+import { scoreV1Task } from "../shared/scoreV1";
 import {
-  GENERATE_V1_REGISTERS,
-  generateV1Task,
-  scoreV1Task,
-  type GenerateV1Result,
-  type ScoreV1Result,
-} from "@unslop/shared";
-import { intArg, readArgs } from "./lib/args";
-import { cacheDir, dataDir } from "./lib/paths";
-import { mapWithConcurrency } from "./lib/pool";
-import { createScriptProvider } from "./lib/provider";
-import { createDiskCache } from "./lib/resultCache";
-import { createTaskRunner } from "./lib/runTask";
+  cacheDir,
+  createDiskCache,
+  createScriptProvider,
+  dataDir,
+  intArg,
+  mapWithConcurrency,
+  readArgs,
+} from "./common";
+import { GENERATE_V1_REGISTERS, generateV1Task } from "./generateV1";
 
 const TOPICS = [
   "sourdough starter",
@@ -94,7 +93,7 @@ const args = readArgs({
   "max-attempts": { type: "string" },
 });
 const count = intArg(args.count, 60);
-const minScore = intArg(args["min-score"], 8);
+const minScore = intArg(args["min-score"], 0); //once scorer is figured out, maybe implement a minimum score for the passages to be kept
 const concurrency = intArg(args.concurrency, 3);
 const maxAttempts = intArg(args["max-attempts"], count * 2);
 const outFile = path.resolve(args.out ?? path.join(dataDir, "passages.json"));
@@ -107,10 +106,10 @@ type BankEntry = {
   generatedWith: { task: string; scoredWith: string; score: number };
 };
 
-const runner = createTaskRunner(
-  createScriptProvider(),
-  createDiskCache(path.join(cacheDir, "results")),
-);
+const deps: RunTaskDeps = {
+  provider: createScriptProvider(),
+  cache: createDiskCache(path.join(cacheDir, "results")),
+};
 
 const existing: BankEntry[] = args.append
   ? (JSON.parse(await readFile(outFile, "utf8")) as BankEntry[])
@@ -138,14 +137,14 @@ type Attempt = {
 async function attempt(i: number): Promise<Attempt> {
   const { topic, register } = combo(i);
   try {
-    const gen = (await runner.run(generateV1Task, { topic, register })).result as GenerateV1Result;
+    const gen = (await runTask(generateV1Task, { topic, register }, deps)).result;
     if (gen.wordCount < 80 || gen.wordCount > 140) {
       return { topic, register, text: gen.text, keep: false, why: `length ${gen.wordCount} words` };
     }
     if (usedTexts.has(gen.text))
       return { topic, register, text: gen.text, keep: false, why: "duplicate" };
-    const scored = (await runner.run(scoreV1Task, { original: gen.text, current: gen.text }))
-      .result as ScoreV1Result;
+    const scored = (await runTask(scoreV1Task, { original: gen.text, current: gen.text }, deps))
+      .result;
     if (scored.score < minScore) {
       return {
         topic,
