@@ -38,9 +38,18 @@ describe("generate-v1", () => {
       expect(request.messages).toEqual(haiku.messages);
     }
     expect(createGenerateV1Task("claude-opus-4-6").buildRequest(payload).temperature).toBe(0);
+    expect(createGenerateV1Task("claude-opus-5").buildRequest(payload).temperature).toBeUndefined();
     expect(
       createGenerateV1Task("claude-sonnet-5-5").buildRequest(payload).temperature,
     ).toBeUndefined();
+    expect(createGenerateV1Task("gpt-4o").buildRequest(payload).temperature).toBe(0);
+    expect(createGenerateV1Task("gpt-5.6-sol").buildRequest(payload).temperature).toBeUndefined();
+  });
+
+  it("calls GPT models through OpenAI and Claude models through Anthropic", () => {
+    for (const [model, settings] of Object.entries(GENERATE_V1_MODELS)) {
+      expect(settings.provider).toBe(model.startsWith("gpt-") ? "openai" : "anthropic");
+    }
   });
 
   it("parses plain text, strips fences and quotes, and collapses newlines", () => {

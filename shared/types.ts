@@ -1,8 +1,9 @@
 /**
  * The task and provider contract shared by the Worker and the Node scripts.
  *
- * A task definition produces a provider-neutral request; only the provider
- * adapter (anthropic.ts) translates it into a concrete API call.
+ * A task definition produces a provider-neutral request; only a provider
+ * adapter (anthropic.ts, or the scripts' OpenAI adapter in scripts/common.ts)
+ * translates it into a concrete API call.
  */
 export type ProviderMessage = {
   role: "user" | "assistant";
@@ -15,7 +16,7 @@ export type ProviderRequest = {
   system: string;
   messages: ProviderMessage[];
   maxTokens: number;
-  /** Omit for models that reject non-default sampling (Claude Sonnet 5.5 and newer). */
+  /** Omit for models that reject non-default sampling (Claude Sonnet 5.5 and newer, GPT-5). */
   temperature?: number;
   /** JSON Schema the provider should constrain its output to, when it supports that. */
   outputSchema?: Record<string, unknown>;

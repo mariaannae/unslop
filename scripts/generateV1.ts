@@ -1,5 +1,5 @@
 import { TaskError, type ProviderRequest, type TaskDefinition } from "../shared/types";
-import { countWords } from "./common";
+import { countWords, type ProviderName } from "./common";
 
 /**
  * `generate-v1` — passage generation for the bank (SPEC Appendix A.3).
@@ -12,20 +12,29 @@ import { countWords } from "./common";
  */
 
 /**
- * Models `generate-v1` can run on. Every model gets the same prompt. Models that
- * accept a sampling temperature run at 0. The Claude 5.5 models reject one, so
- * they run at their default; they also think before answering, and thinking
- * tokens count against max_tokens, so they get more room.
+ * Models `generate-v1` can run on, and the provider each one is called through.
+ * Every model gets the same prompt. Models that accept a sampling temperature run
+ * at 0. Opus 5, the Claude 5.5 models and the GPT-5 models reject one, so they
+ * run at their default; they also think before answering, and thinking tokens
+ * count against max_tokens, so they get more room.
  */
 export const GENERATE_V1_MODELS = {
-  "claude-haiku-4-5": { temperature: 0, maxTokens: 512 },
-  "claude-sonnet-4-6": { temperature: 0, maxTokens: 512 },
-  "claude-opus-4-6": { temperature: 0, maxTokens: 512 },
-  "claude-sonnet-5-5": { maxTokens: 16000 },
-  "claude-opus-5-5": { maxTokens: 16000 },
+  "claude-haiku-4-5": { provider: "anthropic", temperature: 0, maxTokens: 512 },
+  "claude-sonnet-4-6": { provider: "anthropic", temperature: 0, maxTokens: 512 },
+  "claude-opus-4-6": { provider: "anthropic", temperature: 0, maxTokens: 512 },
+  "claude-opus-5": { provider: "anthropic", maxTokens: 16000 },
+  "claude-sonnet-5-5": { provider: "anthropic", maxTokens: 16000 },
+  "claude-opus-5-5": { provider: "anthropic", maxTokens: 16000 },
+  "gpt-3.5-turbo": { provider: "openai", temperature: 0, maxTokens: 512 },
+  "gpt-4": { provider: "openai", temperature: 0, maxTokens: 512 },
+  "gpt-4o": { provider: "openai", temperature: 0, maxTokens: 512 },
+  "gpt-5": { provider: "openai", maxTokens: 16000 },
+  "gpt-5.6-luna": { provider: "openai", maxTokens: 16000 },
+  "gpt-5.6-terra": { provider: "openai", maxTokens: 16000 },
+  "gpt-5.6-sol": { provider: "openai", maxTokens: 16000 },
 } as const satisfies Record<string, GenerationSettings>;
 
-type GenerationSettings = { temperature?: number; maxTokens: number };
+type GenerationSettings = { provider: ProviderName; temperature?: number; maxTokens: number };
 
 export type GenerationModel = keyof typeof GENERATE_V1_MODELS;
 

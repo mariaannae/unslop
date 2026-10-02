@@ -21,7 +21,7 @@ import {
   readArgs,
 } from "./common";
 import { generationModel } from "../web/src/config";
-import { createGenerateV1Task, GENERATE_V1_REGISTERS } from "./generateV1";
+import { createGenerateV1Task, GENERATE_V1_MODELS, GENERATE_V1_REGISTERS } from "./generateV1";
 
 const TOPICS = [
   "sourdough starter",
@@ -109,14 +109,14 @@ type BankEntry = {
 };
 
 const generateV1Task = createGenerateV1Task(generationModel);
-const provider = createScriptProvider();
+// Scoring is always score-v1 on Claude; generation goes to the model's own provider.
 const scoreDeps: RunTaskDeps = {
-  provider,
+  provider: createScriptProvider("anthropic"),
   cache: createDiskCache(path.join(cacheDir, "results")),
 };
 // generate-v1's cache key doesn't name the model, so each model gets its own cache.
 const generateDeps: RunTaskDeps = {
-  provider,
+  provider: createScriptProvider(GENERATE_V1_MODELS[generationModel].provider),
   cache: createDiskCache(path.join(cacheDir, "generations", generationModel)),
 };
 

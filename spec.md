@@ -1555,3 +1555,33 @@ From 200 words up, every tell applies, so the scorer still works as jevslop does
 - The recap-conclusion question still refers to "the last paragraph". On one-paragraph passages, Jev answers it about the ending, and it is one of the strongest tells there, so it was kept.
 - On the Haiku bank and the human corpus, the mean bank score rose from 1.6 to 1.9, and separation (AUC) went from 0.89 to 0.90. At the unchanged 1.5 threshold, 33% of bank passages score as won before any edit (50% under version 2), and 92% of human texts score at or below 1.5 (97% before). jevslop's 225-word slop sample keeps every tell and still scores 5.4.
 
+## B.22 `generate-v1` without register: tried and reverted (2026-10-01)
+
+As a trial, the generator no longer asks for a register. The prompt gives only the topic: "Write one paragraph of 90–130 words about: <topic>", followed by the formatting rules. The code that sent a register is commented out, not deleted, in `scripts/generateV1.ts`, `scripts/generateBank.ts` and `scripts/generateV1.test.ts`, so it can be restored. `GENERATE_V1_REGISTERS` is kept but unused. `generate-v1` is now version 4 (version 3 sent a register), and new bank entries have no `register` field.
+
+- Attempt i still uses topic i of the 60. Without the rotating register, a retry of a topic sends the same request and gets the same cached passage back, which is rejected as a duplicate. If any of the first 60 candidates is rejected, the run ends with fewer than 60 passages.
+- **Reverted the same day.** A Haiku 4.5 bank generated without a register was harder for both judges to catch. Compared with the bank that used registers:
+  - score-jev: separation (AUC) fell from 0.90 to 0.84, and passages won before any edit (≤ 1.5) rose from 20 to 37 of 60.
+  - score-v1: AUC fell from 0.78 to 0.73, and passages won before any edit (≤ 2) rose from 0 to 10 of 60.
+
+  Without a register, Haiku wrote neutral, encyclopedic prose that resembles the Wikipedia half of the human corpus. The marketing-style registers were where most of the tells came from. The register code is restored as it was, and `generate-v1` is back at version 3, the same prompt as before, so its cached generations still apply.
+
+## B.23 OpenAI models for `generate-v1` (2026-10-01)
+
+`pnpm generate` can now write the bank with OpenAI models as well as Claude. Each entry in `GENERATE_V1_MODELS` names its provider, and `scripts/generateBank.ts` creates the generation provider from it. Scoring is unchanged: candidates are still scored with `score-v1` on Claude, so a GPT run needs both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` in `worker/.dev.vars`. The prompt and parser are the same for every model, so `generate-v1` stays at version 3, and GPT generations are cached per model like Claude's (B.16).
+
+| Model | Temperature | max_completion_tokens | Notes |
+| --- | --- | --- | --- |
+| `gpt-3.5-turbo` | 0 | 512 | Legacy. OpenAI shuts it down on 2026-10-23. |
+| `gpt-4` | 0 | 512 | Legacy. OpenAI shuts it down on 2026-10-23. |
+| `gpt-4o` | 0 | 512 | |
+| `gpt-5` | default | 16000 | Reasoning model; rejects temperature. Its snapshot shuts down on 2026-12-11. |
+| `gpt-5.6-luna` | default | 16000 | GPT-5.6, cheapest of the three. |
+| `gpt-5.6-terra` | default | 16000 | GPT-5.6, balanced. |
+| `gpt-5.6-sol` | default | 16000 | GPT-5.6 flagship; reasoning effort defaults to `medium`. |
+
+- The user asked for "gpt-5.6". OpenAI has no plain `gpt-5.6` model id, only the three variants above, so all three are options.
+- Reasoning effort is left at each model's default, as with the Claude thinking models (B.16). Reasoning tokens count against `max_completion_tokens`, hence 16000.
+- The adapter, `createOpenAIProvider` in `scripts/common.ts`, calls Chat Completions, because it serves all seven models. It sends `system` as a system message, maps `maxTokens` to `max_completion_tokens`, and fails an attempt on a refusal, a content filter or truncation, as the Anthropic adapter does. It lives in `scripts/` rather than `shared/`, because the Worker never calls OpenAI (B.15). The `openai` SDK is a dev dependency for the same reason.
+- Passages already generated with `gpt-4` or `gpt-3.5-turbo` stay usable after the shutdown, because they are cached on disk and recorded in the bank.
+

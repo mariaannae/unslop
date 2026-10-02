@@ -34,13 +34,23 @@ export const gameConfig: GameConfig = {
 
 /**
  * Model that `pnpm generate` writes the passage bank with. The prompt is the same
- * for every model; each option's temperature is in GENERATE_V1_MODELS
- * (scripts/generateV1.ts). The game itself never reads this.
+ * for every model; each option's provider and temperature are in
+ * GENERATE_V1_MODELS (scripts/generateV1.ts). The game itself never reads this.
+ * GPT models need OPENAI_API_KEY in worker/.dev.vars, as well as ANTHROPIC_API_KEY
+ * for scoring.
  *
  *   "claude-haiku-4-5"    smallest and fastest, temperature 0
  *   "claude-sonnet-4-6"   mid-size, previous generation, temperature 0
  *   "claude-opus-4-6"     largest, previous generation, temperature 0
+ *   "claude-opus-5"       previous Opus, default temperature, thinks first
  *   "claude-sonnet-5-5"   current Sonnet, default temperature, thinks first
  *   "claude-opus-5-5"     current Opus, default temperature, thinks first
+ *   "gpt-3.5-turbo"       legacy, temperature 0; OpenAI shuts it down 2026-10-23
+ *   "gpt-4"               legacy, temperature 0; OpenAI shuts it down 2026-10-23
+ *   "gpt-4o"              temperature 0
+ *   "gpt-5"               previous GPT-5, default temperature, thinks first
+ *   "gpt-5.6-luna"        GPT-5.6, cheapest, default temperature, thinks first
+ *   "gpt-5.6-terra"       GPT-5.6, balanced, default temperature, thinks first
+ *   "gpt-5.6-sol"         GPT-5.6 flagship, default temperature, thinks first
  */
-export const generationModel: GenerationModel = "claude-haiku-4-5";
+export const generationModel: GenerationModel = "gpt-4o";

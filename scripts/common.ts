@@ -6,9 +6,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, type ParseArgsConfig } from "node:util";
+import OpenAI from "openai";
 import { createAnthropicProvider } from "../shared/anthropic";
 import type { TaskCache } from "../shared/runTask";
-import type { Provider } from "../shared/types";
+import { ProviderError, type Provider, type ProviderResponse } from "../shared/types";
 
 // ---------------------------------------------------------------------------
 // Flags, paths, and text
@@ -33,19 +34,72 @@ export function countWords(text: string): number {
 // ---------------------------------------------------------------------------
 // Provider and cache
 
+export type ProviderName = "anthropic" | "openai";
+
 /**
  * Scripts talk to the provider directly. `pnpm generate` and `pnpm harness` load
  * the key from worker/.dev.vars (the Worker's git-ignored secrets file); a key
  * exported in the shell takes precedence.
  */
-export function createScriptProvider(): Provider {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+export function createScriptProvider(name: ProviderName = "anthropic"): Provider {
+  const keyName = name === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+  const apiKey = process.env[keyName];
   if (!apiKey) {
     throw new Error(
-      "ANTHROPIC_API_KEY is not set. Put it in worker/.dev.vars (git-ignored) or export it in your shell, and rerun.",
+      `${keyName} is not set. Put it in worker/.dev.vars (git-ignored) or export it in your shell, and rerun.`,
     );
   }
-  return createAnthropicProvider(apiKey);
+  return name === "openai" ? createOpenAIProvider(apiKey) : createAnthropicProvider(apiKey);
+}
+
+/**
+ * OpenAI Chat Completions adapter, the counterpart of shared/anthropic.ts. Only
+ * `pnpm generate` uses it (for the GPT models in GENERATE_V1_MODELS), so it
+ * lives here rather than in shared/ (spec B.23). `outputSchema` is not sent.
+ */
+export function createOpenAIProvider(apiKey: string): Provider {
+  const client = new OpenAI({ apiKey, maxRetries: 2 });
+
+  return {
+    async complete(request): Promise<ProviderResponse> {
+      let completion: OpenAI.ChatCompletion;
+      try {
+        completion = await client.chat.completions.create({
+          model: request.model,
+          // Includes reasoning tokens on the GPT-5 models, like max_tokens with Claude thinking.
+          max_completion_tokens: request.maxTokens,
+          ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+          messages: [{ role: "system", content: request.system }, ...request.messages],
+        });
+      } catch (error) {
+        if (error instanceof OpenAI.APIError) {
+          throw new ProviderError(
+            `OpenAI API error ${error.status}: ${error.message}`,
+            error.status,
+          );
+        }
+        throw new ProviderError(error instanceof Error ? error.message : String(error));
+      }
+
+      const choice = completion.choices[0];
+      if (!choice) throw new ProviderError("provider returned no choices");
+      if (choice.message.refusal || choice.finish_reason === "content_filter") {
+        throw new ProviderError("provider refused the request");
+      }
+      if (choice.finish_reason === "length") {
+        throw new ProviderError("provider output was truncated (max_completion_tokens)");
+      }
+
+      return {
+        text: choice.message.content ?? "",
+        stopReason: choice.finish_reason,
+        usage: completion.usage && {
+          inputTokens: completion.usage.prompt_tokens,
+          outputTokens: completion.usage.completion_tokens,
+        },
+      };
+    },
+  };
 }
 
 /**
