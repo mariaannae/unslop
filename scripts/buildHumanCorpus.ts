@@ -1,11 +1,12 @@
 /**
- * Builds data/human_corpus.json (SPEC Appendix A.4): ~100 human-written paragraphs
- * of 90–130 words from public-domain Project Gutenberg books and CC BY-SA
- * Wikipedia articles, each with a `source` attribution. Deterministic: the same
- * inputs always select the same paragraphs. Raw downloads are cached under
- * scripts/.cache/raw so reruns are offline.
+ * Builds data/human_corpus.json (SPEC Appendix A.4): human-written paragraphs of
+ * 90–130 words from public-domain Project Gutenberg books, CC BY-SA Wikipedia
+ * articles, and, for modern prose, CC BY-SA Stack Exchange answers and Wikivoyage
+ * pages written before CUTOFF (spec B.24). Each has a `source` attribution.
+ * Deterministic: the same inputs always select the same paragraphs. Raw downloads
+ * are cached under scripts/.cache/raw so reruns are offline.
  *
- *   pnpm corpus [--per-book 5] [--out data/human_corpus.json]
+ *   pnpm corpus [--per-book 5] [--per-site 8] [--out data/human_corpus.json]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -102,11 +103,78 @@ const WIKIPEDIA_TITLES = [
   "Doormat",
 ];
 
+/**
+ * ChatGPT's public release. Modern sources are taken only from text written and
+ * last edited before this, so no AI-written prose gets into the human corpus.
+ */
+const CUTOFF = "2022-11-30T00:00:00Z";
+
+/** Stack Exchange sites close to the bank's everyday topics. */
+const STACK_EXCHANGE_SITES = [
+  "cooking",
+  "travel",
+  "diy",
+  "outdoors",
+  "bicycles",
+  "gardening",
+  "pets",
+  "parenting",
+];
+
+/** Destinations and travel topics, the human counterpart of the bank's travel descriptions. */
+const WIKIVOYAGE_TITLES = [
+  "Lisbon",
+  "Kyoto",
+  "Edinburgh",
+  "Prague",
+  "Vienna",
+  "Copenhagen",
+  "Amsterdam",
+  "Seville",
+  "Bruges",
+  "Hanoi",
+  "Oaxaca (city)",
+  "Quebec City",
+  "Savannah",
+  "Santa Fe (New Mexico)",
+  "Portland (Oregon)",
+  "Wellington",
+  "Hobart",
+  "Valparaíso",
+  "Cuzco",
+  "Marrakech",
+  "Istanbul",
+  "Tallinn",
+  "Ljubljana",
+  "Galway",
+  "York",
+  "Bath",
+  "Kraków",
+  "Porto",
+  "Lucerne",
+  "Chiang Mai",
+  "Hiking",
+  "Camping",
+  "Cycling",
+  "Rail travel in Europe",
+  "Packing list",
+  "Travelling with children",
+  "Hitchhiking",
+  "Budget travel",
+  "Tips for road trips",
+  "Winter driving",
+  "Food and drink",
+  "Beaches",
+  "Street food",
+];
+
 const args = readArgs({
   "per-book": { type: "string" },
+  "per-site": { type: "string" },
   out: { type: "string" },
 });
 const perBook = intArg(args["per-book"], 5);
+const perSite = intArg(args["per-site"], 8);
 const outFile = path.resolve(args.out ?? path.join(dataDir, "human_corpus.json"));
 
 async function fetchCached(name: string, url: string): Promise<string> {
@@ -149,9 +217,65 @@ function paragraphs(text: string): string[] {
     .filter((p) => p.length > 0);
 }
 
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+  lsquo: "‘",
+  rsquo: "’",
+  ldquo: "“",
+  rdquo: "”",
+};
+
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+    if (name[0] === "#") {
+      const code =
+        name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : +name.slice(1);
+      return String.fromCodePoint(code);
+    }
+    return ENTITIES[name.toLowerCase()] ?? entity;
+  });
+}
+
+/**
+ * The top-level <p> paragraphs of an HTML page as plain text. Quotes, code,
+ * lists and tables are dropped, as are paragraphs with inline code or a
+ * Wikivoyage listing (address and phone details).
+ */
+function htmlParagraphs(html: string): string[] {
+  const body = html
+    .replace(/<(blockquote|pre|ul|ol|table|style|sup)\b[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  return [...body.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((m) => m[1]!)
+    .filter((p) => !/<code\b|class="[^"]*vcard/i.test(p))
+    .map((p) =>
+      decodeEntities(p.replace(/<[^>]+>/g, ""))
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((p) => p.length > 0);
+}
+
 function inRange(paragraph: string): boolean {
   const n = countWords(paragraph);
   return n >= MIN_WORDS && n <= MAX_WORDS;
+}
+
+/**
+ * At least two sentences. Used for the modern sources only, where a single
+ * "sentence" in range is usually a list run together (a timetable, say); the
+ * older sources were selected without it and keep their paragraphs.
+ */
+function hasSeveralSentences(paragraph: string): boolean {
+  return /[.!?]["”')]*\s+["“(]*[A-Z0-9]/.test(paragraph);
 }
 
 /** Picks `count` items spread evenly through the list. */
@@ -213,7 +337,112 @@ async function fromWikipedia(): Promise<Entry[]> {
   return out;
 }
 
-const entries = [...(await fromGutenberg()), ...(await fromWikipedia())].map((e, i) => ({
+type StackExchangeAnswer = {
+  answer_id: number;
+  question_id: number;
+  creation_date: number;
+  last_edit_date?: number;
+  content_license: string;
+  owner: { display_name?: string };
+  body: string;
+};
+
+/**
+ * The top-voted answers on each site written and last edited before CUTOFF, one
+ * paragraph per question: the answer's first prose paragraph in range.
+ */
+async function fromStackExchange(): Promise<Entry[]> {
+  const cutoff = Date.parse(CUTOFF) / 1000;
+  const out: Entry[] = [];
+  for (const site of STACK_EXCHANGE_SITES) {
+    const url =
+      `https://api.stackexchange.com/2.3/answers?order=desc&sort=votes&site=${site}` +
+      `&filter=withbody&pagesize=100&todate=${cutoff}`;
+    const raw = await fetchCached(`stackexchange-${site}.json`, url);
+    const answers = (JSON.parse(raw) as { items: StackExchangeAnswer[] }).items;
+    const seen = new Set<number>();
+    let kept = 0;
+    for (const answer of answers) {
+      if (kept >= perSite) break;
+      if ((answer.last_edit_date ?? answer.creation_date) >= cutoff) continue;
+      if (seen.has(answer.question_id)) continue;
+      const text = htmlParagraphs(answer.body)
+        .filter(inRange)
+        .filter(looksLikeProse)
+        .filter(hasSeveralSentences)[0];
+      if (!text) continue;
+      seen.add(answer.question_id);
+      kept++;
+      const author = decodeEntities(answer.owner.display_name ?? "an anonymous user");
+      out.push({
+        id: "",
+        text,
+        source: `Stack Exchange (${site}), answer by ${author}, ${answer.content_license}, https://${site}.stackexchange.com/a/${answer.answer_id}`,
+        register: "informal",
+      });
+    }
+    console.error(`Stack Exchange ${site}: ${answers.length} answers, kept ${kept}`);
+  }
+  return out;
+}
+
+/**
+ * One paragraph per page from its last revision before CUTOFF. The middle
+ * candidate rather than the first: a destination's first long paragraph is
+ * usually its history, which reads like Wikipedia, not like a travel guide.
+ */
+async function fromWikivoyage(): Promise<Entry[]> {
+  const api = "https://en.wikivoyage.org/w/api.php?format=json&formatversion=2";
+  const out: Entry[] = [];
+  for (const title of WIKIVOYAGE_TITLES) {
+    const slug = title.replace(/\W+/g, "_");
+    const revRaw = await fetchCached(
+      `wikivoyage-rev-${slug}.json`,
+      `${api}&action=query&prop=revisions&rvlimit=1&rvdir=older&rvprop=ids%7Ctimestamp` +
+        `&rvstart=${CUTOFF}&redirects=1&titles=${encodeURIComponent(title)}`,
+    );
+    const page = (
+      JSON.parse(revRaw) as {
+        query: { pages: Array<{ revisions?: Array<{ revid: number; timestamp: string }> }> };
+      }
+    ).query.pages[0];
+    const rev = page?.revisions?.[0];
+    if (!rev) {
+      console.error(`Wikivoyage "${title}": no revision before ${CUTOFF}, skipped`);
+      continue;
+    }
+    const parsed = await fetchCached(
+      `wikivoyage-${slug}-${rev.revid}.json`,
+      `${api}&action=parse&prop=text&disablelimitreport=1&disableeditsection=1&oldid=${rev.revid}`,
+    );
+    const html = (JSON.parse(parsed) as { parse: { text: string } }).parse.text;
+    const candidates = htmlParagraphs(html)
+      .filter(inRange)
+      .filter(looksLikeProse)
+      .filter(hasSeveralSentences);
+    const text = spread(candidates, 1)[0];
+    if (!text) {
+      console.error(`Wikivoyage "${title}": no paragraph in range, skipped`);
+      continue;
+    }
+    out.push({
+      id: "",
+      text,
+      // Wikimedia text was licensed CC BY-SA 3.0 until mid-2023.
+      source: `Wikivoyage, "${title}" (revision of ${rev.timestamp.slice(0, 10)}), CC BY-SA 3.0, https://en.wikivoyage.org/w/index.php?oldid=${rev.revid}`,
+      register: "informal",
+    });
+  }
+  return out;
+}
+
+// New sources go last so the existing entries keep their ids.
+const entries = [
+  ...(await fromGutenberg()),
+  ...(await fromWikipedia()),
+  ...(await fromStackExchange()),
+  ...(await fromWikivoyage()),
+].map((e, i) => ({
   ...e,
   id: `h${String(i + 1).padStart(4, "0")}`,
 }));

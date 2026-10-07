@@ -20,7 +20,6 @@ import { countWords, type ProviderName } from "./common";
  */
 export const GENERATE_V1_MODELS = {
   "claude-haiku-4-5": { provider: "anthropic", temperature: 0, maxTokens: 512 },
-  "claude-sonnet-4-6": { provider: "anthropic", temperature: 0, maxTokens: 512 },
   "claude-opus-4-6": { provider: "anthropic", temperature: 0, maxTokens: 512 },
   "claude-opus-5": { provider: "anthropic", maxTokens: 16000 },
   "claude-sonnet-5-5": { provider: "anthropic", maxTokens: 16000 },
@@ -29,7 +28,6 @@ export const GENERATE_V1_MODELS = {
   "gpt-4": { provider: "openai", temperature: 0, maxTokens: 512 },
   "gpt-4o": { provider: "openai", temperature: 0, maxTokens: 512 },
   "gpt-5": { provider: "openai", maxTokens: 16000 },
-  "gpt-5.6-luna": { provider: "openai", maxTokens: 16000 },
   "gpt-5.6-terra": { provider: "openai", maxTokens: 16000 },
   "gpt-5.6-sol": { provider: "openai", maxTokens: 16000 },
 } as const satisfies Record<string, GenerationSettings>;

@@ -7,7 +7,15 @@ const P1 = "My starter smells like beer, and I still do not trust it to raise a 
 const P2 = "The second rise took nine hours because the kitchen sat at sixty degrees.";
 /** One paragraph of 208 words: over the 200-word line for the long-form tells. */
 const LONG = Array(13).fill(P1).join(" ");
-const LONG_FORM = ["fence_sitting", "reasons_list", "bold_labels", "emoji_bullets"];
+const LONG_FORM = [
+  "fence_sitting",
+  "reasons_list",
+  "bold_labels",
+  "emoji_bullets",
+  "vague_attribution",
+  "rhetorical_qa",
+  "chatbot_residue",
+];
 
 /**
  * Replaces fetch with a fake Jev that answers every noul with `noul(id, state)`
@@ -98,9 +106,9 @@ describe("score-jev", () => {
     expect(bodies[0].state).toEqual({ text: current });
     expect(bodies[0].questions.gut_check.type).toBe("score");
     expect(bodies[0].questions.gut_check.criteria).toHaveLength(4);
-    expect(bodies[0].questions.chatbot_residue.criteria.true).toMatch(/assistant-to-user/);
+    expect(bodies[0].questions.promotional_tone.criteria.true).toMatch(/marketing copy/);
     expect(bodies.slice(1).map((b) => b.state)).toEqual([{ paragraph: P1 }, { paragraph: P2 }]);
-    expect(Object.keys(bodies[1].questions)).toHaveLength(8);
+    expect(Object.keys(bodies[1].questions)).toHaveLength(7);
   });
 
   it("scores 0 when Jev finds nothing", async () => {
@@ -113,10 +121,10 @@ describe("score-jev", () => {
       () => 1,
       (id) => (id === "no_voice" ? 2 : 3),
     );
-    // Short text, so no long-form tells. Jev weights 5 + 2.6 + 8.8 at strength 1; stock
-    // vocabulary and em dash (weight 2.2) at 0: 16.4 / 18.6.
+    // Short text, so no long-form tells. Jev weights 4 + 4.6 + 8 at strength 1; stock
+    // vocabulary and em dash (weight 2.2) at 0: 16.6 / 18.8.
     const result = await scoreText(P1);
-    expect(result.composite).toBe(88.2);
+    expect(result.composite).toBe(88.3);
     expect(result.score).toBe(8.8);
     expect(result.tells).toHaveLength(14);
   });
@@ -127,31 +135,36 @@ describe("score-jev", () => {
     const long = await scoreText(LONG);
 
     const asked = fetch.mock.calls.map(([, i]) => JSON.parse(i!.body as string).questions);
-    expect(asked[0]).not.toHaveProperty("reasons_list");
-    expect(asked[0]).not.toHaveProperty("fence_sitting");
-    expect(asked[2]).toHaveProperty("reasons_list");
-    expect(asked[2]).toHaveProperty("fence_sitting");
+    // Requests: short text, its paragraph, long text, its paragraph.
+    for (const id of ["reasons_list", "fence_sitting", "chatbot_residue"]) {
+      expect(asked[0]).not.toHaveProperty(id);
+      expect(asked[2]).toHaveProperty(id);
+    }
+    for (const id of ["vague_attribution", "rhetorical_qa"]) {
+      expect(asked[1]).not.toHaveProperty(id);
+      expect(asked[3]).toHaveProperty(id);
+    }
     const strengths = (r: typeof short) =>
       LONG_FORM.map((id) => r.breakdown.find((t) => t.id === id)!.strength);
-    expect(strengths(short)).toEqual([null, null, null, null]);
-    expect(strengths(long)).toEqual([1, 1, 0, 0]);
+    expect(strengths(short)).toEqual([null, null, null, null, null, null, null]);
+    expect(strengths(long)).toEqual([1, 1, 0, 0, 1, 1, 1]);
   });
 
-  it("scores a paragraph tell as the share of paragraphs that show it", async () => {
+  it("scores a paragraph tell as Jev's probability averaged over the paragraphs", async () => {
     stubJev((id, state) => (id === "contrast_reframe" && state.paragraph === P1 ? 0.9 : 0));
     const result = await scoreText(`${P1}\n\n${P2}`);
-    expect(result.breakdown.find((t) => t.id === "contrast_reframe")!.strength).toBe(0.5);
+    expect(result.breakdown.find((t) => t.id === "contrast_reframe")!.strength).toBeCloseTo(0.45);
   });
 
   it("lists tells at strength 0.5 or more, strongest first", async () => {
     stubJev(
-      (id) => ({ chatbot_residue: 0.9, generic_filler: 0.6 })[id] ?? 0.2,
+      (id) => ({ promotional_tone: 0.9, generic_filler: 0.6 })[id] ?? 0.2,
       (id) => (id === "gut_check" ? 3 : 1),
     );
     expect((await scoreText(P1)).tells).toEqual([
       { label: "Jev's overall impression" },
+      { label: "Brochure tone" },
       { label: "Generic filler" },
-      { label: "Chatbot residue" },
       { label: "Absent personal voice" },
     ]);
   });

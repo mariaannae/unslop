@@ -1353,7 +1353,7 @@ The runtime `Passage` type ignores `generatedWith`; it is provenance for the har
 
 ## A.4 Human corpus sourcing rules
 
-`data/human_corpus.json` is a list of `{ id, text, source }` entries, 90–130 words each, roughly 100 entries. Use only:
+`data/human_corpus.json` is a list of `{ id, text, source }` entries, 90–130 words each, roughly 100 entries (198 since B.24). Use only:
 
 - public-domain prose (Project Gutenberg excerpts),
 - CC-BY-SA text with attribution in the `source` field (for example, Wikipedia paragraphs),
@@ -1585,3 +1585,157 @@ As a trial, the generator no longer asks for a register. The prompt gives only t
 - The adapter, `createOpenAIProvider` in `scripts/common.ts`, calls Chat Completions, because it serves all seven models. It sends `system` as a system message, maps `maxTokens` to `max_completion_tokens`, and fails an attempt on a refusal, a content filter or truncation, as the Anthropic adapter does. It lives in `scripts/` rather than `shared/`, because the Worker never calls OpenAI (B.15). The `openai` SDK is a dev dependency for the same reason.
 - Passages already generated with `gpt-4` or `gpt-3.5-turbo` stay usable after the shutdown, because they are cached on disk and recorded in the bank.
 
+## B.24 Larger evaluation set, split for tuning and checking (2026-10-07)
+
+To measure `score-jev`'s accuracy on text it was not tuned on, the harness has more AI and human texts, and a split that holds part of them back. Nothing in the game changes.
+
+- **Human corpus:** 198 entries, up from 95. Entries `h0001`–`h0095` are unchanged, and the new ones follow them.
+  - 62 Stack Exchange answers from 8 sites: cooking, travel, diy, outdoors, bicycles, gardening, pets and parenting. These are top-voted answers, one paragraph per question; diy yielded 6, the others 8. `source` records each answer's link, author and license as the API reports it.
+  - 41 Wikivoyage pages from 43 titles. "Galway" and "Tips for road trips" have no paragraph in range. Each paragraph comes from the page's last revision before the cutoff, credited as CC BY-SA 3.0, Wikimedia's license until mid-2023. The builder takes the middle eligible paragraph, not the first, because a destination's first long paragraph is usually its history, which reads like Wikipedia rather than a travel guide.
+  - Both sources are modern prose written and last edited before 30 Nov 2022 (ChatGPT's release), so none of it is AI-written. Both are labelled `informal`.
+  - The new sources also need at least two sentences. This rule drops lists run together into one sentence, such as a page's bus timetable. The older sources keep their rules, so their paragraphs do not change.
+- **AI evaluation set:** `data/ai_eval.json` holds 180 passages, three banks generated with `generate-v1@3`: gpt-4o (the current `passages.json`, commit `116588a`), Haiku 4.5 (`539fe6e`) and gpt-4. Ids are prefixed with the model. The game bank is unchanged.
+  - The gpt-4 bank was generated for this set on 2026-10-07, with `generationModel` set to `"gpt-4"` for the run and then put back to `"gpt-4o"`. All 60 were kept (3 attempts were rejected for length) and cover 57 topics, because retried attempts reuse topics. OpenAI shuts gpt-4 down on 2026-10-23.
+  - The Opus 5.5 bank (`1fada8b`) is not used, at the user's direction. Its passages mostly lack the tells either judge looks for: under `score-jev` version 3, 44 of the 46 in `tune` scored at or below 1.5 before any edit (AUC 0.510 against the human corpus), and `score-v1` also scored them low when the bank was generated (0–10, mean 4.2). As puzzles they would be won before any edit. The gpt-4 bank was generated in its place.
+- **Split:** `pnpm harness --split tune|holdout`. A SHA-256 hash of each entry's key puts about a third in `holdout`. AI passages are keyed by topic, so a topic's passages from different models land on the same side. By chance only 14 of the 60 topics fell in `holdout`, so it has fewer AI passages than a third. Tuning is done on `tune`, and `holdout` is run once at the end to confirm.
+
+  | Split | AI | Human |
+  | --- | --- | --- |
+  | `tune` | 139 (46 topics) | 136 |
+  | `holdout` | 41 (14 topics) | 62 |
+
+- **AUC:** the harness now prints the AUC of the score, AI against human, with a breakdown by generator and by human source. The AUCs in B.20–B.21 were computed by hand.
+
+**Baseline, `score-jev` version 3:**
+
+| AUC | `tune` | `holdout` |
+| --- | --- | --- |
+| All AI vs all human | 0.950 | 0.912 |
+| gpt-4o | 0.962 | 0.967 |
+| Haiku 4.5 | 0.908 | 0.808 |
+| gpt-4 | 0.979 | 0.965 |
+| Gutenberg (all AI) | 0.964 | 0.894 |
+| Wikipedia (all AI) | 0.957 | 0.949 |
+| Stack Exchange (all AI) | 0.948 | 0.903 |
+| Wikivoyage (all AI) | 0.929 | 0.931 |
+
+Findings on the `tune` split:
+
+- Modern human text is harder to separate than Gutenberg and Wikipedia. For gpt-4o and Haiku passages, the composite's AUC falls from 0.950 against the old human sources to 0.922 against the new ones, and `gut_check` alone falls from 0.989 to 0.883. `gut_check` fires on 17% of Stack Exchange and 16% of Wikivoyage texts, against 0% of Gutenberg. The earlier finding that `gut_check` alone beat the composite came from the old human sources being easy to separate.
+- `signposting` fires more often on Stack Exchange (15%) and Wikivoyage (22%) than on any AI bank (4–13%).
+
+## B.25 `score-jev` paragraph tells use Jev's probability (2026-10-07)
+
+A paragraph tell's strength is now Jev's probability averaged over the paragraphs, instead of the share of paragraphs where the probability is above 0.5. On a one-paragraph passage, which is every passage in the game, the strength is simply Jev's probability, where before it was 0 or 1. Tells are still shown to the player at strength 0.5 or more. `score-jev` is now version 4.
+
+On the `tune` split (B.24), against version 3:
+
+| AUC | Version 3 | Version 4 |
+| --- | --- | --- |
+| All AI vs all human | 0.950 | 0.962 |
+| gpt-4o | 0.962 | 0.974 |
+| Haiku 4.5 | 0.908 | 0.925 |
+| gpt-4 | 0.979 | 0.987 |
+| Gutenberg (all AI) | 0.964 | 0.972 |
+| Wikipedia (all AI) | 0.957 | 0.973 |
+| Stack Exchange (all AI) | 0.948 | 0.955 |
+| Wikivoyage (all AI) | 0.929 | 0.951 |
+
+- **The gain comes from the change, not from new Jev calls.** Version 4 called Jev afresh for every text. On the whole-text questions, which did not change, answers differed between the two calls by less than 0.01 on average and at most 0.08. Scored on the same version 4 answers, the old rule gives 0.947 and the new one 0.962. Jev is close enough to deterministic that averaging repeated calls would gain little.
+- **Per tell**, on the same answers, from the old rule to the new: inflated significance 0.64 → 0.88, rule of three 0.59 → 0.86, generic filler 0.60 → 0.78. Two now point the wrong way, because human texts get higher probabilities than AI ones: self-answered rhetorical question 0.50 → 0.28 and vague attribution 0.49 → 0.34. "Not X, but Y" reframing falls from 0.59 to 0.51. These are the first candidates for rewording or dropping.
+- **Scores rise**, because probabilities under 0.5 now count: the mean AI score goes from 1.7 to 2.8, and the mean human score from 0.8 to 1.1. At the unchanged win line of 1.5, 82% of `tune` human texts score as won, against 93% under version 3. Keeping 92% of human texts would need a line at 1.8, where version 4 catches 114 of 139 AI passages; version 3 catches 117 at 1.5. So the better ranking does not yet show at a game-style threshold.
+- **The win line is unchanged.** It is to be reset after the weights are settled. Until then, deploying version 4 would make the game harder: fewer human-sounding rewrites would score as won.
+- `holdout` was not run for version 4.
+
+## B.26 `score-jev` questions reworded, skipped or added (2026-10-07)
+
+Every question that separated AI from human text poorly under version 4 was reworded at least once, and a few new questions were drafted. Jev answered all of them for the 275 `tune` texts, alongside the current questions. Asking the extra questions in the same request moved the current questions' answers by at most 0.07. Thirteen variants were tried and seven kept. `score-jev` is now version 5.
+
+- **Reworded.** Each figure is the question's own AUC on `tune`, version 4 against the new wording.
+  - "Not X, but Y" reframing now counts only the inflating use ("not just a drink, it's a lifestyle"). A contrast that corrects a real mistake or adds a separate fact does not count: 0.51 → 0.79.
+  - Signposting now covers the text announcing itself or welcoming the reader ("Welcome to the world of", "Join us as we explore"). Flagging a point as important does not count, and the stock phrases for that are in `STOCK_PHRASES` already: 0.54 → 0.68. A narrower variant that asked only about stock lead-ins ("When it comes to") reached 0.55 and was not kept.
+  - Tacked-on "-ing" commentary now counts only -ing phrases that comment on the sentence's significance, not ones that add a plain fact: 0.58 → 0.67.
+  - Absent personal voice now asks whether the text "could have been written by anyone", adding that plain factual writing can still show a writer: 0.63 → 0.85.
+- **Skipped on texts under 200 words.** These are marked `longForm`, the B.21 mechanism: vague attribution (0.34, reworded 0.33), self-answered rhetorical question (0.28, reworded 0.36) and chatbot residue (0.39, reworded 0.44). AI passages in the banks almost never contain them, so they cannot separate, and human texts get small probabilities from them that only add noise. They still apply from 200 words, where they are untested.
+- **Added, not in jevslop:**
+  - Hollow praise (paragraph question, weight 1): praise in general positive words instead of specifics. 0.94.
+  - Feel-good ending (whole text, weight 1): a last sentence that ends on an unearned uplifting or sentimental note. 0.97.
+  - Reads as AI-written (score question, weight 2): "How likely is it that `text` was written by an AI language model rather than by a person?" It reaches 1.00 on its own, where Jev's overall impression reaches 0.94. It is asked alongside the overall impression rather than replacing it, which gave 0.996 against 0.995. Two other alternatives, "Was `text` written by an AI chat assistant?" (0.99) and "How formulaic is `text`" (0.95), and the average of all four did no better in the composite.
+- **Weights:** the existing weights are unchanged, and the new tells use the weights above. Weights are set in step 5.
+- **Player-facing labels:** the new tells show as "Hollow praise", "Feel-good ending" and "Reads as AI-written".
+
+On the `tune` split, from the harness:
+
+| AUC | Version 4 | Version 5 |
+| --- | --- | --- |
+| All AI vs all human | 0.962 | 0.996 |
+| gpt-4o | 0.974 | 0.999 |
+| Haiku 4.5 | 0.925 | 0.991 |
+| gpt-4 | 0.987 | 0.999 |
+| Gutenberg (all AI) | 0.972 | 1.000 |
+| Wikipedia (all AI) | 0.973 | 0.998 |
+| Stack Exchange (all AI) | 0.955 | 0.991 |
+| Wikivoyage (all AI) | 0.951 | 0.996 |
+
+- **Scores rise again:** the mean AI score is 4.1 and the mean human score 1.4. The highest human score is 3.1 and the lowest AI score 2.0.
+- **At the unchanged win line of 1.5,** only 86 of 136 human texts (63%) score as won, so version 5 must not be deployed with that line. A line that keeps 92% of human texts sits at 2.1 and catches 138 of 139 AI passages, against 117 for version 3 at 1.5 and 114 for version 4 at 1.8. No AI passage scores as won before any edit, against 22 under version 3.
+- **These figures are optimistic.** The questions were chosen by their `tune` results, so `holdout` (end of step 5) is the real test.
+
+## B.27 Win line 2 for `score-jev` version 5, confirmed on `holdout` (2026-10-07)
+
+`gameConfig.win.scoreAtOrBelow` in `web/src/config.ts` is now 2, up from 1.5 (B.19). The user chose 2 after B.26 showed that version 5 scores everything higher, so that only 63% of human texts in `tune` would win at 1.5. The weights are unchanged from B.26: at AUC 0.996 on `tune` there was little room left for weight tuning, and fitting weights to 275 texts would mostly fit noise.
+
+`holdout` was then run once, as planned in B.24, for version 5:
+
+| | Version 3, line 1.5 | Version 5, line 2 |
+| --- | --- | --- |
+| AUC on `holdout` | 0.912 | 0.992 |
+| `holdout` human texts that win | 55 of 62 (89%) | 57 of 62 (92%) |
+| `holdout` AI passages won before any edit | 9 of 41 | 1 of 41 |
+| `tune` human texts that win | 126 of 136 (93%) | 123 of 136 (90%) |
+| `tune` AI passages won before any edit | 22 of 139 | 1 of 139 |
+
+- **By generator,** the `holdout` AUC is 1.000 for gpt-4o and gpt-4 and 0.978 for Haiku 4.5. By human source it is 0.989–0.994. `tune` scored 0.996, so the selection of questions in B.26 overfitted only slightly.
+- **The five `holdout` human texts over the line** score 2.1–2.5: an encyclopedic Wikipedia paragraph, a Gutenberg paragraph that does signpost ("Let us now pass to the second division of the argument"), two Stack Exchange answers using stock words such as "Additionally", and a Wikivoyage paragraph flagged for generic filler.
+- **Deploy together.** The scorer (`shared/scoreJev.ts`, run by the Worker) and the win line (`web/src/config.ts`, in the client) belong together. Deployed alone, version 5 with the 1.5 line would let too few human-sounding rewrites win, and the 2 line with version 3 would let many AI passages win before any edit.
+- From here, `holdout` has been seen. Further tuning should use fresh texts for its final check.
+
+## B.28 Fresh AI test set: 600 passages from six models (2026-10-07)
+
+To test `score-jev` version 5 on passages it was never tuned on, `data/ai_test.json` holds 600 new AI passages: 100 from each of six models, on 100 topics in `data/test_topics.json` that share none of the bank's 60. The file is for testing only, never for tuning. At the user's direction, no human texts were scored for this test, so it reports how many AI passages would be won before any edit, not an AUC.
+
+- **Generator flags:** `pnpm generate` gained `--model <id>`, which overrides `generationModel` for one run, and `--topics <file>`, which takes a JSON array of topics. Without them it behaves as before. Each model's run was `pnpm generate --model <id> --topics data/test_topics.json --count 100`, with ids prefixed by the model. The Haiku judge (`score-v1`) still screens every candidate, rejecting 11 for length and 1 for meaning or grammar.
+- **Models:** gpt-4o, Haiku 4.5 and gpt-4, the three the scorer was tuned on, now on new topics; and gpt-3.5-turbo, Sonnet 4.6 and gpt-5.6-luna, which it has never seen.
+
+Passages won before any edit, at the game's line for each version (version 3 at 1.5, version 5 at 2):
+
+| Model | Version 3 | Version 5 | Mean score, v3 → v5 |
+| --- | --- | --- | --- |
+| gpt-4o | 19 | 0 | 2.4 → 4.1 |
+| Haiku 4.5 | 46 | 1 | 1.8 → 3.3 |
+| gpt-4 | 14 | 1 | 2.7 → 4.3 |
+| gpt-3.5-turbo | 31 | 0 | 2.0 → 3.7 |
+| Sonnet 4.6 | 71 | 23 | 1.3 → 2.7 |
+| gpt-5.6-luna | 66 | 18 | 1.5 → 2.8 |
+| All 600 | 247 (41%) | 43 (7%) | 1.9 → 3.5 |
+
+- **The tuned models generalise to new topics,** with 0–1 in 100 won before any edit, and so does gpt-3.5-turbo, which the scorer had never seen.
+- **Sonnet 4.6 and gpt-5.6-luna write cleaner passages.** The Haiku judge also rated them lower when generating (mean 7.1 and 7.8, against 9.0–9.2 for the others). Version 5 still lets about one in five through, against two in three under version 3.
+- **The 43 passages won before any edit** have almost none of the specific tells. Against the 557 caught, their mean strengths are: stock vocabulary 0.02 against 0.41, generic filler 0.07 against 0.30, and Jev's overall impression 0.23 against 0.55. They read as plain product reviews, travel descriptions and step-by-step accounts. "Reads as AI-written" still leans AI on them (0.72), but at weight 2 out of about 19 it cannot carry a passage over the line alone.
+- **Which tells fire:** "Reads as AI-written" shows on all 600 passages and absent personal voice on 80–100% per model. Jev's overall impression shows on 35–78%, lowest for Sonnet 4.6. Stock vocabulary shows on 50–65% of the GPT-4-family and gpt-3.5-turbo passages, but only 9–11% of the Sonnet 4.6 and gpt-5.6-luna ones. The rule of three is gpt-5.6-luna's commonest specific tell (47%).
+- **Banks from newer models need a filter.** `generate-v1` keeps passages by `score-v1` with `--min-score 0`, so a bank from Sonnet 4.6 or gpt-5.6-luna would include about one passage in five that is won before any edit.
+
+## B.29 The bank generator scores with the game's scorer; Sonnet 4.6 and gpt-5.6-luna dropped (2026-10-07)
+
+At the user's direction, `pnpm generate` now scores candidates with whichever scorer the game uses, and rejects any the game would count as won before an edit.
+
+- **Candidates go through the game's own Check.** The generator runs `runCheck` with `gameConfig`, which applies the configured scorer, the guardrails and the win line. It keeps a candidate only if it passes every guardrail and is not already won, meaning its score is above `win.scoreAtOrBelow`, now 2.
+  - With `scorers.jev`, the default, that means `score-jev` for the score and `score-v1` for the meaning and grammar verdicts.
+  - If `web/src/config.ts` switches to `scorers.llmBasic`, both come from `score-v1`. `scorers.mock` makes no calls.
+- **This replaces the fixed `score-v1` check** and its `--min-score` flag, which defaulted to 0 and so kept everything the judge did not flag. The flag is removed.
+- **Provenance:** `generatedWith.scoredWith` records the tasks the scorer called, for example `score-jev@5 + score-v1@2`.
+- **Mechanism:** the scorers in `web/src/scorers.ts` call tasks through a transport that posts to the Worker by default. `setTaskTransport` swaps it out. The scripts use `runScorersLocally` (`scripts/common.ts`), which runs the same tasks locally with `runTask` and the disk cache.
+- **The harness follows the scorer too.** `pnpm harness` now scores with the active scorer by default, where before the default was `score-v1`. `--task` still runs a single task.
+- **Keys:** under `scorers.jev`, `pnpm generate` also needs `TYPESAFE_API_KEY`.
+- **Checked end to end.** Re-running the Haiku 4.5 generation on the test topics, almost entirely from cache, rejected the one passage that scores at or below 2 (B.28) and one that the grammar guardrail flagged. The lowest kept score was 2.1, and kept passages record `score-jev@5 + score-v1@2`. In the current game bank (`data/passages.json`, gpt-4o), no passage is at or below 2 under version 5; the lowest scores 2.6. So the bank already meets the rule.
+- **Two models dropped.** At the user's direction, Sonnet 4.6 and gpt-5.6-luna are removed from `GENERATE_V1_MODELS` and from the list in `web/src/config.ts`. Their 200 passages are removed from `data/ai_test.json`, which now holds 400 passages from four models. Their B.28 results stand as recorded. Opus 5.5 is still selectable.

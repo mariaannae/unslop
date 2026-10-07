@@ -104,6 +104,26 @@ describe("jev scorer", () => {
   });
 });
 
+describe("setTaskTransport", () => {
+  afterEach(() => scorers.setTaskTransport(scorers.callTask));
+
+  it("sends the scorers' task calls through the given transport instead of the Worker", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const calls: string[] = [];
+    scorers.setTaskTransport(async <Result>(taskId: string) => {
+      calls.push(taskId);
+      return (taskId === "score-jev" ? { score: 2.4, tells: [] } : taskResult) as Result;
+    });
+
+    const result = await scorers.jev.score({ original: "a", current: "b" });
+
+    expect(calls).toEqual(["score-jev", "score-v1"]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(result.score).toBe(2.4);
+  });
+});
+
 describe("callTask", () => {
   it("posts {taskId, payload} as JSON to /api/task and returns the result", async () => {
     const fetch = stubFetch(200, {

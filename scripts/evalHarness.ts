@@ -1,34 +1,46 @@
 /**
- * Evaluation harness (SPEC §19 Milestone 3b, Appendix A.5). Runs a scoring task
- * over the AI bank and the human corpus and prints histograms, mean, median, and
- * the two separation figures. Talks to the provider directly with
- * ANTHROPIC_API_KEY from the environment; never goes through the Worker.
+ * Evaluation harness (SPEC §19 Milestone 3b, Appendix A.5). Scores the AI bank and
+ * the human corpus and prints histograms, mean, median, the two separation figures
+ * and the AUC. By default it scores with the game's active scorer from
+ * web/src/config.ts (spec B.29); `--task` runs one scoring task instead. Talks to
+ * the providers directly with the keys from the environment; never goes through
+ * the Worker.
  *
- *   pnpm harness [--task score-v1] [--limit N] [--concurrency 4] [--no-cache] [--strict]
+ *   pnpm harness [--task score-jev] [--bank file] [--human file] [--split tune|holdout]
+ *                [--limit N] [--concurrency 4] [--no-cache] [--strict] [--show-misses]
+ *
+ * `--split` keeps only that part of both sets (spec B.24). Tune scorers on
+ * "tune"; "holdout" is for confirming the result once.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { callableTasks, runTask, type RunTaskDeps } from "../shared/runTask";
 import type { ScoreV1Result } from "../shared/scoreV1";
 import type { AnyTask } from "../shared/types";
+import { gameConfig } from "../web/src/config";
 import {
   cacheDir,
   createDiskCache,
   createScriptProvider,
   dataDir,
+  auc,
   formatSet,
   intArg,
   mapWithConcurrency,
   meetsTarget,
   noCache,
   readArgs,
+  runScorersLocally,
+  splitOf,
   type SeparationTarget,
+  type Split,
 } from "./common";
 
 const args = readArgs({
-  task: { type: "string", default: "score-v1" },
+  task: { type: "string" },
   bank: { type: "string" },
   human: { type: "string" },
+  split: { type: "string" },
   limit: { type: "string" },
   concurrency: { type: "string" },
   "no-cache": { type: "boolean", default: false },
@@ -43,14 +55,24 @@ function requireTask(id: string): AnyTask {
   }
   return found;
 }
-const task = requireTask(args.task!);
+const task = args.task === undefined ? undefined : requireTask(args.task);
 const limit = intArg(args.limit, Number.MAX_SAFE_INTEGER);
 const concurrency = intArg(args.concurrency, 4);
+if (args.split !== undefined && args.split !== "tune" && args.split !== "holdout") {
+  throw new Error(`--split must be "tune" or "holdout", not "${args.split}"`);
+}
+const split = args.split as Split | undefined;
 
-type Item = { id: string; text: string };
+type Item = {
+  id: string;
+  text: string;
+  topic?: string;
+  generatedWith?: { model?: string };
+  source?: string;
+};
 async function loadItems(file: string): Promise<Item[]> {
   const items = JSON.parse(await readFile(file, "utf8")) as Item[];
-  return items.slice(0, limit);
+  return items.filter((item) => !split || splitOf(item.topic ?? item.id) === split).slice(0, limit);
 }
 
 const deps: RunTaskDeps = {
@@ -58,20 +80,33 @@ const deps: RunTaskDeps = {
   typesafeApiKey: process.env.TYPESAFE_API_KEY,
   cache: args["no-cache"] ? noCache : createDiskCache(path.join(cacheDir, "results")),
 };
+const scorerTasks = runScorersLocally(deps);
 
-type Scored = { id: string; score: number | null; error?: string; cached: boolean };
+/**
+ * `group` is the generator model of an AI passage, or the source site of a human
+ * text. `cached` is known only when a single task runs.
+ */
+type Scored = {
+  id: string;
+  group?: string;
+  score: number | null;
+  error?: string;
+  cached?: boolean;
+};
 async function scoreAll(items: Item[]): Promise<Scored[]> {
   return mapWithConcurrency(items, concurrency, async (item) => {
+    const ctx = { original: item.text, current: item.text };
     try {
-      const { result, cached } = await runTask(
-        task,
-        { original: item.text, current: item.text },
-        deps,
-      );
-      return { id: item.id, score: (result as ScoreV1Result).score, cached };
+      if (!task) {
+        const { score } = await gameConfig.scorer.score(ctx);
+        return { id: item.id, group: groupOf(item), score };
+      }
+      const { result, cached } = await runTask(task, ctx, deps);
+      return { id: item.id, group: groupOf(item), score: (result as ScoreV1Result).score, cached };
     } catch (error) {
       return {
         id: item.id,
+        group: groupOf(item),
         score: null,
         error: error instanceof Error ? error.message : String(error),
         cached: false,
@@ -80,11 +115,18 @@ async function scoreAll(items: Item[]): Promise<Scored[]> {
   });
 }
 
+function groupOf(item: Item): string | undefined {
+  return item.generatedWith?.model ?? item.source?.match(/^[A-Za-z ]+/)?.[0].trim();
+}
+
 const bank = await loadItems(path.resolve(args.bank ?? path.join(dataDir, "passages.json")));
 const human = await loadItems(path.resolve(args.human ?? path.join(dataDir, "human_corpus.json")));
 
-console.log(`scorer task: ${task.id}@${task.version} (${task.model})\n`);
 const [bankScored, humanScored] = await Promise.all([scoreAll(bank), scoreAll(human)]);
+const scorerLabel = task
+  ? `scorer task: ${task.id}@${task.version} (${task.model})`
+  : `active scorer (web/src/config.ts): ${[...scorerTasks].join(" + ") || "offline"}`;
+console.log(`${scorerLabel}${split ? `, ${split} split` : ""}\n`);
 
 function report(label: string, scored: Scored[], sep: SeparationTarget, missIsBelow: boolean) {
   const ok = scored.filter((s) => s.score !== null);
@@ -95,8 +137,10 @@ function report(label: string, scored: Scored[], sep: SeparationTarget, missIsBe
     console.log(
       `  ${failed.length} failed: ${failed.map((f) => `${f.id} (${f.error})`).join("; ")}`,
     );
-  const cachedCount = scored.filter((s) => s.cached).length;
-  console.log(`  ${cachedCount}/${scored.length} served from cache`);
+  if (task) {
+    const cachedCount = scored.filter((s) => s.cached).length;
+    console.log(`  ${cachedCount}/${scored.length} served from cache`);
+  }
   if (args["show-misses"]) {
     const misses = ok.filter((s) =>
       missIsBelow ? s.score! < sep.threshold : s.score! >= sep.threshold,
@@ -116,5 +160,23 @@ const humanOk = report(
   { threshold: 6, kind: "max", target: 0.1 },
   false,
 );
+
+const scoresOf = (scored: Scored[]) => scored.flatMap((s) => (s.score === null ? [] : [s.score]));
+const groups = (scored: Scored[]) => [...new Set(scored.map((s) => s.group ?? "other"))];
+const inGroup = (scored: Scored[], group: string) =>
+  scored.filter((s) => (s.group ?? "other") === group);
+console.log(`AUC (AI vs human): ${auc(scoresOf(bankScored), scoresOf(humanScored)).toFixed(3)}`);
+if (groups(bankScored).length > 1) {
+  const cells = groups(bankScored).map(
+    (g) => `${g} ${auc(scoresOf(inGroup(bankScored, g)), scoresOf(humanScored)).toFixed(3)}`,
+  );
+  console.log(`  by generator: ${cells.join(", ")}`);
+}
+if (groups(humanScored).length > 1) {
+  const cells = groups(humanScored).map(
+    (g) => `${g} ${auc(scoresOf(bankScored), scoresOf(inGroup(humanScored, g))).toFixed(3)}`,
+  );
+  console.log(`  by human source: ${cells.join(", ")}`);
+}
 
 if (args.strict && !(bankOk && humanOk)) process.exit(1);

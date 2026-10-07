@@ -56,7 +56,7 @@ export const mock: Scorer = {
  */
 export const llmBasic: Scorer = {
   async score(ctx) {
-    const result = await callTask<ScoreV1Result>("score-v1", {
+    const result = await transport<ScoreV1Result>("score-v1", {
       original: ctx.original,
       current: ctx.current,
     });
@@ -73,8 +73,8 @@ export const jev: Scorer = {
   async score(ctx) {
     const payload = { original: ctx.original, current: ctx.current };
     const [result, judge] = await Promise.all([
-      callTask<ScoreJevResult>("score-jev", payload),
-      callTask<ScoreV1Result>("score-v1", payload),
+      transport<ScoreJevResult>("score-jev", payload),
+      transport<ScoreV1Result>("score-v1", payload),
     ]);
     return {
       score: result.score,
@@ -87,6 +87,19 @@ export const jev: Scorer = {
     };
   },
 };
+
+type TaskTransport = <Result>(taskId: string, payload: unknown) => Promise<Result>;
+
+let transport: TaskTransport = callTask;
+
+/**
+ * Sends the scorers' task calls somewhere other than the Worker. The Node scripts
+ * use it to run the configured scorer locally with runTask (scripts/common.ts),
+ * so bank generation and the harness score exactly as the game does (spec B.29).
+ */
+export function setTaskTransport(next: TaskTransport): void {
+  transport = next;
+}
 
 /** Worker origin set at build time (spec B.8, B.12). Empty means same origin, which the Vite proxy serves in dev. */
 const API_ORIGIN = normalizeApiOrigin(import.meta.env?.VITE_API_BASE_URL as string | undefined);

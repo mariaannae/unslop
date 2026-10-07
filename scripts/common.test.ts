@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, diskCachePath, formatSet, fractionAtOrAbove } from "./common";
+import { auc, computeStats, diskCachePath, formatSet, fractionAtOrAbove, splitOf } from "./common";
 
 describe("stats", () => {
   it("computes histogram, mean, and median", () => {
@@ -31,6 +31,24 @@ describe("stats", () => {
     expect(human).toContain(">=6: 33.3%");
     expect(human).toContain("MISS");
     expect(formatSet("x", [1], { threshold: 6, kind: "max", target: 0.1 })).toContain("PASS");
+  });
+});
+
+describe("separation", () => {
+  it("computes AUC as the share of AI/human pairs the AI passage wins, ties counting half", () => {
+    expect(auc([3, 4], [1, 2])).toBe(1);
+    expect(auc([1, 2], [3, 4])).toBe(0);
+    expect(auc([2, 2], [2, 2])).toBe(0.5);
+    expect(auc([3, 1], [2])).toBe(0.5);
+    expect(auc([], [1])).toBeNaN();
+  });
+
+  it("splits deterministically, with about a third held out", () => {
+    const keys = Array.from({ length: 3000 }, (_, i) => `key-${i}`);
+    expect(keys.map(splitOf)).toEqual(keys.map(splitOf));
+    const held = keys.filter((k) => splitOf(k) === "holdout").length / keys.length;
+    expect(held).toBeGreaterThan(0.3);
+    expect(held).toBeLessThan(0.37);
   });
 });
 

@@ -9,24 +9,29 @@ import { ProviderError, TaskError, type CallTask } from "./types";
  *
  * Questions, weights and thresholds are copied from jevslop's tells.py; the
  * weights are its hand-picked starting points, not calibrated. Changes so far:
- * stock vocabulary and em dashes are counted at any length (spec B.20), and the
- * `longForm` tells are skipped on texts under LONG_TEXT_WORDS (spec B.21). Bump
- * `version` when any of them change.
+ * stock vocabulary and em dashes are counted at any length (spec B.20), the
+ * `longForm` tells are skipped on texts under LONG_TEXT_WORDS (spec B.21), a
+ * paragraph tell's strength is Jev's mean probability rather than the share of
+ * paragraphs above YES (spec B.25), and some questions are reworded, three skipped
+ * on short texts and three added (spec B.26). Bump `version` when any of them
+ * change.
  */
 
 // ---------------------------------------------------------------------------
 // The tells (jevslop tells.py)
 
-/** A Jev probability above this counts as "the tell is present". */
+/** Tells at this strength or more are listed for the player. */
 const YES = 0.5;
 
 /** Paragraphs shorter than this (in words) are not asked the paragraph tells. */
 const MIN_PARAGRAPH_WORDS = 12;
 
 /**
- * Texts with fewer words than this skip the `longForm` tells, which look for
- * essay structure or formatting that a one-paragraph passage doesn't have. A tell
- * that cannot fire would still count at strength 0 and drag the score down.
+ * Texts with fewer words than this skip the `longForm` tells. Most look for essay
+ * structure or formatting that a one-paragraph passage doesn't have; a tell that
+ * cannot fire would still count at strength 0 and drag the score down (spec
+ * B.21). Three more (vague attribution, self-answered questions, chatbot residue)
+ * scored human passages higher than AI ones, however worded (spec B.26).
  * Game passages stay below this: the longest has 132 words and length-ratio
  * allows 1.3 times that, so a player cannot cross it.
  */
@@ -71,18 +76,22 @@ type CodeTell = {
   longForm?: boolean;
 };
 
-/** Asked of each paragraph; strength is the share of paragraphs that show the tell. */
+/** Asked of each paragraph; strength is Jev's probability, averaged over the paragraphs. */
 const PARAGRAPH_TELLS: NoulTell[] = [
   {
     id: "contrast_reframe",
     name: "“Not X, but Y” reframing",
     weight: 1.5,
+    // Reworded to the inflating use; people also write "isn't just for you, it's
+    // also for the bears" (spec B.26).
     instructions:
-      "Does `paragraph` contain a sentence that denies a claim nobody made in " +
-      "order to state the real point, such as “It's not just X, it's Y”, " +
-      "“This isn't about X. It's about Y.” or “X is not merely A but B”?",
-    true: "At least one sentence uses the deny-then-reveal construction.",
-    false: "No sentence sets up and knocks down an unstated claim.",
+      "Does `paragraph` use the formula “not just X, (but) Y”, “It's not X, " +
+      "it's Y” or “more than just X” to inflate its subject, where X is a " +
+      "modest description nobody disputed and Y is a grander one, as in " +
+      "“Coffee is not just a drink, it's a lifestyle”? A contrast that " +
+      "corrects a real mistake or adds a separate practical fact does not count.",
+    true: "Inflates the subject by setting aside a modest description for a grander one.",
+    false: "No such inflating formula.",
   },
   {
     id: "inflated_significance",
@@ -102,13 +111,16 @@ const PARAGRAPH_TELLS: NoulTell[] = [
     id: "trailing_participle",
     name: "Tacked-on “-ing” commentary",
     weight: 1.0,
+    // Reworded to exclude -ing phrases that add a plain fact (spec B.26).
     instructions:
-      "Does a sentence in `paragraph` end with a comma followed by a phrase " +
-      "starting with an -ing verb that comments on the meaning of what was " +
-      "just said, such as “, highlighting the importance of X”, " +
-      "“, underscoring its role in Y” or “, reflecting a broader trend”?",
-    true: "At least one sentence ends with an evaluative -ing tail.",
-    false: "No sentence ends with an evaluative -ing tail.",
+      "Does a sentence in `paragraph` end with a comma and a phrase beginning " +
+      "with an -ing word that tells the reader what the sentence means or why " +
+      "it matters, such as “, highlighting the importance of X”, “, " +
+      "underscoring its role in Y”, “, reflecting a broader trend” or “, " +
+      "making it a must-visit destination”? An -ing phrase that adds a plain " +
+      "fact or action, such as “, leaving at noon”, does not count.",
+    true: "At least one sentence ends with an -ing tail commenting on its own significance.",
+    false: "No sentence ends with such a tail.",
   },
   {
     id: "triplet",
@@ -126,19 +138,24 @@ const PARAGRAPH_TELLS: NoulTell[] = [
     id: "signposting",
     name: "Signposting and throat-clearing",
     weight: 1.0,
+    // Reworded to the text announcing itself or welcoming the reader. People flag
+    // points as important too ("it is worth pointing out"), and the stock
+    // phrases for that are already in STOCK_PHRASES (spec B.26).
     instructions:
-      "Does `paragraph` contain a phrase that announces what the text is " +
-      "about to do or that something deserves attention, instead of just " +
-      "saying it, such as “Let's dive in”, “It's worth noting that”, " +
-      "“Here's the thing”, “It is important to remember that” or " +
-      "“Let's break it down”?",
-    true: "Contains at least one announcing or throat-clearing phrase.",
-    false: "Gets straight to the point.",
+      "Does `paragraph` contain a phrase where the writer announces or frames " +
+      "what the text itself is about to do, or welcomes or invites the reader " +
+      "along, instead of just doing it, such as “Let's dive in”, “Welcome to " +
+      "the world of”, “Join us as we explore”, “Here's everything you need to " +
+      "know” or “In this post, we'll look at”? Phrases that only flag a point " +
+      "as important, such as “it is worth noting” or “keep in mind”, do not count.",
+    true: "The text announces its own content or invites the reader on a journey.",
+    false: "The text just says what it has to say; at most it flags a point as important.",
   },
   {
     id: "vague_attribution",
     name: "Vague attribution",
     weight: 1.0,
+    longForm: true,
     instructions:
       "Does `paragraph` attribute a claim to an unnamed authority, such as " +
       "“experts say”, “studies show”, “many believe”, “research suggests” or " +
@@ -150,6 +167,7 @@ const PARAGRAPH_TELLS: NoulTell[] = [
     id: "rhetorical_qa",
     name: "Self-answered rhetorical question",
     weight: 0.8,
+    longForm: true,
     instructions:
       "Does `paragraph` ask a short question and immediately answer it " +
       "itself, as in “The result? A faster app.” or “Why does this matter? " +
@@ -168,6 +186,18 @@ const PARAGRAPH_TELLS: NoulTell[] = [
       "quotations or examples?",
     true: "Mostly interchangeable generalities with nothing concrete.",
     false: "Anchored in concrete, topic-specific details.",
+  },
+  {
+    // Not in jevslop (spec B.26).
+    id: "hollow_praise",
+    name: "Hollow praise",
+    weight: 1.0,
+    instructions:
+      "Does `paragraph` praise its subject with general positive words, such " +
+      "as “rich”, “unique”, “rewarding”, “delightful”, “perfect” or " +
+      "“meaningful”, instead of saying specifically what is good about it?",
+    true: "Praise is mostly general positive words.",
+    false: "Praise, if any, says specifically what is good.",
   },
 ];
 
@@ -201,6 +231,7 @@ const DOCUMENT_TELLS: NoulTell[] = [
     id: "chatbot_residue",
     name: "Chatbot residue",
     weight: 2.0,
+    longForm: true,
     instructions:
       "Does `text` contain words addressed to the person who requested it " +
       "rather than to the reader, such as “Certainly!”, “Great question”, " +
@@ -246,6 +277,19 @@ const DOCUMENT_TELLS: NoulTell[] = [
     true: "Reads like marketing copy.",
     false: "Plain descriptive register, or genuinely an advertisement.",
   },
+  {
+    // Not in jevslop (spec B.26).
+    id: "uplifting_closer",
+    name: "Feel-good ending",
+    weight: 1.0,
+    instructions:
+      "Does the last sentence of `text` end on an uplifting, inspirational or " +
+      "sentimental note, such as a lesson, an invitation to cherish or embrace " +
+      "something, or a promise of joy, growth or memories, that the rest of " +
+      "`text` has not earned with specifics?",
+    true: "Ends on an unearned uplifting or sentimental note.",
+    false: "Ends on a specific point, a plain fact, or a note the text has earned.",
+  },
 ];
 
 /** Asked once of the whole text; strength is Jev's score / (levels - 1). */
@@ -253,14 +297,18 @@ const SCORE_TELLS: ScoreTell[] = [
   {
     id: "no_voice",
     name: "Absent personal voice",
-    // Low: reference and technical writing is impersonal by design.
+    // Low: reference and technical writing is impersonal by design. Reworded so
+    // that plain factual writing can still show a writer (spec B.26).
     weight: 0.6,
-    instructions: "How much of a particular writer's personality comes through in `text`?",
+    instructions:
+      "Could `text` have been written by anyone, or does it show a particular " +
+      "writer, through their own experience, judgments, quirks of phrasing, " +
+      "humour, or what they choose to mention? Plain factual writing can still " +
+      "show a writer.",
     levels: [
-      "A distinct voice: personal experience, strong opinions, humor, " +
-        "odd or memorable word choices.",
-      "Some personality, but mostly neutral.",
-      "Neutral and impersonal; any competent writer or none could have written it.",
+      "Clearly a particular writer.",
+      "Some sign of a particular writer.",
+      "Could have been written by anyone.",
     ],
   },
   {
@@ -275,6 +323,21 @@ const SCORE_TELLS: ScoreTell[] = [
       "Some resemblance.",
       "Strong resemblance.",
       "Unmistakably default chatbot prose.",
+    ],
+  },
+  {
+    // Not in jevslop: a second overall impression, asking about authorship
+    // rather than chatbot style (spec B.26).
+    id: "gut_author",
+    name: "Reads as AI-written",
+    weight: 2.0,
+    instructions:
+      "How likely is it that `text` was written by an AI language model rather than by a person?",
+    levels: [
+      "Almost certainly written by a person.",
+      "Probably written by a person.",
+      "Probably written by an AI.",
+      "Almost certainly written by an AI.",
     ],
   },
 ];
@@ -511,7 +574,7 @@ function answer(answers: JevAnswers | undefined, id: string): number {
 
 export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
   id: "score-jev",
-  version: 3,
+  version: 5,
   model: "jev-1.13.0",
 
   // Same {original, current} payload as score-v1; only `current` is scored.
@@ -531,7 +594,9 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
       ...DOCUMENT_TELLS.filter((t) => long || !t.longForm).map((t) => [t.id, noul(t)]),
       ...SCORE_TELLS.map((t) => [t.id, score(t)]),
     ]);
-    const paraQuestions = Object.fromEntries(PARAGRAPH_TELLS.map((t) => [t.id, noul(t)]));
+    const paraQuestions = Object.fromEntries(
+      PARAGRAPH_TELLS.filter((t) => long || !t.longForm).map((t) => [t.id, noul(t)]),
+    );
     const eligible = paragraphs(payload.current).filter(
       (p) => words(p).length >= MIN_PARAGRAPH_WORDS,
     );
@@ -564,9 +629,10 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
       })),
       ...PARAGRAPH_TELLS.map((t) => ({
         ...pick(t),
-        strength: paras.length
-          ? paras.filter((p) => answer(p, t.id) > YES).length / paras.length
-          : null,
+        strength:
+          paras.length && (long || !t.longForm)
+            ? paras.reduce((sum, p) => sum + answer(p, t.id), 0) / paras.length
+            : null,
       })),
     ];
 

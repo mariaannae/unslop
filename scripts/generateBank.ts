@@ -1,16 +1,19 @@
 /**
  * Bank generator (SPEC §19 Milestone 3b, Appendix A.3). Generates candidate
- * passages with `generate-v1`, scores each with the active scoring task, and
- * keeps those at or above --min-score that the judge also marks grammatically
- * correct and meaning-preserving. Writes data/passages.json with provenance. The
- * generation model is set in web/src/config.ts.
+ * passages with `generate-v1` and puts each through the game's own Check, with the
+ * scorer, guardrails and win line in web/src/config.ts (spec B.29). It keeps the
+ * candidates that pass every guardrail and that the game would not already count
+ * as won, so every passage needs editing. Writes data/passages.json with
+ * provenance. The generation model is also set in web/src/config.ts; `--model`
+ * overrides it for one run. `--topics` reads the topic list from a JSON array
+ * instead of TOPICS.
  *
- *   pnpm generate [--count 60] [--min-score 8] [--out data/passages.json] [--append] [--concurrency 3]
+ *   pnpm generate [--count 60] [--out data/passages.json] [--append] [--concurrency 3]
+ *                 [--model gpt-4o] [--topics data/test_topics.json]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runTask, type RunTaskDeps } from "../shared/runTask";
-import { scoreV1Task } from "../shared/scoreV1";
 import {
   cacheDir,
   createDiskCache,
@@ -19,9 +22,16 @@ import {
   intArg,
   mapWithConcurrency,
   readArgs,
+  runScorersLocally,
 } from "./common";
-import { generationModel } from "../web/src/config";
-import { createGenerateV1Task, GENERATE_V1_MODELS, GENERATE_V1_REGISTERS } from "./generateV1";
+import { gameConfig, generationModel } from "../web/src/config";
+import { runCheck } from "../web/src/game";
+import {
+  createGenerateV1Task,
+  GENERATE_V1_MODELS,
+  GENERATE_V1_REGISTERS,
+  type GenerationModel,
+} from "./generateV1";
 
 const TOPICS = [
   "sourdough starter",
@@ -88,17 +98,28 @@ const TOPICS = [
 
 const args = readArgs({
   count: { type: "string" },
-  "min-score": { type: "string" },
   out: { type: "string" },
   append: { type: "boolean", default: false },
   concurrency: { type: "string" },
   "max-attempts": { type: "string" },
+  model: { type: "string" },
+  topics: { type: "string" },
 });
 const count = intArg(args.count, 60);
-const minScore = intArg(args["min-score"], 0); //once scorer is figured out, maybe implement a minimum score for the passages to be kept
 const concurrency = intArg(args.concurrency, 3);
 const maxAttempts = intArg(args["max-attempts"], count * 2);
 const outFile = path.resolve(args.out ?? path.join(dataDir, "passages.json"));
+
+const model = (args.model ?? generationModel) as GenerationModel;
+if (!(model in GENERATE_V1_MODELS)) {
+  throw new Error(`Unknown model "${model}". Known: ${Object.keys(GENERATE_V1_MODELS).join(", ")}`);
+}
+const topics: string[] = args.topics
+  ? (JSON.parse(await readFile(path.resolve(args.topics), "utf8")) as string[])
+  : TOPICS;
+if (!Array.isArray(topics) || topics.length === 0 || topics.some((t) => typeof t !== "string")) {
+  throw new Error(`${args.topics} must be a JSON array of topic strings`);
+}
 
 type BankEntry = {
   id: string;
@@ -108,16 +129,18 @@ type BankEntry = {
   generatedWith: { task: string; model: string; scoredWith: string; score: number };
 };
 
-const generateV1Task = createGenerateV1Task(generationModel);
-// Scoring is always score-v1 on Claude; generation goes to the model's own provider.
-const scoreDeps: RunTaskDeps = {
+const generateV1Task = createGenerateV1Task(model);
+// The configured scorer runs its tasks here (Claude for score-v1, TypeSafe for
+// score-jev); generation goes to the model's own provider.
+const scorerTasks = runScorersLocally({
   provider: createScriptProvider("anthropic"),
+  typesafeApiKey: process.env.TYPESAFE_API_KEY,
   cache: createDiskCache(path.join(cacheDir, "results")),
-};
+});
 // generate-v1's cache key doesn't name the model, so each model gets its own cache.
 const generateDeps: RunTaskDeps = {
-  provider: createScriptProvider(GENERATE_V1_MODELS[generationModel].provider),
-  cache: createDiskCache(path.join(cacheDir, "generations", generationModel)),
+  provider: createScriptProvider(GENERATE_V1_MODELS[model].provider),
+  cache: createDiskCache(path.join(cacheDir, "generations", model)),
 };
 
 const existing: BankEntry[] = args.append
@@ -128,9 +151,9 @@ const usedTexts = new Set(existing.map((e) => e.text));
 /** Deterministic topic/register pairing: attempt i uses topic i and a rotating register. */
 function combo(i: number) {
   return {
-    topic: TOPICS[i % TOPICS.length]!,
+    topic: topics[i % topics.length]!,
     register:
-      GENERATE_V1_REGISTERS[(i + Math.floor(i / TOPICS.length)) % GENERATE_V1_REGISTERS.length]!,
+      GENERATE_V1_REGISTERS[(i + Math.floor(i / topics.length)) % GENERATE_V1_REGISTERS.length]!,
   };
 }
 
@@ -152,30 +175,24 @@ async function attempt(i: number): Promise<Attempt> {
     }
     if (usedTexts.has(gen.text))
       return { topic, register, text: gen.text, keep: false, why: "duplicate" };
-    const scored = (
-      await runTask(scoreV1Task, { original: gen.text, current: gen.text }, scoreDeps)
-    ).result;
-    if (scored.score < minScore) {
+    // The passage as the game first shows it: original and current are the same text.
+    const outcome = await runCheck({ original: gen.text, current: gen.text }, gameConfig);
+    const score = outcome.score?.score;
+    const failed = outcome.guardrails.find((g) => !g.result.pass);
+    if (failed) {
+      return { topic, register, text: gen.text, score, keep: false, why: `guardrail ${failed.id}` };
+    }
+    if (outcome.win) {
       return {
         topic,
         register,
         text: gen.text,
-        score: scored.score,
+        score,
         keep: false,
-        why: `score ${scored.score} < ${minScore}`,
+        why: `already won (score at or below ${gameConfig.win.scoreAtOrBelow})`,
       };
     }
-    if (!scored.grammatically_correct || !scored.meaning_preserved) {
-      return {
-        topic,
-        register,
-        text: gen.text,
-        score: scored.score,
-        keep: false,
-        why: "judge flagged grammar/meaning",
-      };
-    }
-    return { topic, register, text: gen.text, score: scored.score, keep: true, why: "kept" };
+    return { topic, register, text: gen.text, score, keep: true, why: "kept" };
   } catch (error) {
     return {
       topic,
@@ -186,7 +203,7 @@ async function attempt(i: number): Promise<Attempt> {
   }
 }
 
-console.error(`generating with ${generationModel}`);
+console.error(`generating with ${model}`);
 const kept: BankEntry[] = [...existing];
 let attempts = 0;
 const rejected: Attempt[] = [];
@@ -206,7 +223,7 @@ while (kept.length < count && attempts < maxAttempts) {
         generatedWith: {
           task: `${generateV1Task.id}@${generateV1Task.version}`,
           model: generateV1Task.model,
-          scoredWith: `${scoreV1Task.id}@${scoreV1Task.version}`,
+          scoredWith: [...scorerTasks].join(" + ") || "offline scorer",
           score: r.score!,
         },
       });

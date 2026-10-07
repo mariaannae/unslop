@@ -2,14 +2,16 @@
  * Helpers shared by the Node scripts: command-line flags, paths, the provider,
  * the disk cache, a concurrency pool, and the harness's score statistics.
  */
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import OpenAI from "openai";
 import { createAnthropicProvider } from "../shared/anthropic";
-import type { TaskCache } from "../shared/runTask";
+import { callableTasks, runTask, type RunTaskDeps, type TaskCache } from "../shared/runTask";
 import { ProviderError, type Provider, type ProviderResponse } from "../shared/types";
+import { setTaskTransport } from "../web/src/scorers";
 
 // ---------------------------------------------------------------------------
 // Flags, paths, and text
@@ -133,6 +135,23 @@ export function createDiskCache(root: string): TaskCache {
   };
 }
 
+/**
+ * Makes the game's scorers (web/src/scorers.ts) run their tasks here with runTask
+ * instead of posting to the Worker, so a script scores exactly as the configured
+ * scorer does in the game (spec B.29). Returns the set of `task@version` ids the
+ * scorers call, filled in as they run, for provenance.
+ */
+export function runScorersLocally(deps: RunTaskDeps): Set<string> {
+  const used = new Set<string>();
+  setTaskTransport(async <Result>(taskId: string, payload: unknown) => {
+    const task = callableTasks.get(taskId);
+    if (!task) throw new Error(`Unknown task "${taskId}"`);
+    used.add(`${task.id}@${task.version}`);
+    return (await runTask(task, payload, deps)).result as Result;
+  });
+  return used;
+}
+
 export const noCache: TaskCache = {
   async get() {
     return undefined;
@@ -177,6 +196,29 @@ export function computeStats(scores: readonly number[]): ScoreStats {
   const median =
     n === 0 ? 0 : n % 2 === 1 ? sorted[(n - 1) / 2]! : (sorted[n / 2 - 1]! + sorted[n / 2]!) / 2;
   return { n, histogram, mean, median };
+}
+
+/**
+ * The chance that a random AI passage outscores a random human text, ties
+ * counting half (the area under the ROC curve). 1 is perfect separation, 0.5 is
+ * chance. Independent of any win threshold, so scorers on different scales compare.
+ */
+export function auc(ai: readonly number[], human: readonly number[]): number {
+  if (ai.length === 0 || human.length === 0) return NaN;
+  let wins = 0;
+  for (const a of ai) for (const h of human) wins += a > h ? 1 : a === h ? 0.5 : 0;
+  return wins / (ai.length * human.length);
+}
+
+export type Split = "tune" | "holdout";
+
+/**
+ * The evaluation split an entry belongs to: a hash of `key` puts about a third
+ * in "holdout" (spec B.24). The harness keys AI passages by topic, so one topic
+ * from several generators always lands on the same side.
+ */
+export function splitOf(key: string): Split {
+  return createHash("sha256").update(key).digest()[0]! % 3 === 0 ? "holdout" : "tune";
 }
 
 export function fractionAtOrAbove(scores: readonly number[], threshold: number): number {
