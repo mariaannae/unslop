@@ -47,13 +47,44 @@ export interface Guardrail {
 /** Returns a random passage, avoiding `excludeId` whenever there is another choice. */
 export type DrawPassage = (excludeId?: string) => Promise<Passage>;
 
+/** A scorer the player can choose, with the win line on that scorer's own scale. */
+export type ScorerOption = {
+  id: string;
+  /** Shown in the scorer menu. */
+  label: string;
+  scorer: Scorer;
+  win: { scoreAtOrBelow: number };
+};
+
 export type GameConfig = {
   drawPassage: DrawPassage;
+  /** The scorers the player can choose between, in menu order. */
+  scorers: readonly ScorerOption[];
+  /** Id of the scorer a new game starts with. The scripts score with it too. */
+  defaultScorer: string;
+  guardrails: readonly Guardrail[];
+  budget: { checksPerPuzzle: number };
+};
+
+/** What one Check runs: a scorer and its win line, and the guardrails. */
+export type CheckRules = {
   scorer: Scorer;
   guardrails: readonly Guardrail[];
   win: { scoreAtOrBelow: number };
-  budget: { checksPerPuzzle: number };
 };
+
+/** The rules for a Check under the scorer with this id. Throws on an unknown id. */
+export function checkRules(
+  config: Pick<GameConfig, "scorers" | "guardrails">,
+  scorerId: string,
+): CheckRules {
+  const option = config.scorers.find((s) => s.id === scorerId);
+  if (!option) {
+    const known = config.scorers.map((s) => s.id).join(", ");
+    throw new Error(`Unknown scorer "${scorerId}". Known: ${known}`);
+  }
+  return { scorer: option.scorer, guardrails: config.guardrails, win: option.win };
+}
 
 export type CheckOutcome = {
   guardrails: Array<{ id: string; result: GuardrailResult }>;
@@ -71,10 +102,7 @@ export type CheckOutcome = {
  * touches the budget; it only reports whether the scorer ran via `checkConsumed`.
  * Scorer errors propagate to the caller.
  */
-export async function runCheck(
-  ctx: EvalContext,
-  rules: Pick<GameConfig, "scorer" | "guardrails" | "win">,
-): Promise<CheckOutcome> {
+export async function runCheck(ctx: EvalContext, rules: CheckRules): Promise<CheckOutcome> {
   const guardrails: CheckOutcome["guardrails"] = [];
   const allPassed = () => guardrails.every((entry) => entry.result.pass);
 
@@ -103,6 +131,8 @@ export type GameState = {
   current: string;
   checksUsed: number;
   checksPerPuzzle: number;
+  /** Id of the scorer the current puzzle is played under (GameConfig.scorers). */
+  scorerId: string;
   outcome: CheckOutcome | null;
   /** Last scorer/provider failure. Cleared on the next edit, check, or new passage. */
   error: string | null;
@@ -117,15 +147,22 @@ export interface Game {
   setCurrent(text: string): void;
   /** Runs a Check. Resolves to the outcome, or null if the check was refused or failed. */
   check(): Promise<CheckOutcome | null>;
+  /**
+   * Switches scorer. A puzzle is played under one scorer, so this restarts the
+   * current passage: original text, full budget, no outcome. Ignored mid-check.
+   */
+  setScorer(id: string): void;
 }
 
 export function createGame(config: GameConfig): Game {
+  checkRules(config, config.defaultScorer);
   let state: GameState = {
     phase: "loading",
     passage: null,
     current: "",
     checksUsed: 0,
     checksPerPuzzle: config.budget.checksPerPuzzle,
+    scorerId: config.defaultScorer,
     outcome: null,
     error: null,
   };
@@ -166,10 +203,11 @@ export function createGame(config: GameConfig): Game {
       if (state.phase !== "playing" || !state.passage) return null;
       if (state.checksUsed >= state.checksPerPuzzle) return null;
 
+      const rules = checkRules(config, state.scorerId);
       set({ phase: "checking", error: null });
       let outcome: CheckOutcome;
       try {
-        outcome = await runCheck({ original: state.passage.text, current: state.current }, config);
+        outcome = await runCheck({ original: state.passage.text, current: state.current }, rules);
       } catch (error) {
         // A scorer/API failure costs nothing (spec §13) but must be surfaced, never swallowed.
         set({ phase: "playing", error: error instanceof Error ? error.message : String(error) });
@@ -184,6 +222,24 @@ export function createGame(config: GameConfig): Game {
           : "playing";
       set({ phase, checksUsed, outcome });
       return outcome;
+    },
+
+    setScorer(id) {
+      if (state.phase === "checking" || id === state.scorerId) return;
+      checkRules(config, id);
+      // While a passage is loading there is nothing to restart; it arrives fresh.
+      if (state.phase === "loading" || !state.passage) {
+        set({ scorerId: id });
+        return;
+      }
+      set({
+        scorerId: id,
+        phase: "playing",
+        current: state.passage.text,
+        checksUsed: 0,
+        outcome: null,
+        error: null,
+      });
     },
   };
 }

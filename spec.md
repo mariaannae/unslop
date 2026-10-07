@@ -1739,3 +1739,34 @@ At the user's direction, `pnpm generate` now scores candidates with whichever sc
 - **Keys:** under `scorers.jev`, `pnpm generate` also needs `TYPESAFE_API_KEY`.
 - **Checked end to end.** Re-running the Haiku 4.5 generation on the test topics, almost entirely from cache, rejected the one passage that scores at or below 2 (B.28) and one that the grammar guardrail flagged. The lowest kept score was 2.1, and kept passages record `score-jev@5 + score-v1@2`. In the current game bank (`data/passages.json`, gpt-4o), no passage is at or below 2 under version 5; the lowest scores 2.6. So the bank already meets the rule.
 - **Two models dropped.** At the user's direction, Sonnet 4.6 and gpt-5.6-luna are removed from `GENERATE_V1_MODELS` and from the list in `web/src/config.ts`. Their 200 passages are removed from `data/ai_test.json`, which now holds 400 passages from four models. Their B.28 results stand as recorded. Opus 5.5 is still selectable.
+
+## B.30 A Judge menu, per-scorer win lines, and a display scale for Jev (2026-10-07)
+
+At the user's request, the player can switch scorers from a menu in the app, and the Jev scorer's score is stretched so AI passages read high, as they do under the Haiku judge.
+
+- **Config:** `gameConfig.scorer` and `gameConfig.win` are replaced by `scorers`, a list of options shown in the menu in order, and `defaultScorer`. Each option has an id, a label, a scorer and its own win line:
+  - `jev`, "Jev": `scorers.jev`, line 2.
+  - `haiku`, "Claude Haiku": `scorers.llmBasic`, line 2, the line it had before B.19.
+  - `offline`, "Offline": `scorers.mock`, line 2.
+- **Engine:** `GameState` gains `scorerId`, and `Game` gains `setScorer(id)`. `checkRules(config, id)` pairs a scorer with its win line and the guardrails; `runCheck` takes those rules.
+  - A puzzle is played under one scorer, so switching restarts the current passage: original text, full budget, no outcome.
+  - Switching is ignored mid-check, and only recorded while a passage is loading.
+  - An unknown id throws, including a bad `defaultScorer` when the game is created.
+- **UI:** a "Judge" menu above the instructions. If the player has edited the passage or used a check, it asks before restarting. Its text is 16px so iOS does not zoom on focus.
+- **Scripts:** `pnpm generate` and `pnpm harness` use `defaultScorer`, and `--scorer <id>` picks another option for one run. The harness reports scores as the game shows them. `--task score-jev` still reports the task's own unscaled score.
+- **Jev display scale.** `scaleJevScore` in `web/src/scorers.ts` is applied only by `scorers.jev`, so switching scorer switches the scale with it. It is piecewise linear through (0, 0), (2, 2), (4, 8) and (7, 10), and caps at 10.
+  - **Why:** Jev rarely calls a single tell clearly present, so `score-jev` puts most AI passages at 3–5 out of 10, while the Haiku judge puts them at 8–10.
+  - **No ranking or win changes:** the scale is increasing and leaves 0–2 as they are, so with the line at 2 the same texts win. On the `tune` split the harness gives the same AUC, 0.996.
+  - **What changes is the meter:**
+    - Across the 580 cached AI passages (`ai_eval.json` and `ai_test.json`), the mean shown score rises from 3.9 to 6.9, and 45% show 8 or more. Only the highest, 7.0, reaches 10.
+    - Human texts keep their scores up to 2. The highest human score, 3.1, shows as 5.3.
+    - Between 2 and 4 each step of 0.1 shows as 0.3, so edits move the meter more visibly.
+  - **Where it lives:** the scale is display only. The `score-jev` task, its version (5) and its caches are unchanged, and `raw` keeps the task's own score.
+- **Game bank under each judge:**
+  - **Jev:** none of the 60 passages is won before any edit. The lowest shows 3.8 and the mean is 7.7.
+  - **Claude Haiku:** none is won before any edit; lowest 7, mean 9.1.
+  - **Offline:** 56 of 60 are won before any edit, because most passages contain none of its markers.
+- **Checked in the running app** at 375px wide, with the local Worker:
+  - The menu lists the three judges.
+  - Switching to Offline, editing and checking won at 0/10.
+  - Switching back to Jev restored the original text and a full budget, and one check showed 7.1 out of 10 with its tells.

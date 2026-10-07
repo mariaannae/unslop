@@ -1,13 +1,15 @@
 /**
  * Evaluation harness (SPEC §19 Milestone 3b, Appendix A.5). Scores the AI bank and
  * the human corpus and prints histograms, mean, median, the two separation figures
- * and the AUC. By default it scores with the game's active scorer from
- * web/src/config.ts (spec B.29); `--task` runs one scoring task instead. Talks to
- * the providers directly with the keys from the environment; never goes through
- * the Worker.
+ * and the AUC. By default it scores with the game's default scorer from
+ * web/src/config.ts (spec B.29), on that scorer's display scale; `--scorer` picks
+ * another configured scorer, and `--task` runs one scoring task on its own scale
+ * instead. Talks to the providers directly with the keys from the environment;
+ * never goes through the Worker.
  *
- *   pnpm harness [--task score-jev] [--bank file] [--human file] [--split tune|holdout]
- *                [--limit N] [--concurrency 4] [--no-cache] [--strict] [--show-misses]
+ *   pnpm harness [--scorer jev | --task score-jev] [--bank file] [--human file]
+ *                [--split tune|holdout] [--limit N] [--concurrency 4] [--no-cache]
+ *                [--strict] [--show-misses]
  *
  * `--split` keeps only that part of both sets (spec B.24). Tune scorers on
  * "tune"; "holdout" is for confirming the result once.
@@ -18,6 +20,7 @@ import { callableTasks, runTask, type RunTaskDeps } from "../shared/runTask";
 import type { ScoreV1Result } from "../shared/scoreV1";
 import type { AnyTask } from "../shared/types";
 import { gameConfig } from "../web/src/config";
+import { checkRules } from "../web/src/game";
 import {
   cacheDir,
   createDiskCache,
@@ -37,6 +40,7 @@ import {
 } from "./common";
 
 const args = readArgs({
+  scorer: { type: "string" },
   task: { type: "string" },
   bank: { type: "string" },
   human: { type: "string" },
@@ -56,6 +60,8 @@ function requireTask(id: string): AnyTask {
   return found;
 }
 const task = args.task === undefined ? undefined : requireTask(args.task);
+const scorerId = args.scorer ?? gameConfig.defaultScorer;
+const { scorer } = checkRules(gameConfig, scorerId);
 const limit = intArg(args.limit, Number.MAX_SAFE_INTEGER);
 const concurrency = intArg(args.concurrency, 4);
 if (args.split !== undefined && args.split !== "tune" && args.split !== "holdout") {
@@ -98,7 +104,7 @@ async function scoreAll(items: Item[]): Promise<Scored[]> {
     const ctx = { original: item.text, current: item.text };
     try {
       if (!task) {
-        const { score } = await gameConfig.scorer.score(ctx);
+        const { score } = await scorer.score(ctx);
         return { id: item.id, group: groupOf(item), score };
       }
       const { result, cached } = await runTask(task, ctx, deps);
@@ -125,7 +131,7 @@ const human = await loadItems(path.resolve(args.human ?? path.join(dataDir, "hum
 const [bankScored, humanScored] = await Promise.all([scoreAll(bank), scoreAll(human)]);
 const scorerLabel = task
   ? `scorer task: ${task.id}@${task.version} (${task.model})`
-  : `active scorer (web/src/config.ts): ${[...scorerTasks].join(" + ") || "offline"}`;
+  : `scorer "${scorerId}" (web/src/config.ts): ${[...scorerTasks].join(" + ") || "offline"}`;
 console.log(`${scorerLabel}${split ? `, ${split} split` : ""}\n`);
 
 function report(label: string, scored: Scored[], sep: SeparationTarget, missIsBelow: boolean) {

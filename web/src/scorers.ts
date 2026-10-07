@@ -65,9 +65,37 @@ export const llmBasic: Scorer = {
 };
 
 /**
- * The jevslop port (shared/scoreJev.ts): Jev's composite score and tells. Jev has
- * no meaning or grammar verdict, so score-v1 runs alongside it and only its two
- * verdicts are copied into `raw` for the meaning and grammar guardrails.
+ * The Jev scorer's display scale (spec B.30). score-jev's composite puts most AI
+ * passages at 3–5 out of 10, because Jev rarely calls a single tell clearly
+ * present, where the Haiku judge puts them at 8–10. This stretches the range above
+ * 2 so AI passages read high too. It is piecewise linear through these points and
+ * increasing, and leaves 0–2 as they are, so it changes no ranking and, with the
+ * win line at 2, no win.
+ */
+const JEV_SCALE: ReadonlyArray<readonly [raw: number, shown: number]> = [
+  [0, 0],
+  [2, 2],
+  [4, 8],
+  [7, 10],
+];
+
+/** score-jev's 0–10 score on the Jev scorer's display scale, to one decimal. */
+export function scaleJevScore(raw: number): number {
+  for (let k = 1; k < JEV_SCALE.length; k++) {
+    const [x1, y1] = JEV_SCALE[k]!;
+    if (raw <= x1) {
+      const [x0, y0] = JEV_SCALE[k - 1]!;
+      return Math.round(10 * (y0 + ((raw - x0) * (y1 - y0)) / (x1 - x0))) / 10;
+    }
+  }
+  return JEV_SCALE[JEV_SCALE.length - 1]![1];
+}
+
+/**
+ * The jevslop port (shared/scoreJev.ts): Jev's composite score, on the display
+ * scale above, and tells. `raw` keeps the task's own score. Jev has no meaning or
+ * grammar verdict, so score-v1 runs alongside it and only its two verdicts are
+ * copied into `raw` for the meaning and grammar guardrails.
  */
 export const jev: Scorer = {
   async score(ctx) {
@@ -77,7 +105,7 @@ export const jev: Scorer = {
       transport<ScoreV1Result>("score-v1", payload),
     ]);
     return {
-      score: result.score,
+      score: scaleJevScore(result.score),
       tells: result.tells,
       raw: {
         ...result,

@@ -85,7 +85,7 @@ describe("llm-basic scorer", () => {
 
 describe("jev scorer", () => {
   it("runs score-jev and score-v1 together and copies score-v1's verdicts into raw", async () => {
-    const jevResult = { score: 1.2, composite: 12, tells: [{ label: "Generic filler" }] };
+    const jevResult = { score: 3, composite: 30, tells: [{ label: "Generic filler" }] };
     const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const { taskId } = JSON.parse(init!.body as string) as { taskId: string };
       const result = taskId === "score-jev" ? jevResult : taskResult;
@@ -96,11 +96,33 @@ describe("jev scorer", () => {
     const result = await scorers.jev.score({ original: "orig", current: "cur" });
 
     expect(fetch).toHaveBeenCalledTimes(2);
+    // The score is on the display scale; raw keeps the task's own score of 3.
     expect(result).toEqual({
-      score: 1.2,
+      score: 5,
       tells: jevResult.tells,
       raw: { ...jevResult, meaning_preserved: false, grammatically_correct: true },
     });
+  });
+});
+
+describe("scaleJevScore", () => {
+  it("leaves 0–2 as they are, so the win line at 2 picks the same texts", () => {
+    for (const raw of [0, 0.4, 1.2, 1.9, 2]) expect(scorers.scaleJevScore(raw)).toBe(raw);
+    expect(scorers.scaleJevScore(2.1)).toBe(2.3);
+  });
+
+  it("stretches the range above 2: 4 shows as 8 and 7 or more as 10", () => {
+    expect(scorers.scaleJevScore(3)).toBe(5);
+    expect(scorers.scaleJevScore(4)).toBe(8);
+    expect(scorers.scaleJevScore(5.5)).toBe(9);
+    expect(scorers.scaleJevScore(7)).toBe(10);
+    expect(scorers.scaleJevScore(9.4)).toBe(10);
+  });
+
+  it("never reorders two scores", () => {
+    const raws = Array.from({ length: 101 }, (_, i) => i / 10);
+    const shown = raws.map(scorers.scaleJevScore);
+    for (let i = 1; i < shown.length; i++) expect(shown[i]).toBeGreaterThanOrEqual(shown[i - 1]!);
   });
 });
 
@@ -120,7 +142,7 @@ describe("setTaskTransport", () => {
 
     expect(calls).toEqual(["score-jev", "score-v1"]);
     expect(fetch).not.toHaveBeenCalled();
-    expect(result.score).toBe(2.4);
+    expect(result.score).toBe(3.2);
   });
 });
 

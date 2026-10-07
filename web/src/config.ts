@@ -11,9 +11,19 @@ import * as scorers from "./scorers";
 export const gameConfig: GameConfig = {
   drawPassage: createStaticBank(),
 
-  // scorers.jev and scorers.llmBasic score through the Worker (run `pnpm dev:worker`
-  // alongside the app). scorers.mock plays offline with no server at all.
-  scorer: scorers.jev,
+  // The scorers the player can pick from the menu, in order. Each has its own win
+  // line, on its own 0–10 scale. scorers.jev and scorers.llmBasic score through the
+  // Worker (run `pnpm dev:worker` alongside the app). scorers.mock plays offline
+  // with no server at all.
+  scorers: [
+    { id: "jev", label: "Jev", scorer: scorers.jev, win: { scoreAtOrBelow: 2 } },
+    { id: "haiku", label: "Claude Haiku", scorer: scorers.llmBasic, win: { scoreAtOrBelow: 2 } },
+    { id: "offline", label: "Offline", scorer: scorers.mock, win: { scoreAtOrBelow: 2 } },
+  ],
+
+  // The scorer a new game starts with. `pnpm generate` and `pnpm harness` score
+  // with it too, unless given --scorer.
+  defaultScorer: "jev",
 
   // Local guardrails run before the scorer and cost no Check; remote ones read its result.
   guardrails: [
@@ -22,10 +32,6 @@ export const gameConfig: GameConfig = {
     guardrails.meaning,
     guardrails.grammar,
   ],
-
-  win: {
-    scoreAtOrBelow: 2,
-  },
 
   budget: {
     checksPerPuzzle: 6,
@@ -37,7 +43,7 @@ export const gameConfig: GameConfig = {
  * for every model; each option's provider and temperature are in
  * GENERATE_V1_MODELS (scripts/generateV1.ts). The game itself never reads this.
  * GPT models need OPENAI_API_KEY in worker/.dev.vars. Candidates are scored with
- * gameConfig's scorer, so its keys are needed too: ANTHROPIC_API_KEY, and
+ * gameConfig's default scorer, so its keys are needed too: ANTHROPIC_API_KEY, and
  * TYPESAFE_API_KEY for scorers.jev.
  *
  *   "claude-haiku-4-5"    smallest and fastest, temperature 0

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  checkRules,
   createGame,
   runCheck,
   type CheckOutcome,
@@ -182,7 +183,11 @@ describe("win logic", () => {
   });
 });
 
-function gameWith(scorer = fakeScorer({ score: 5 }), checksPerPuzzle = 3) {
+function gameWith(
+  scorer = fakeScorer({ score: 5 }),
+  checksPerPuzzle = 3,
+  other = fakeScorer({ score: 1 }),
+) {
   const local = fakeGuardrail("not-empty", true);
   local.check.mockImplementation(async (c) =>
     c.current.trim() ? { pass: true } : { pass: false, reason: "empty" },
@@ -190,12 +195,15 @@ function gameWith(scorer = fakeScorer({ score: 5 }), checksPerPuzzle = 3) {
   const drawPassage = sequentialDraw();
   const game = createGame({
     drawPassage,
-    scorer,
+    scorers: [
+      { id: "main", label: "Main", scorer, win },
+      { id: "other", label: "Other", scorer: other, win: { scoreAtOrBelow: 1 } },
+    ],
+    defaultScorer: "main",
     guardrails: [local],
-    win,
     budget: { checksPerPuzzle },
   });
-  return { game, scorer, drawPassage };
+  return { game, scorer, other, drawPassage };
 }
 
 describe("game state: passages", () => {
@@ -346,5 +354,93 @@ describe("game state: winning", () => {
       original: passages[0]!.text,
       current: "second edit",
     });
+  });
+});
+
+describe("game state: choosing a scorer", () => {
+  it("starts with the default scorer and checks with it", async () => {
+    const { game, scorer, other } = gameWith();
+    expect(game.getState().scorerId).toBe("main");
+    await game.newPassage();
+    await game.check();
+    expect(scorer.score).toHaveBeenCalledTimes(1);
+    expect(other.score).not.toHaveBeenCalled();
+  });
+
+  it("switching restarts the passage and checks with the new scorer and its win line", async () => {
+    const { game, scorer, other } = gameWith(fakeScorer({ score: 9 }), 3, fakeScorer({ score: 1 }));
+    await game.newPassage();
+    game.setCurrent("my edit");
+    await game.check();
+
+    game.setScorer("other");
+
+    expect(game.getState()).toMatchObject({
+      scorerId: "other",
+      phase: "playing",
+      passage: passages[0],
+      current: passages[0]!.text,
+      checksUsed: 0,
+      outcome: null,
+    });
+    const outcome = (await game.check()) as CheckOutcome;
+    expect(other.score).toHaveBeenCalledTimes(1);
+    expect(scorer.score).toHaveBeenCalledTimes(1);
+    expect(outcome.win).toBe(true); // 1 is at the other scorer's line of 1
+  });
+
+  it("can switch after a puzzle is over, which replays the same passage", async () => {
+    const { game } = gameWith(fakeScorer({ score: 9 }), 1);
+    await game.newPassage();
+    await game.check();
+    expect(game.getState().phase).toBe("lost");
+
+    game.setScorer("other");
+
+    expect(game.getState()).toMatchObject({ phase: "playing", passage: passages[0] });
+  });
+
+  it("is ignored mid-check, and only records the choice while a passage loads", async () => {
+    let finish!: (r: ScoreResult) => void;
+    const slow = { score: vi.fn(() => new Promise<ScoreResult>((resolve) => (finish = resolve))) };
+    const { game } = gameWith(slow);
+    game.setScorer("other");
+    expect(game.getState()).toMatchObject({ scorerId: "other", phase: "loading", passage: null });
+
+    game.setScorer("main");
+    await game.newPassage();
+    const pending = game.check();
+    await Promise.resolve();
+    game.setScorer("other");
+    expect(game.getState()).toMatchObject({ scorerId: "main", phase: "checking" });
+    finish({ score: 5 });
+    await pending;
+  });
+
+  it("rejects an unknown scorer id, in the config and when switching", () => {
+    const { game } = gameWith();
+    expect(() => game.setScorer("nope")).toThrow('Unknown scorer "nope". Known: main, other');
+    expect(() =>
+      createGame({
+        drawPassage: sequentialDraw(),
+        scorers: [],
+        defaultScorer: "main",
+        guardrails: [],
+        budget: { checksPerPuzzle: 1 },
+      }),
+    ).toThrow('Unknown scorer "main"');
+  });
+
+  it("checkRules pairs the chosen scorer with its own win line and the guardrails", () => {
+    const scorer = fakeScorer();
+    const guardrail = fakeGuardrail("g", true);
+    const rules = checkRules(
+      {
+        scorers: [{ id: "x", label: "X", scorer, win: { scoreAtOrBelow: 3 } }],
+        guardrails: [guardrail],
+      },
+      "x",
+    );
+    expect(rules).toEqual({ scorer, guardrails: [guardrail], win: { scoreAtOrBelow: 3 } });
   });
 });

@@ -1,7 +1,8 @@
 /**
  * Bank generator (SPEC §19 Milestone 3b, Appendix A.3). Generates candidate
  * passages with `generate-v1` and puts each through the game's own Check, with the
- * scorer, guardrails and win line in web/src/config.ts (spec B.29). It keeps the
+ * default scorer, its win line and the guardrails in web/src/config.ts (spec
+ * B.29); `--scorer` picks another of the configured scorers. It keeps the
  * candidates that pass every guardrail and that the game would not already count
  * as won, so every passage needs editing. Writes data/passages.json with
  * provenance. The generation model is also set in web/src/config.ts; `--model`
@@ -9,7 +10,7 @@
  * instead of TOPICS.
  *
  *   pnpm generate [--count 60] [--out data/passages.json] [--append] [--concurrency 3]
- *                 [--model gpt-4o] [--topics data/test_topics.json]
+ *                 [--model gpt-4o] [--topics data/test_topics.json] [--scorer jev]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,7 +26,7 @@ import {
   runScorersLocally,
 } from "./common";
 import { gameConfig, generationModel } from "../web/src/config";
-import { runCheck } from "../web/src/game";
+import { checkRules, runCheck } from "../web/src/game";
 import {
   createGenerateV1Task,
   GENERATE_V1_MODELS,
@@ -104,7 +105,9 @@ const args = readArgs({
   "max-attempts": { type: "string" },
   model: { type: "string" },
   topics: { type: "string" },
+  scorer: { type: "string" },
 });
+const rules = checkRules(gameConfig, args.scorer ?? gameConfig.defaultScorer);
 const count = intArg(args.count, 60);
 const concurrency = intArg(args.concurrency, 3);
 const maxAttempts = intArg(args["max-attempts"], count * 2);
@@ -176,7 +179,7 @@ async function attempt(i: number): Promise<Attempt> {
     if (usedTexts.has(gen.text))
       return { topic, register, text: gen.text, keep: false, why: "duplicate" };
     // The passage as the game first shows it: original and current are the same text.
-    const outcome = await runCheck({ original: gen.text, current: gen.text }, gameConfig);
+    const outcome = await runCheck({ original: gen.text, current: gen.text }, rules);
     const score = outcome.score?.score;
     const failed = outcome.guardrails.find((g) => !g.result.pass);
     if (failed) {
@@ -189,7 +192,7 @@ async function attempt(i: number): Promise<Attempt> {
         text: gen.text,
         score,
         keep: false,
-        why: `already won (score at or below ${gameConfig.win.scoreAtOrBelow})`,
+        why: `already won (score at or below ${rules.win.scoreAtOrBelow})`,
       };
     }
     return { topic, register, text: gen.text, score, keep: true, why: "kept" };
@@ -203,7 +206,7 @@ async function attempt(i: number): Promise<Attempt> {
   }
 }
 
-console.error(`generating with ${model}`);
+console.error(`generating with ${model}, scoring with ${args.scorer ?? gameConfig.defaultScorer}`);
 const kept: BankEntry[] = [...existing];
 let attempts = 0;
 const rejected: Attempt[] = [];

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { gameConfig } from "./config";
-import { createGame, type CheckOutcome, type GamePhase } from "./game";
+import { createGame, type CheckOutcome, type GamePhase, type ScorerOption } from "./game";
 
 /**
  * The whole screen. Builds the game from config once, subscribes to its store,
@@ -42,6 +42,14 @@ export function App() {
     void game.newPassage();
   }
 
+  function onScorerChange(id: string) {
+    const discarding = state.phase === "playing" && (edited || state.checksUsed > 0);
+    if (discarding && !window.confirm("Switching the judge restarts this passage. Continue?")) {
+      return;
+    }
+    game.setScorer(id);
+  }
+
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-white font-sans text-neutral-900">
       <header className="flex items-baseline justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
@@ -53,6 +61,13 @@ export function App() {
       </header>
 
       <main className="flex flex-1 flex-col gap-4 px-4 pb-6">
+        <ScorerMenu
+          options={gameConfig.scorers}
+          value={state.scorerId}
+          disabled={checking}
+          onChange={onScorerChange}
+        />
+
         <p className="text-sm text-neutral-600">
           Edit this passage until it no longer reads like an AI wrote it. Keep the meaning.
           {state.passage?.topic ? (
@@ -125,6 +140,35 @@ export function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+/**
+ * Picks the scorer. The options and their order come from config; the engine
+ * restarts the passage on a switch. text-base keeps iOS from zooming on focus.
+ */
+function ScorerMenu(props: {
+  options: readonly ScorerOption[];
+  value: string;
+  disabled: boolean;
+  onChange(id: string): void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-neutral-600">
+      Judge
+      <select
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(e) => props.onChange(e.target.value)}
+        className="min-h-10 rounded-md border border-neutral-300 bg-white px-2 text-base text-neutral-900 focus:border-neutral-900 focus:outline-none disabled:opacity-50"
+      >
+        {props.options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
