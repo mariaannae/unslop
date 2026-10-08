@@ -1,4 +1,4 @@
-import type { TaskRequest, TaskResponse } from "../../shared/api";
+import type { TaskRequest, TaskResponse } from "../../shared/types";
 import type { ScoreJevResult } from "../../shared/scoreJev";
 import type { ScoreV1Result } from "../../shared/scoreV1";
 import type { Scorer, Tell } from "./game";

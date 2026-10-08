@@ -228,40 +228,42 @@ A richer editor can be substituted later behind a UI component boundary.
 
 # 5. Repository architecture
 
-The repository is one pnpm package with four top-level folders (Appendix B.13). Keep it flat: one readable file per concept, with tests next to the file they test.
+The repository is one pnpm package with four top-level folders (Appendix B.13, B.32). Keep it flat: one readable file per concept, with tests next to the file they test.
 
 ```text
 .
 ├── spec.md, DEVELOPMENT.md
 ├── package.json              one package: all dependencies and scripts
 ├── tsconfig.json             shared options; type-checks shared/ + worker/
+├── .github/workflows/deploy.yml
 ├── data/
-│   ├── passages.json
-│   └── human_corpus.json
+│   ├── passages.json         the bank the game draws from
+│   ├── human_corpus.json     the harness's human baseline
+│   ├── ai_eval.json          generated banks for tuning a scorer
+│   └── ai_test.json, test_topics.json   held back for testing a finished scorer
 ├── web/                      Vite + React app (GitHub Pages)
-│   ├── index.html, vite.config.ts, tsconfig.json, public/CNAME
+│   ├── index.html, vite.config.ts, tsconfig.json
 │   └── src/
-│       ├── config.ts         the game settings: passage source, scorer, guardrails, win, budget
-│       ├── game.ts           domain types, runCheck, game store
-│       ├── scorers.ts        mock, llm-basic, and callTask (POST /api/task)
+│       ├── config.ts         the game settings: passage source, scorer menu, default scorer, guardrails, budget; generation model
+│       ├── game.ts           domain types, checkRules, runCheck, game store
+│       ├── scorers.ts        mock, llmBasic, jev, and callTask (POST /api/task)
 │       ├── guardrails.ts     not-empty, length-ratio, meaning, grammar
 │       ├── passages.ts       static bank
-│       ├── App.tsx           the whole UI: screen, editor, outcome panel, score meter
+│       ├── App.tsx           the whole UI: judge menu, editor, outcome panel, score meter
 │       └── main.tsx, index.css, *.test.ts
 ├── worker/                   Cloudflare Worker, the only holder of the API key
 │   ├── wrangler.toml, .dev.vars.example
-│   ├── index.ts              entry, routing, CORS
-│   └── task.ts               /api/task handler, KV cache, rate limit
+│   └── index.ts              the whole Worker: entry, routing, CORS, /api/task handler, KV cache, rate limit
 ├── shared/                   used by worker and scripts; web imports types only
-│   ├── api.ts                /api/task wire types
-│   ├── types.ts              task and provider contract
+│   ├── types.ts              task and provider contract, /api/task wire types
 │   ├── runTask.ts            the task sequence, cache key, callable tasks
-│   ├── scoreV1.ts            the score-v1 task (the only task the Worker runs)
+│   ├── scoreV1.ts            the score-v1 task (the Haiku judge)
+│   ├── scoreJev.ts           the score-jev task (jevslop port: tells, weights, Jev call)
 │   └── anthropic.ts          provider adapter
 └── scripts/                  Node scripts run with tsx
     ├── evalHarness.ts, generateBank.ts, buildHumanCorpus.ts
     ├── generateV1.ts         the generate-v1 task (scripts only)
-    └── common.ts             flags, paths, word count, provider, disk cache, stats
+    └── common.ts             flags, paths, word count, OpenAI adapter, disk cache, stats
 ```
 
 Do not create files solely for future concepts unless there is a concrete interface or test that benefits from their existence.
@@ -1779,3 +1781,15 @@ At the user's direction, the code-measured "Bold labels and lead-ins" tell (weig
 - **No score changes:** in all 979 cached version 5 results, the tell was skipped, so removing it changes no score on any text scored so far. Only texts of 200+ words score differently: one weight less in the average.
 - **Caches:** the version bump starts fresh caches in Worker KV and `scripts/.cache/results`, so the next Check or harness run calls Jev again for each text.
 - **What stays:** the reasons-list question (whole text, 200+ words only) still mentions "a bold label" as one way list items are introduced. That is Jev reading the text, not this tell, and was left as is.
+
+## B.32 Fewer files: one Worker file, one contracts file, no CNAME (2026-10-08)
+
+At the user's request, three more files are folded into their neighbors so the code is easier to read by hand. `web/src/` stays as it is, also at the user's request. Tracked files go from 55 to 51. This supersedes the Worker part of the "Files" bullet in B.13 and the CNAME parts of B.8 and B.11.
+
+- **The Worker is one file.** `worker/task.ts` is merged into `worker/index.ts` (about 330 lines). It has four sections: entry, routing and CORS; the task handler; JSON responses and structured errors; the KV cache and rate limiter.
+  - The tests are merged into `worker/index.test.ts`, still 21.
+  - `HttpError`, `jsonResponse` and `errorResponse` are no longer exported, because only this file uses them. `handleTask` and the two KV factories stay exported for the tests.
+  - `wrangler.toml` still points at `index.ts`. Under `wrangler dev` the Worker loads with the extra named exports and no warnings, and `/api/health` and `/api/task` answer as before.
+- **One contracts file.** The `/api/task` wire types from `shared/api.ts` are now the last section of `shared/types.ts`. `web/src/scorers.ts` imports them from there with `import type`, so the built app still contains neither `TaskError` nor `ProviderError`.
+- **No CNAME file.** `web/public/CNAME` and the `public/` folder are deleted. The app is published by `actions/deploy-pages`, and GitHub ignores a CNAME file in a workflow deploy: the custom domain comes from Settings → Pages. `unslop.app` is set there, since `mariaannae.github.io/unslop/` redirects to it.
+- **No behavior changes.** No code path, test or cache key changed. All 154 tests pass, and lint, typecheck, build and the Worker dry run are clean.
