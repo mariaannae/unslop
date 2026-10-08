@@ -162,7 +162,7 @@ describe("POST /api/task", () => {
     expect(body).toEqual({
       ok: true,
       taskId: "score-v1",
-      version: 2,
+      version: 3,
       cached: false,
       result: {
         score: 4,

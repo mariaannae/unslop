@@ -1793,3 +1793,13 @@ At the user's request, three more files are folded into their neighbors so the c
 - **One contracts file.** The `/api/task` wire types from `shared/api.ts` are now the last section of `shared/types.ts`. `web/src/scorers.ts` imports them from there with `import type`, so the built app still contains neither `TaskError` nor `ProviderError`.
 - **No CNAME file.** `web/public/CNAME` and the `public/` folder are deleted. The app is published by `actions/deploy-pages`, and GitHub ignores a CNAME file in a workflow deploy: the custom domain comes from Settings → Pages. `unslop.app` is set there, since `mariaannae.github.io/unslop/` redirects to it.
 - **No behavior changes.** No code path, test or cache key changed. All 154 tests pass, and lint, typecheck, build and the Worker dry run are clean.
+
+## B.33 `score-v1` moves to Claude Haiku 5.5 (2026-10-08)
+
+At the user's request, `score-v1` now calls Claude Haiku 5.5 (`claude-haiku-5-5`, released 2026-10-07) instead of Haiku 4.5. This supersedes the model and temperature in A.2 and B.5.
+
+- **No temperature.** Haiku 5.5 returns a 400 (`temperature` is deprecated for this model) when the request sets it, so `buildRequest` leaves it out and the model runs at its default. Scores are no longer deterministic across separate calls, but the Worker's KV cache still returns the same result when the same text is checked again.
+- **Thinking left unset.** In a spot check of 5 passages with the real prompt, the model used no thinking tokens either way, and responses were 36–349 output tokens, under the 512 cap. The three AI passages scored 8–10 and the two human texts scored 0–1.
+- **Version 3.** The cache key does not name the model, so `score-v1` is now version 3. Results that Haiku 4.5 produced under version 2 are no longer served.
+- **Wider effect.** `scorers.jev` takes its `meaning_preserved` and `grammatically_correct` verdicts from `score-v1` (B.19), so the `meaning` and `grammar` guardrails in the default game now use Haiku 5.5. So does the grammar check in `pnpm generate`. The `score-v1` harness figures in B.10 describe Haiku 4.5 and have not been re-measured.
+- `generate-v1` still writes with `claude-haiku-4-5` at temperature 0; only the scorer changed.

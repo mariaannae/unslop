@@ -3,7 +3,8 @@ import { TaskError, type ProviderRequest, type TaskDefinition } from "./types";
 /**
  * `score-v1` — the first scoring task (SPEC Appendix A.2).
  *
- * One Claude Haiku 4.5 call, temperature 0, schema-constrained JSON output.
+ * One Claude Haiku 5.5 call, schema-constrained JSON output. Haiku 5.5 rejects
+ * `temperature`, so the request leaves it at the model's default.
  * Prompt text, model, schema, and parser rules all live here so the Worker
  * and Node scripts share one definition. Bump `version` when any of them change.
  */
@@ -171,8 +172,8 @@ function booleanOrDefault(
 
 export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
   id: "score-v1",
-  version: 2,
-  model: "claude-haiku-4-5",
+  version: 3,
+  model: "claude-haiku-5-5",
 
   validatePayload(input: unknown): ScoreV1Payload {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -191,7 +192,6 @@ export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
       system: SCORE_V1_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildUserMessage(payload) }],
       maxTokens: 512,
-      temperature: 0,
       outputSchema: SCORE_V1_RESPONSE_SCHEMA,
     };
   },

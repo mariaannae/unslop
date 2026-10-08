@@ -181,10 +181,10 @@ describe("score-v1 validatePayload", () => {
 });
 
 describe("score-v1 buildRequest", () => {
-  it("builds a deterministic provider request with the shared prompt", () => {
+  it("builds a provider request with the shared prompt", () => {
     const request = scoreV1Task.buildRequest(payload);
-    expect(request.model).toBe("claude-haiku-4-5");
-    expect(request.temperature).toBe(0);
+    expect(request.model).toBe("claude-haiku-5-5");
+    expect(request.temperature).toBeUndefined();
     expect(request.system).toBe(SCORE_V1_SYSTEM_PROMPT);
     expect(request.outputSchema).toBe(SCORE_V1_RESPONSE_SCHEMA);
     expect(request.messages).toEqual([
