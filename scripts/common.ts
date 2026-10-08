@@ -33,6 +33,20 @@ export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+export function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/** An entry of data/human_originals.json (spec B.40), written by buildHumanOriginals.ts. */
+export type HumanOriginal = {
+  id: string;
+  /** An AI rewrite of the human text, scored as the passage the player started from. */
+  original: string;
+  model: string;
+  /** sha256 of the human text it was written from, so a changed text is redone. */
+  textSha256: string;
+};
+
 // ---------------------------------------------------------------------------
 // Provider and cache
 

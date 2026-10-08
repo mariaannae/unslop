@@ -1,14 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { runCheck, type EvalContext } from "./game";
 import {
   countWords,
   grammar,
+  jevGrammar,
+  jevMeaning,
   lengthRatio,
   meaning,
   MEANING_CHANGED_REASON,
   NOT_GRAMMATICAL_REASON,
   notEmpty,
 } from "./guardrails";
+import { callTask, setTaskTransport } from "./scorers";
 
 const ctx = (overrides: Partial<EvalContext> = {}): EvalContext => ({
   original: "one two three four five six seven eight nine ten",
@@ -127,5 +130,62 @@ describe("meaning and grammar", () => {
       expect(await guardrail.check(ctx(), { score: 0 })).toEqual({ pass: true });
       expect(await guardrail.check(ctx(), { score: 0, raw: {} })).toEqual({ pass: true });
     }
+  });
+});
+
+describe("meaning and grammar from Jev", () => {
+  afterEach(() => setTaskTransport(callTask));
+
+  /** Answers judge-jev with these verdicts and records each call. */
+  function stubJudge(meaning_preserved: boolean, grammatically_correct: boolean) {
+    const calls: Array<{ taskId: string; payload: unknown }> = [];
+    setTaskTransport(async <Result>(taskId: string, payload: unknown) => {
+      calls.push({ taskId, payload });
+      return { meaning_preserved, grammatically_correct } as Result;
+    });
+    return calls;
+  }
+
+  const rules = {
+    scorer: { score: async () => ({ score: 0, raw: { meaning_preserved: true } }) },
+    guardrails: [jevMeaning, jevGrammar],
+    win: { scoreAtOrBelow: 2 },
+  };
+
+  it("ask judge-jev once per Check for both verdicts, whatever the scorer's raw says", async () => {
+    const calls = stubJudge(false, true);
+    const outcome = await runCheck(ctx({ current: "changed" }), rules);
+    expect(calls).toEqual([
+      { taskId: "judge-jev", payload: { original: ctx().original, current: "changed" } },
+    ]);
+    expect(outcome.win).toBe(false);
+    expect(outcome.guardrails).toEqual([
+      { id: "meaning-jev", result: { pass: false, reason: MEANING_CHANGED_REASON } },
+      { id: "grammar-jev", result: { pass: true } },
+    ]);
+  });
+
+  it("ask again on the next Check", async () => {
+    const calls = stubJudge(true, false);
+    const first = await runCheck(ctx(), rules);
+    await runCheck(ctx(), rules);
+    expect(calls).toHaveLength(2);
+    expect(first.guardrails[1]).toEqual({
+      id: "grammar-jev",
+      result: { pass: false, reason: NOT_GRAMMATICAL_REASON },
+    });
+  });
+
+  it("let the score decide when Jev passes both", async () => {
+    stubJudge(true, true);
+    expect((await runCheck(ctx(), rules)).win).toBe(true);
+  });
+
+  it("pass without asking after a scorer that made no server call, as offline", async () => {
+    const calls = stubJudge(false, false);
+    const offline = { ...rules, scorer: { score: async () => ({ score: 0, tells: [] }) } };
+    const outcome = await runCheck(ctx(), offline);
+    expect(calls).toEqual([]);
+    expect(outcome.win).toBe(true);
   });
 });

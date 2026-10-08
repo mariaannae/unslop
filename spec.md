@@ -1929,3 +1929,91 @@ At the user's request, `scorers.llmBasic` measures two more tells in code, next 
   - The "-ing" tell is listed on 408 of the 580 AI passages (70%) and 32 of the 198 human texts (16%). The list tell is listed on 320 (55%) and 34 (17%).
   - 326 AI passages now reach the cap of 10.
 - **Caveats.** The rest has only 62 human texts. `ai_test` and the `holdout` split had both been used before, though not for these tells. A first version of the `tune`/rest comparison mixed up the two AI sets, because 180 ids appear in both `ai_eval.json` and `ai_test.json`. The figures above key the split by set as well as id.
+
+## B.39 Wikipedia paragraphs from before ChatGPT, and an AUC without Gutenberg (2026-10-08)
+
+At the user's request, the human corpus's Wikipedia paragraphs now come from each article as it stood before the cutoff that Stack Exchange and Wikivoyage already use (30 Nov 2022, B.24), and the harness reports separation against the modern human sources first.
+
+- **Why.** The 35 Wikipedia paragraphs were taken from the current articles in September 2026. Compared with the last revision before the cutoff, 23 of them had under 90% of their six-word runs in the old article, and 11 under half. Two of the paragraphs (Pickling and Trampoline) were not in the articles at all in 2022. That does not make them AI-written, but it leaves them without the guarantee the other modern sources have.
+- **The builder** (`scripts/buildHumanCorpus.ts`) now fetches each article's last revision before the cutoff and renders it, as it already did for Wikivoyage; the two share `revisionBefore`. It takes the first paragraph in range with at least two sentences, the rule for modern sources. `source` records the revision's date and link, licensed CC BY-SA 3.0 like Wikivoyage's.
+- **Ids are kept.** 41 titles now have a paragraph in range. The first 35 in title order are kept (`WIKIPEDIA_COUNT`), so the Wikipedia entries stay `h0061`–`h0095`, and every other entry keeps its id, text and split. The builder stops with an error if it ever finds fewer than 35, rather than renumbering the entries after them.
+  - Seven titles are new (Birdwatching, Knitting, Lantern, Rain gauge, Sourdough, Sudoku, Windmill), and seven dropped (Campfire, Playground, Sandcastle, Skateboard, Tide pool, Toaster, Wheelbarrow).
+  - No paragraph is the same as before, even from articles that did not change. The old plain-text extract ran each section together into one "paragraph", so the first one in range was usually a different one.
+- **AUC without Gutenberg.** The harness now prints the AUC against the modern sources (Wikipedia, Stack Exchange, Wikivoyage; 138 texts) before the AUC against all 198. Gutenberg's 60 texts are 19th-century prose that no player writes, and every scorer separates them from AI text almost perfectly, which flatters the overall figure.
+- **Effect on Jev:** Wikipedia's AUC goes from 0.995 to 0.996, and 32 of 35 win at line 3 either way. For the Haiku judge, see B.40.
+
+## B.40 The harness scores a human text as an edit of an AI original (2026-10-08)
+
+At the user's request, the harness no longer scores a human text as its own original.
+
+- **The problem.** The harness passed each human text as both `original` and `current`. `score-v1`'s prompt says the original was written by an AI, so the Haiku judge saw an AI passage the player had not touched, and said so: 84 of the 198 human texts had a tell such as `unchanged-from-original`, including 26 of the 34 that `score-v1` put at 6 or more. Jev scores only `current` and was not affected.
+- **The fix.** `data/human_originals.json` holds an AI rewrite of each human text, and the harness scores the human text as a player's edit of it. That is the game's best case: a player who turned an AI passage into genuinely human prose. AI passages are still scored unedited, as the player first sees them.
+  - `pnpm originals` (`scripts/buildHumanOriginals.ts`) writes the file with `generationModel` (gpt-4o, the game bank's model), at temperature 0. It asks for the passage "in your own words", with every fact, as one paragraph of about the same length. The rewrites are 0.69–1.32 times the length of the human text, median 0.92.
+  - Each entry records the model and the sha256 of the human text. The builder writes only entries that are missing or whose text changed, and the harness stops if any human text lacks an original for its current text.
+- **Results** for the judges as shipped, from cache, `ai_eval` and `ai_test` (580) against the human corpus (198). "Before" is the old corpus and harness; "after" includes B.39.
+
+  | | Haiku, line 5 | Jev, line 3 |
+  | --- | --- | --- |
+  | AUC against modern human texts | 0.9970 → 0.9998 | 0.9929 → 0.9932 |
+  | AUC against all human texts | 0.9979 → 0.9990 | 0.9949 → 0.9951 |
+  | Human texts that win | 162 (82%) → 188 (95%) | 184 (93%) → 184 (93%) |
+  | AI passages won before any edit (unchanged) | 1 | 4 |
+
+  - The harness fix alone, on the 163 texts B.39 did not change: for the Haiku judge, wins go from 139 to 158 and the modern AUC from 0.9975 to 0.9999. Jev stays at 152.
+  - For the Haiku judge, Gutenberg is now the hardest source (AUC 0.997, 57 of 60 win), since its old prose is compared with a modern rewrite. Wikipedia, Stack Exchange and Wikivoyage are at 1.000, with 30 of 35, 61 of 62 and 40 of 41 winning.
+- **Haiku's line 5 stands.** The B.34 table, redone with the fixed harness (AI passages are unchanged):
+
+  | Line | Human texts that win, old harness → fixed | AI passages won before any edit |
+  | --- | --- | --- |
+  | 2 | 66 (33%) → 28 (14%) | 0 |
+  | 3 | 99 (50%) → 77 (39%) | 0 |
+  | 4 | 147 (74%) → 155 (78%) | 0 |
+  | **5** | **162 (82%) → 188 (95%)** | **1** |
+  | 6 | 166 (84%) → 195 (98%) | 2 |
+  | 7 | 188 (95%) → 197 (99%) | 4 |
+
+  Against an AI original, human texts bunch between 3 and 5 rather than spreading from 0 to 6, so fewer win at low lines and more at 5.
+- **Guardrail verdicts.** The harness's win counts leave the guardrails out. Both judges take `score-v1`'s meaning and grammar verdicts, and either one failing blocks the Check.
+  - **Grammar** is judged on the human text itself. Against an AI original, 46 human texts are marked not grammatical: 22 of 62 from Stack Exchange, 12 of 41 from Wikivoyage, 7 of 35 from Wikipedia and 5 of 60 from Gutenberg. Most are real slips in casual writing ("to much", "thats", "Zara who has"), so the guardrail blocks ordinary human carelessness, not only nonsense. The verdict also depends on the original: on the 163 texts B.39 did not change, it went from 15 to 39 when the text was compared with an AI original rather than with itself.
+  - **Meaning** says little about the human texts here. In the game the AI passage comes first, so whatever differs is the player's doing. Here the original was written from the human text, so a failed meaning check mostly measures the rewrite. 25 texts fail it (none did when each was its own original). Some are the rewrite's fault: h0109's original leaves out the human text's opening "Detailed explanation, with pictures". Others are the judge's strictness: the Kite pair says the same thing in nearly the same words.
+- **Caveats.** All originals come from one model, and their wording affects the meaning verdict. The human-text figures in B.33–B.38 were measured with the old harness. Haiku 5.5's run-to-run noise (B.33) still applies.
+
+## B.41 Jev as an option for the meaning and grammar guardrails (2026-10-08)
+
+At the user's request, TypeSafe's Jev can now give the meaning and grammar verdicts in place of the Haiku judge. Haiku stays the default; the choice is a line in `web/src/config.ts`. Until now both verdicts came from `score-v1` whichever scorer the player picked: `scorers.llmBasic` gets them with its score, and `scorers.jev` makes a second call to `score-v1` only for them (B.19).
+
+- **The task:** `judge-jev` (`shared/judgeJev.ts`, version 1) sends Jev one System One request with both texts and two yes/no questions: does `current` keep the meaning of `original` (rewording, tone and cut filler are fine), and is `current` well-formed English (casual style and an occasional small slip are fine; scrambled order, missing words, repeated misspellings and gibberish are not). Each verdict passes at probability 0.5 or more. The result uses `score-v1`'s field names and adds the two probabilities. It is in `callableTasks`, so the Worker serves it, and it needs `pnpm deploy:worker` before the live site can use it.
+- **The guardrails:** `guardrails.jevMeaning` and `guardrails.jevGrammar` (ids `meaning-jev`, `grammar-jev`) are remote, like `meaning` and `grammar`, but make their own call instead of reading the scorer's `raw`. The two share one `judge-jev` request per Check, made after the scorer. They go through the scorers' transport (`runRemoteTask` in `web/src/scorers.ts`), so the scripts run them locally like everything else. The app imports only the result type, so Jev's questions and URL stay out of the bundle (B.32).
+- **Comparison,** with both judges given the same pairs (all cached under `scripts/.cache/results`). The broken edits are the 60 game bank passages, altered in code.
+
+  | Pairs | Expected | Haiku blocks | Jev blocks |
+  | --- | --- | --- | --- |
+  | Unedited AI passages, `ai_eval` and `ai_test` (580) | pass | 2 | 0 |
+  | Human text against its AI original (198, B.40) | mostly pass | 63 (meaning 25, grammar 46) | 5 (meaning 2, grammar 3) |
+  | Two letters swapped in 1 word in 4 (60) | grammar fails | 59 | 60 |
+  | Two letters swapped in 1 word in 10 (60) | grammar fails | 59 | 60 |
+  | Words reordered within each sentence (60) | both fail | 25, and 35 refused | 60 (meaning 59, grammar 60) |
+  | Every fourth word dropped (60) | grammar fails | 60 | 60 |
+  | Another bank passage in its place (60) | meaning fails | 60 | 60 |
+
+  - Jev's five human flags: three Huckleberry Finn paragraphs in dialect ("she warn't", "dey") on grammar, at 0.37–0.48, and two Wikivoyage paragraphs on meaning (0.31 and 0.39), which may be the rewrite's fault (B.40). The slips Haiku blocked, such as "to much" (h0101) and "thats" (h0103), pass Jev at 0.70–0.89.
+  - **Haiku refuses scrambled text.** On 35 of the 60 reordered passages, Haiku 5.5 stopped with `refusal`, which `score-v1` reports as an error. In the game a player who submits such text sees an error, not a failed guardrail, and since `scorers.jev` also calls `score-v1`, this happens under either judge.
+  - **Jev is consistent.** 41 human texts are within 0.2 of the threshold on one verdict or the other. Asked twice more, none changed verdict, and no probability moved by more than 0.09. Haiku 5.5's grammar verdict flipped on 2 of 70 texts across three runs (B.33).
+  - **Jev is quick:** 173 ms per request on average, eight at a time.
+- **Cost of switching.** One more Worker request per Check. Under the Jev scorer that makes three (`score-jev`, `score-v1`, `judge-jev`), so the per-IP limit of 30 a minute allows 10 Checks a minute. If Jev gives both verdicts, `scorers.jev`'s `score-v1` call is no longer needed, but it still runs: removing it is a separate change.
+- **Caveats.** The broken edits are mechanical and few; no subtler meaning change, such as a reversed claim or a changed number, was tried. The human texts' meaning verdicts compare them with a rewrite made from them, so they say more about the rewrite (B.40). The 0.5 threshold and the question wording were not tuned.
+
+## B.42 Jev judges meaning and grammar by default, and the Jev scorer calls no Haiku (2026-10-08)
+
+At the user's direction, following B.41, `web/src/config.ts` now lists `guardrails.jevMeaning` and `guardrails.jevGrammar` in place of `meaning` and `grammar`, and `scorers.jev` no longer calls `score-v1`. This supersedes the guardrails bullet of B.19.
+
+- **What a Check calls now:**
+  - Jev scorer: `score-jev`, then `judge-jev`. No Haiku call.
+  - Haiku scorer: `score-v1`, then `judge-jev`. `score-v1` still returns Haiku's own verdicts in `raw`, but no guardrail reads them.
+  - Offline scorer: nothing. The Jev guardrails pass without asking after a scorer that returns no `raw`, so offline play still needs no server.
+  - Each real Check is two Worker requests, so the per-IP limit of 30 a minute allows 15 Checks a minute under either scorer. That is unchanged for Jev and half of what the Haiku scorer allowed before (30).
+- **Checked end to end** through `runCheck` with the live config, on three texts under each scorer. The unedited AI passage is not won. The human text h0101 ("to much") wins under both real scorers. The scrambled passage fails both Jev guardrails under both, including the Haiku scorer, which scored it 1 and would otherwise have let it win. Under Offline, nothing is called. The local Worker serves `judge-jev`.
+- **Haiku's own guardrails remain** as `guardrails.meaning` and `guardrails.grammar`, but only `scorers.llmBasic` returns their verdicts now. Under the Jev scorer they would pass everything, and config.ts says so.
+- **Haiku's refusals** (B.41) no longer affect the Jev scorer. Under the Haiku scorer a scrambled text can still make `score-v1` refuse, which the player sees as an error.
+- **Scripts:** `pnpm harness --scorer jev` makes no Haiku calls; its scores are unchanged. `pnpm generate` now screens candidates with the Jev guardrails, and kept entries record `score-jev@7 + judge-jev@1`.
+- **Deploy the Worker first.** It must serve `judge-jev` before the client lists the Jev guardrails; otherwise every Check fails with `unknown_task`. The same `pnpm deploy:worker` also ships `score-jev` version 7, which Jev's line 3 needs (B.36).

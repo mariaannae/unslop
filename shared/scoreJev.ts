@@ -479,7 +479,7 @@ export function measure(text: string): {
 
 const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 
-type JevQuestion =
+export type JevQuestion =
   | { type: "noul"; instructions: string; criteria: { true: string; false: string } }
   | { type: "score"; instructions: string; criteria: string[] };
 
@@ -498,7 +498,7 @@ const score = (t: ScoreTell): JevQuestion => ({
 });
 
 /** One System One request. Returns each answer's noul or score by question id. */
-async function systemOne(
+export async function systemOne(
   apiKey: string,
   model: string,
   state: Record<string, string>,

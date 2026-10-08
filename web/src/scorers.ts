@@ -219,26 +219,17 @@ export function scaleJevScore(raw: number): number {
 
 /**
  * The jevslop port (shared/scoreJev.ts): Jev's composite score, on the display
- * scale above, and tells. `raw` keeps the task's own score. Jev has no meaning or
- * grammar verdict, so score-v1 runs alongside it and only its two verdicts are
- * copied into `raw` for the meaning and grammar guardrails.
+ * scale above, and tells. `raw` is the task's own result. It has no meaning or
+ * grammar verdict: those come from Jev's guardrails (spec B.42), so this scorer
+ * calls no Haiku.
  */
 export const jev: Scorer = {
   async score(ctx) {
-    const payload = { original: ctx.original, current: ctx.current };
-    const [result, judge] = await Promise.all([
-      transport<ScoreJevResult>("score-jev", payload),
-      transport<ScoreV1Result>("score-v1", payload),
-    ]);
-    return {
-      score: scaleJevScore(result.score),
-      tells: result.tells,
-      raw: {
-        ...result,
-        meaning_preserved: judge.meaning_preserved,
-        grammatically_correct: judge.grammatically_correct,
-      },
-    };
+    const result = await transport<ScoreJevResult>("score-jev", {
+      original: ctx.original,
+      current: ctx.current,
+    });
+    return { score: scaleJevScore(result.score), tells: result.tells, raw: result };
   },
 };
 
@@ -253,6 +244,11 @@ let transport: TaskTransport = callTask;
  */
 export function setTaskTransport(next: TaskTransport): void {
   transport = next;
+}
+
+/** Runs a task the way the scorers do, for guardrails that make their own call. */
+export function runRemoteTask<Result>(taskId: string, payload: unknown): Promise<Result> {
+  return transport<Result>(taskId, payload);
 }
 
 /** Worker origin set at build time (spec B.8, B.12). Empty means same origin, which the Vite proxy serves in dev. */

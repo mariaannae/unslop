@@ -25,12 +25,15 @@ export const gameConfig: GameConfig = {
   // with it too, unless given --scorer.
   defaultScorer: "jev",
 
-  // Local guardrails run before the scorer and cost no Check; remote ones read its result.
+  // Local guardrails run before the scorer and cost no Check; remote ones run after it.
+  // Jev judges meaning and grammar, in one extra call per Check (spec B.41, B.42).
+  // guardrails.meaning and guardrails.grammar would take Haiku's verdicts instead,
+  // but only scorers.llmBasic returns them: under Jev they would check nothing.
   guardrails: [
     guardrails.notEmpty,
     guardrails.lengthRatio({ min: 0.7, max: 1.3 }),
-    guardrails.meaning,
-    guardrails.grammar,
+    guardrails.jevMeaning,
+    guardrails.jevGrammar,
   ],
 
   budget: {

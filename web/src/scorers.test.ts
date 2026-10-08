@@ -190,24 +190,22 @@ describe("llm-basic scorer", () => {
 });
 
 describe("jev scorer", () => {
-  it("runs score-jev and score-v1 together and copies score-v1's verdicts into raw", async () => {
+  it("runs score-jev alone, with no Haiku call", async () => {
     const jevResult = { score: 3, composite: 30, tells: [{ label: "Generic filler" }] };
     const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const { taskId } = JSON.parse(init!.body as string) as { taskId: string };
-      const result = taskId === "score-jev" ? jevResult : taskResult;
-      return new Response(JSON.stringify({ ok: true, taskId, version: 1, result, cached: false }));
+      return new Response(
+        JSON.stringify({ ok: true, taskId, version: 1, result: jevResult, cached: false }),
+      );
     });
     vi.stubGlobal("fetch", fetch);
 
     const result = await scorers.jev.score({ original: "orig", current: "cur" });
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string).taskId).toBe("score-jev");
     // The score is on the display scale; raw keeps the task's own score of 3.
-    expect(result).toEqual({
-      score: 5,
-      tells: jevResult.tells,
-      raw: { ...jevResult, meaning_preserved: false, grammatically_correct: true },
-    });
+    expect(result).toEqual({ score: 5, tells: jevResult.tells, raw: jevResult });
   });
 });
 
@@ -246,7 +244,7 @@ describe("setTaskTransport", () => {
 
     const result = await scorers.jev.score({ original: "a", current: "b" });
 
-    expect(calls).toEqual(["score-jev", "score-v1"]);
+    expect(calls).toEqual(["score-jev"]);
     expect(fetch).not.toHaveBeenCalled();
     expect(result.score).toBe(3.2);
   });

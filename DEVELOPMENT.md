@@ -10,7 +10,7 @@ One pnpm package, TypeScript everywhere, no build step for shared code. Tests si
 | `worker/`  | Cloudflare Worker: `POST /api/task`, KV cache, per-IP rate limit, CORS. All of it is in `index.ts`: entry and router, then the task handler, then the KV cache and rate limiter. The only code that holds an API key.                                                                                              |
 | `shared/`  | The `score-v1` task definition (`scoreV1.ts`: prompt, model, schema, parser), the `score-jev` task (`scoreJev.ts`: the jevslop port, its tells, weights and Jev call), the task, provider and `/api/task` wire types (`types.ts`), the task runner and cache key (`runTask.ts`), and the Anthropic adapter (`anthropic.ts`). The web app imports only types from here.        |
 | `scripts/` | Node scripts run with tsx: eval harness, bank generator (with its `generate-v1` task in `generateV1.ts`), human-corpus builder. They call the provider directly with `ANTHROPIC_API_KEY` (and `OPENAI_API_KEY` when generating with a GPT model) from the environment and never go through the Worker. Helpers, including the OpenAI adapter, are in `common.ts`.                                           |
-| `data/`    | `passages.json` (the bank the game draws from), `human_corpus.json` (the harness's human baseline) `ai_eval.json` (three generated banks, for tuning a scorer), and `ai_test.json` with `test_topics.json` (passages from four models on 100 other topics, only for testing a finished scorer).                                                                                                                                                              |
+| `data/`    | `passages.json` (the bank the game draws from), `human_corpus.json` (the harness's human baseline) with `human_originals.json` (an AI rewrite of each, scored as the passage the player started from), `ai_eval.json` (three generated banks, for tuning a scorer), and `ai_test.json` with `test_topics.json` (passages from four models on 100 other topics, only for testing a finished scorer).                                                                                                                                                              |
 
 Hosting: GitHub Pages at unslop.app for the app, Cloudflare for the Worker (spec Appendix B.8).
 
@@ -37,16 +37,17 @@ pnpm build        # web app into web/dist
 
 ## Scripts
 
-`pnpm generate` and `pnpm harness` read `ANTHROPIC_API_KEY` (plus `TYPESAFE_API_KEY` whenever Jev scores, which it does under the default `scorers.jev`, and `OPENAI_API_KEY` for `pnpm generate` with a GPT model) from `worker/.dev.vars`, the same git-ignored file the local Worker uses, so there is nothing to export. A key exported in your shell takes precedence.
+`pnpm generate` and `pnpm harness` read `ANTHROPIC_API_KEY` (plus `TYPESAFE_API_KEY` whenever Jev scores, which it does under the default `scorers.jev`, and `OPENAI_API_KEY` for `pnpm generate` with a GPT model and for `pnpm originals`) from `worker/.dev.vars`, the same git-ignored file the local Worker uses, so there is nothing to export. A key exported in your shell takes precedence.
 
 ```bash
 pnpm corpus                                   # rebuild data/human_corpus.json (network only, no model calls)
+pnpm originals                                # AI rewrites of new or changed human texts, for the harness
 pnpm generate --out data/passages.new.json    # generate a bank (default 60 passages) into a new file
 pnpm harness --bank data/passages.new.json    # separation report for it; add --strict to fail on a miss
 mv data/passages.new.json data/passages.json  # when both targets PASS, the game uses it
 ```
 
-To measure a scorer's accuracy, run it over the generated banks in `data/ai_eval.json` on the tuning split. The report ends with the AUC by generator and by human source. Use `--split holdout` only to confirm a finished change (spec B.24).
+To measure a scorer's accuracy, run it over the generated banks in `data/ai_eval.json` on the tuning split. The report ends with the AUC against the modern human sources, the AUC against all of them (Gutenberg included), and both by generator and by human source. Each human text is scored as a player's rewrite of its AI original in `data/human_originals.json`; after `pnpm corpus` changes a text, run `pnpm originals` before the harness, which stops until you do (spec B.40). Use `--split holdout` only to confirm a finished change (spec B.24).
 
 ```bash
 pnpm harness --scorer jev --bank data/ai_eval.json --split tune

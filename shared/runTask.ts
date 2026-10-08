@@ -1,3 +1,4 @@
+import { judgeJevTask } from "./judgeJev";
 import { scoreJevTask } from "./scoreJev";
 import { scoreV1Task } from "./scoreV1";
 import {
@@ -16,6 +17,7 @@ import {
 export const callableTasks: ReadonlyMap<string, AnyTask> = new Map<string, AnyTask>([
   [scoreV1Task.id, scoreV1Task],
   [scoreJevTask.id, scoreJevTask],
+  [judgeJevTask.id, judgeJevTask],
 ]);
 
 /** Where parsed results are kept: KV in the Worker, files on disk in the scripts. */

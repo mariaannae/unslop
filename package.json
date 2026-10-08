@@ -18,6 +18,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "corpus": "tsx scripts/buildHumanCorpus.ts",
+    "originals": "tsx --env-file-if-exists=worker/.dev.vars scripts/buildHumanOriginals.ts",
     "harness": "tsx --env-file-if-exists=worker/.dev.vars scripts/evalHarness.ts",
     "generate": "tsx --env-file-if-exists=worker/.dev.vars scripts/generateBank.ts"
   },

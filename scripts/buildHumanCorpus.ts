@@ -1,8 +1,8 @@
 /**
  * Builds data/human_corpus.json (SPEC Appendix A.4): human-written paragraphs of
- * 90–130 words from public-domain Project Gutenberg books, CC BY-SA Wikipedia
- * articles, and, for modern prose, CC BY-SA Stack Exchange answers and Wikivoyage
- * pages written before CUTOFF (spec B.24). Each has a `source` attribution.
+ * 90–130 words from public-domain Project Gutenberg books and, for modern prose,
+ * CC BY-SA Wikipedia articles, Stack Exchange answers and Wikivoyage pages as they
+ * stood before CUTOFF (spec B.24, B.39). Each has a `source` attribution.
  * Deterministic: the same inputs always select the same paragraphs. Raw downloads
  * are cached under scripts/.cache/raw so reruns are offline.
  *
@@ -102,6 +102,12 @@ const WIKIPEDIA_TITLES = [
   "Toaster",
   "Doormat",
 ];
+
+/**
+ * Paragraphs taken from Wikipedia: the 35 the corpus has had since Milestone 3b.
+ * Entries after them are numbered from this, so changing it renumbers them.
+ */
+const WIKIPEDIA_COUNT = 35;
 
 /**
  * ChatGPT's public release. Modern sources are taken only from text written and
@@ -309,32 +315,72 @@ async function fromGutenberg(): Promise<Entry[]> {
   return out;
 }
 
+/**
+ * The first paragraph in range from each article's last revision before CUTOFF
+ * (spec B.39). Until then the current article was used, and most of those
+ * paragraphs had been added or rewritten since ChatGPT's release. Exactly
+ * WIKIPEDIA_COUNT are kept, in title order, so the later sources keep their ids.
+ */
 async function fromWikipedia(): Promise<Entry[]> {
   const out: Entry[] = [];
   for (const title of WIKIPEDIA_TITLES) {
-    const url =
-      "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&redirects=1&titles=" +
-      encodeURIComponent(title);
-    const raw = await fetchCached(`wikipedia-${title.replace(/\W+/g, "_")}.json`, url);
-    const pages = (JSON.parse(raw) as { query: { pages: Record<string, { extract?: string }> } })
-      .query.pages;
-    const extract = Object.values(pages)[0]?.extract ?? "";
-    const candidate = paragraphs(extract)
-      .filter((p) => !p.startsWith("=="))
+    if (out.length === WIKIPEDIA_COUNT) break;
+    const rev = await revisionBefore(CUTOFF, "https://en.wikipedia.org", "wikipedia", title);
+    if (!rev) {
+      console.error(`Wikipedia "${title}": no revision before ${CUTOFF}, skipped`);
+      continue;
+    }
+    const text = htmlParagraphs(rev.html)
       .filter(inRange)
-      .filter(looksLikeProse)[0];
-    if (!candidate) {
+      .filter(looksLikeProse)
+      .filter(hasSeveralSentences)[0];
+    if (!text) {
       console.error(`Wikipedia "${title}": no paragraph in range, skipped`);
       continue;
     }
     out.push({
       id: "",
-      text: candidate,
-      source: `Wikipedia, "${title}", CC BY-SA 4.0, https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`,
+      text,
+      // Wikimedia text was licensed CC BY-SA 3.0 until mid-2023.
+      source: `Wikipedia, "${title}" (revision of ${rev.timestamp.slice(0, 10)}), CC BY-SA 3.0, https://en.wikipedia.org/w/index.php?oldid=${rev.revid}`,
       register: "explanatory",
     });
   }
+  if (out.length < WIKIPEDIA_COUNT) {
+    throw new Error(
+      `Wikipedia gave ${out.length} paragraphs, not ${WIKIPEDIA_COUNT}; later ids would shift`,
+    );
+  }
   return out;
+}
+
+/** A wiki page's last revision before `cutoff`, with its rendered HTML. */
+async function revisionBefore(
+  cutoff: string,
+  origin: string,
+  cachePrefix: string,
+  title: string,
+): Promise<{ revid: number; timestamp: string; html: string } | undefined> {
+  const api = `${origin}/w/api.php?format=json&formatversion=2`;
+  const slug = title.replace(/\W+/g, "_");
+  const revRaw = await fetchCached(
+    `${cachePrefix}-rev-${slug}.json`,
+    `${api}&action=query&prop=revisions&rvlimit=1&rvdir=older&rvprop=ids%7Ctimestamp` +
+      `&rvstart=${cutoff}&redirects=1&titles=${encodeURIComponent(title)}`,
+  );
+  const page = (
+    JSON.parse(revRaw) as {
+      query: { pages: Array<{ revisions?: Array<{ revid: number; timestamp: string }> }> };
+    }
+  ).query.pages[0];
+  const rev = page?.revisions?.[0];
+  if (!rev) return undefined;
+  const parsed = await fetchCached(
+    `${cachePrefix}-${slug}-${rev.revid}.json`,
+    `${api}&action=parse&prop=text&disablelimitreport=1&disableeditsection=1&oldid=${rev.revid}`,
+  );
+  const html = (JSON.parse(parsed) as { parse: { text: string } }).parse.text;
+  return { ...rev, html };
 }
 
 type StackExchangeAnswer = {
@@ -392,31 +438,14 @@ async function fromStackExchange(): Promise<Entry[]> {
  * usually its history, which reads like Wikipedia, not like a travel guide.
  */
 async function fromWikivoyage(): Promise<Entry[]> {
-  const api = "https://en.wikivoyage.org/w/api.php?format=json&formatversion=2";
   const out: Entry[] = [];
   for (const title of WIKIVOYAGE_TITLES) {
-    const slug = title.replace(/\W+/g, "_");
-    const revRaw = await fetchCached(
-      `wikivoyage-rev-${slug}.json`,
-      `${api}&action=query&prop=revisions&rvlimit=1&rvdir=older&rvprop=ids%7Ctimestamp` +
-        `&rvstart=${CUTOFF}&redirects=1&titles=${encodeURIComponent(title)}`,
-    );
-    const page = (
-      JSON.parse(revRaw) as {
-        query: { pages: Array<{ revisions?: Array<{ revid: number; timestamp: string }> }> };
-      }
-    ).query.pages[0];
-    const rev = page?.revisions?.[0];
+    const rev = await revisionBefore(CUTOFF, "https://en.wikivoyage.org", "wikivoyage", title);
     if (!rev) {
       console.error(`Wikivoyage "${title}": no revision before ${CUTOFF}, skipped`);
       continue;
     }
-    const parsed = await fetchCached(
-      `wikivoyage-${slug}-${rev.revid}.json`,
-      `${api}&action=parse&prop=text&disablelimitreport=1&disableeditsection=1&oldid=${rev.revid}`,
-    );
-    const html = (JSON.parse(parsed) as { parse: { text: string } }).parse.text;
-    const candidates = htmlParagraphs(html)
+    const candidates = htmlParagraphs(rev.html)
       .filter(inRange)
       .filter(looksLikeProse)
       .filter(hasSeveralSentences);

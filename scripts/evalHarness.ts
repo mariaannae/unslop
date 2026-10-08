@@ -8,11 +8,15 @@
  * never goes through the Worker.
  *
  *   pnpm harness [--scorer jev | --task score-jev] [--bank file] [--human file]
- *                [--split tune|holdout] [--limit N] [--concurrency 4] [--no-cache]
- *                [--strict] [--show-misses]
+ *                [--originals file] [--split tune|holdout] [--limit N]
+ *                [--concurrency 4] [--no-cache] [--strict] [--show-misses]
  *
  * `--split` keeps only that part of both sets (spec B.24). Tune scorers on
  * "tune"; "holdout" is for confirming the result once.
+ *
+ * An AI passage is scored unedited, as the player first sees it. A human text is
+ * scored as the edit of its AI rewrite from data/human_originals.json (spec B.40),
+ * as if a player had rewritten that passage into this text.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +28,8 @@ import { checkRules } from "../web/src/game";
 import {
   cacheDir,
   createDiskCache,
+  sha256,
+  type HumanOriginal,
   createScriptProvider,
   dataDir,
   auc,
@@ -44,6 +50,7 @@ const args = readArgs({
   task: { type: "string" },
   bank: { type: "string" },
   human: { type: "string" },
+  originals: { type: "string" },
   split: { type: "string" },
   limit: { type: "string" },
   concurrency: { type: "string" },
@@ -99,9 +106,9 @@ type Scored = {
   error?: string;
   cached?: boolean;
 };
-async function scoreAll(items: Item[]): Promise<Scored[]> {
+async function scoreAll(items: Item[], originalOf: (item: Item) => string): Promise<Scored[]> {
   return mapWithConcurrency(items, concurrency, async (item) => {
-    const ctx = { original: item.text, current: item.text };
+    const ctx = { original: originalOf(item), current: item.text };
     try {
       if (!task) {
         const { score } = await scorer.score(ctx);
@@ -127,8 +134,22 @@ function groupOf(item: Item): string | undefined {
 
 const bank = await loadItems(path.resolve(args.bank ?? path.join(dataDir, "passages.json")));
 const human = await loadItems(path.resolve(args.human ?? path.join(dataDir, "human_corpus.json")));
+const originalsFile = path.resolve(args.originals ?? path.join(dataDir, "human_originals.json"));
+const originals = new Map(
+  (JSON.parse(await readFile(originalsFile, "utf8")) as HumanOriginal[]).map((o) => [o.id, o]),
+);
+for (const item of human) {
+  if (originals.get(item.id)?.textSha256 !== sha256(item.text)) {
+    throw new Error(
+      `${originalsFile} has no AI original for ${item.id}'s current text. Run pnpm originals.`,
+    );
+  }
+}
 
-const [bankScored, humanScored] = await Promise.all([scoreAll(bank), scoreAll(human)]);
+const [bankScored, humanScored] = await Promise.all([
+  scoreAll(bank, (item) => item.text),
+  scoreAll(human, (item) => originals.get(item.id)!.original),
+]);
 const scorerLabel = task
   ? `scorer task: ${task.id}@${task.version} (${task.model})`
   : `scorer "${scorerId}" (web/src/config.ts): ${[...scorerTasks].join(" + ") || "offline"}`;
@@ -171,7 +192,16 @@ const scoresOf = (scored: Scored[]) => scored.flatMap((s) => (s.score === null ?
 const groups = (scored: Scored[]) => [...new Set(scored.map((s) => s.group ?? "other"))];
 const inGroup = (scored: Scored[], group: string) =>
   scored.filter((s) => (s.group ?? "other") === group);
-console.log(`AUC (AI vs human): ${auc(scoresOf(bankScored), scoresOf(humanScored)).toFixed(3)}`);
+// Gutenberg's 19th-century prose is far from anything a player writes, and every
+// scorer separates it from AI text almost perfectly, so the modern sources come
+// first (spec B.39).
+const modern = humanScored.filter((s) => s.group !== "Project Gutenberg");
+console.log(
+  `AUC (AI vs modern human, n=${scoresOf(modern).length}): ${auc(scoresOf(bankScored), scoresOf(modern)).toFixed(3)}`,
+);
+console.log(
+  `AUC (AI vs all human, n=${scoresOf(humanScored).length}): ${auc(scoresOf(bankScored), scoresOf(humanScored)).toFixed(3)}`,
+);
 if (groups(bankScored).length > 1) {
   const cells = groups(bankScored).map(
     (g) => `${g} ${auc(scoresOf(inGroup(bankScored, g)), scoresOf(humanScored)).toFixed(3)}`,
