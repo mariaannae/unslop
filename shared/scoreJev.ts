@@ -12,9 +12,9 @@ import { ProviderError, TaskError, type CallTask } from "./types";
  * stock vocabulary and em dashes are counted at any length (spec B.20), the
  * `longForm` tells are skipped on texts under LONG_TEXT_WORDS (spec B.21), a
  * paragraph tell's strength is Jev's mean probability rather than the share of
- * paragraphs above YES (spec B.25), and some questions are reworded, three skipped
- * on short texts and three added (spec B.26). Bump `version` when any of them
- * change.
+ * paragraphs above YES (spec B.25), some questions are reworded, three skipped
+ * on short texts and three added (spec B.26), and the bold-labels tell is removed
+ * (spec B.31). Bump `version` when any of them change.
  */
 
 // ---------------------------------------------------------------------------
@@ -347,7 +347,6 @@ const CODE_TELLS: CodeTell[] = [
   { id: "em_dash", name: "Em-dash habit", weight: 0.7, lo: 2.0, hi: 10.0, unit: "per 1k words" },
   { id: "low_burstiness", name: "Uniform sentence length", weight: 1.0, lo: 0.6, hi: 0.3, unit: "coefficient of variation" },
   { id: "uniform_paragraphs", name: "Uniform paragraph length", weight: 0.4, lo: 0.3, hi: 0.1, unit: "coefficient of variation" },
-  { id: "bold_labels", name: "Bold labels and lead-ins", weight: 1.0, lo: 0.0, hi: 3.0, unit: "paragraphs", longForm: true },
   { id: "emoji_bullets", name: "Emoji bullets/headings", weight: 1.0, lo: 0.0, hi: 2.0, unit: "lines", longForm: true },
 ]; // prettier-ignore
 
@@ -379,8 +378,6 @@ const STOCK_PHRASES = [
 
 const WORD = /[A-Za-z0-9'’-]+/g;
 const SENTENCE_END = /(?<=[.!?])["'”’)]*\s+(?=["'“‘(]*[A-Z0-9])/;
-// A bold span (**x** or __x__) anywhere in a paragraph or list item.
-const BOLD = /(?<![\w*])(\*\*|__)(?=\S)[^*_\n]{1,80}?(?<=\S)\1(?![\w*])/;
 const EMOJI = /^\s*(?:[-*•#]+\s*)?[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{274C}]/u;
 const STOCK = STOCK_PHRASES.map(
   (phrase) => new RegExp(`(?<![\\w-])${phrase.replace(/'/g, "['’]")}(?![\\w-])`, "gi"),
@@ -436,10 +433,6 @@ export function measure(text: string): {
   const nWords = Math.max(1, words(text).length);
   const perK = 1000 / nWords;
   const lines = text.split(/\r\n|\r|\n/);
-  // Paragraphs, with each list item counted as its own block.
-  const blocks = paragraphs(text).flatMap((p) =>
-    /^\s*([-*•]|\d+[.)])\s/.test(p) ? p.split(/\r\n|\r|\n/) : [p],
-  );
 
   const stockHits: string[] = [];
   let stockCount = 0;
@@ -460,7 +453,6 @@ export function measure(text: string): {
     em_dash: [emDashes * perK, true],
     low_burstiness: [cv(sentLengths), sentLengths.length >= 8],
     uniform_paragraphs: [cv(paraLengths), paraLengths.length >= 4],
-    bold_labels: [blocks.filter((b) => BOLD.test(b)).length, true],
     emoji_bullets: [lines.filter((l) => EMOJI.test(l)).length, true],
   };
 
@@ -574,7 +566,7 @@ function answer(answers: JevAnswers | undefined, id: string): number {
 
 export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
   id: "score-jev",
-  version: 5,
+  version: 6,
   model: "jev-1.13.0",
 
   // Same {original, current} payload as score-v1; only `current` is scored.

@@ -1770,3 +1770,12 @@ At the user's request, the player can switch scorers from a menu in the app, and
   - The menu lists the three judges.
   - Switching to Offline, editing and checking won at 0/10.
   - Switching back to Jev restored the original text and a full budget, and one check showed 7.1 out of 10 with its tells.
+
+## B.31 `score-jev` drops the bold-labels tell (2026-10-08)
+
+At the user's direction, the code-measured "Bold labels and lead-ins" tell (weight 1, counting paragraphs or list items with Markdown `**bold**` or `__bold__`) is removed from `shared/scoreJev.ts`, along with its pattern. `score-jev` is now version 6.
+
+- **Why:** no text in the game bank, the AI sets or the human corpus (838 in all) contains bold formatting, and the game's plain text box cannot produce it except as typed asterisks. The tell was also `longForm` (B.21), so it applied only from 200 words, and every text is shorter.
+- **No score changes:** in all 979 cached version 5 results, the tell was skipped, so removing it changes no score on any text scored so far. Only texts of 200+ words score differently: one weight less in the average.
+- **Caches:** the version bump starts fresh caches in Worker KV and `scripts/.cache/results`, so the next Check or harness run calls Jev again for each text.
+- **What stays:** the reasons-list question (whole text, 200+ words only) still mentions "a bold label" as one way list items are introduced. That is Jev reading the text, not this tell, and was left as is.

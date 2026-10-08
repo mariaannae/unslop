@@ -10,7 +10,6 @@ const LONG = Array(13).fill(P1).join(" ");
 const LONG_FORM = [
   "fence_sitting",
   "reasons_list",
-  "bold_labels",
   "emoji_bullets",
   "vague_attribution",
   "rhetorical_qa",
@@ -61,9 +60,11 @@ describe("measure", () => {
     expect(stockHits).toEqual(["crucial"]);
     expect(tells.stock_vocab).toEqual({ value: 50, strength: 1 });
     expect(tells.em_dash).toEqual({ value: 50, strength: 1 });
-    for (const id of ["low_burstiness", "uniform_paragraphs", "bold_labels", "emoji_bullets"]) {
+    for (const id of ["low_burstiness", "uniform_paragraphs", "emoji_bullets"]) {
       expect(tells[id]!.strength).toBeNull();
     }
+    // Removed in version 6 (spec B.31).
+    expect(tells).not.toHaveProperty("bold_labels");
   });
 
   it("counts stock vocabulary and em dashes per 1,000 words", () => {
@@ -75,13 +76,11 @@ describe("measure", () => {
     expect(tells.em_dash).toEqual({ value: 6.25, strength: 0.53125 });
   });
 
-  it("flags uniform sentences, bold labels and emoji bullets", () => {
+  it("flags uniform sentences and emoji bullets", () => {
     expect(measure("The dog ran home. ".repeat(8)).tells.low_burstiness).toEqual({
       value: 0,
       strength: 1,
     });
-    const bold = measure(`- **Speed:** fast\n- **Cost:** low\n\n${LONG}`).tells.bold_labels;
-    expect(bold).toEqual({ value: 2, strength: 2 / 3 });
     const emoji = measure(`✅ Done\n🚀 Shipped\n\n${LONG}`).tells.emoji_bullets;
     expect(emoji).toEqual({ value: 2, strength: 1 });
   });
@@ -146,8 +145,8 @@ describe("score-jev", () => {
     }
     const strengths = (r: typeof short) =>
       LONG_FORM.map((id) => r.breakdown.find((t) => t.id === id)!.strength);
-    expect(strengths(short)).toEqual([null, null, null, null, null, null, null]);
-    expect(strengths(long)).toEqual([1, 1, 0, 0, 1, 1, 1]);
+    expect(strengths(short)).toEqual([null, null, null, null, null, null]);
+    expect(strengths(long)).toEqual([1, 1, 0, 1, 1, 1]);
   });
 
   it("scores a paragraph tell as Jev's probability averaged over the paragraphs", async () => {
