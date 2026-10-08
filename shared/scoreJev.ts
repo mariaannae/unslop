@@ -13,8 +13,9 @@ import { ProviderError, TaskError, type CallTask } from "./types";
  * `longForm` tells are skipped on texts under LONG_TEXT_WORDS (spec B.21), a
  * paragraph tell's strength is Jev's mean probability rather than the share of
  * paragraphs above YES (spec B.25), some questions are reworded, three skipped
- * on short texts and three added (spec B.26), and the bold-labels tell is removed
- * (spec B.31). Bump `version` when any of them change.
+ * on short texts and three added (spec B.26), the bold-labels tell is removed
+ * (spec B.31), and uniform sentence length is measured from 4 sentences instead
+ * of 8 (spec B.35). Bump `version` when any of them change.
  */
 
 // ---------------------------------------------------------------------------
@@ -425,6 +426,13 @@ export type Measurement = {
   strength: number | null;
 };
 
+/**
+ * Uniform sentence length is measured on texts with at least this many sentences.
+ * jevslop's 8 skipped almost every game passage, which has 5–7; at 4, a player
+ * would have to merge a passage into 3 sentences to dodge it (spec B.34, B.35).
+ */
+const MIN_SENTENCES = 4;
+
 /** Measures every code tell. Stock-vocabulary hits are returned separately for the tell list. */
 export function measure(text: string): {
   tells: Record<string, Measurement>;
@@ -451,7 +459,7 @@ export function measure(text: string): {
     // they are counted at any length (spec B.20).
     stock_vocab: [stockCount * perK, true],
     em_dash: [emDashes * perK, true],
-    low_burstiness: [cv(sentLengths), sentLengths.length >= 8],
+    low_burstiness: [cv(sentLengths), sentLengths.length >= MIN_SENTENCES],
     uniform_paragraphs: [cv(paraLengths), paraLengths.length >= 4],
     emoji_bullets: [lines.filter((l) => EMOJI.test(l)).length, true],
   };
@@ -566,7 +574,7 @@ function answer(answers: JevAnswers | undefined, id: string): number {
 
 export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
   id: "score-jev",
-  version: 6,
+  version: 7,
   model: "jev-1.13.0",
 
   // Same {original, current} payload as score-v1; only `current` is scored.

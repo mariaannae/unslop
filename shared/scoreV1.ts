@@ -191,7 +191,8 @@ export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
       model: this.model,
       system: SCORE_V1_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildUserMessage(payload) }],
-      maxTokens: 512,
+      // Haiku 5.5 thinks adaptively before answering, which can take a 512 cap.
+      maxTokens: 2048,
       outputSchema: SCORE_V1_RESPONSE_SCHEMA,
     };
   },

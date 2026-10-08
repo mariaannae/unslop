@@ -16,8 +16,8 @@ export const gameConfig: GameConfig = {
   // Worker (run `pnpm dev:worker` alongside the app). scorers.mock plays offline
   // with no server at all.
   scorers: [
-    { id: "jev", label: "Jev", scorer: scorers.jev, win: { scoreAtOrBelow: 2 } },
-    { id: "haiku", label: "Claude Haiku", scorer: scorers.llmBasic, win: { scoreAtOrBelow: 2 } },
+    { id: "jev", label: "Jev", scorer: scorers.jev, win: { scoreAtOrBelow: 3 } },
+    { id: "haiku", label: "Claude Haiku 5.5", scorer: scorers.llmBasic, win: { scoreAtOrBelow: 5 } },
     { id: "offline", label: "Offline", scorer: scorers.mock, win: { scoreAtOrBelow: 2 } },
   ],
 

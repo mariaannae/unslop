@@ -1796,10 +1796,136 @@ At the user's request, three more files are folded into their neighbors so the c
 
 ## B.33 `score-v1` moves to Claude Haiku 5.5 (2026-10-08)
 
-At the user's request, `score-v1` now calls Claude Haiku 5.5 (`claude-haiku-5-5`, released 2026-10-07) instead of Haiku 4.5. This supersedes the model and temperature in A.2 and B.5.
+At the user's request, `score-v1` now calls Claude Haiku 5.5 (`claude-haiku-5-5`, released 2026-10-07) instead of Haiku 4.5. This supersedes the model, temperature and `max_tokens` in A.2 and B.5.
 
 - **No temperature.** Haiku 5.5 returns a 400 (`temperature` is deprecated for this model) when the request sets it, so `buildRequest` leaves it out and the model runs at its default. Scores are no longer deterministic across separate calls, but the Worker's KV cache still returns the same result when the same text is checked again.
-- **Thinking left unset.** In a spot check of 5 passages with the real prompt, the model used no thinking tokens either way, and responses were 36–349 output tokens, under the 512 cap. The three AI passages scored 8–10 and the two human texts scored 0–1.
+- **`max_tokens` 2048.** With `thinking` unset, Haiku 5.5 thinks adaptively. It skips thinking on most texts but spent 140–190 tokens on one human text (h0191), which pushed that response past the old 512 cap, and a truncated response fails the Check. Thinking stays on because the figures below were measured with it.
 - **Version 3.** The cache key does not name the model, so `score-v1` is now version 3. Results that Haiku 4.5 produced under version 2 are no longer served.
-- **Wider effect.** `scorers.jev` takes its `meaning_preserved` and `grammatically_correct` verdicts from `score-v1` (B.19), so the `meaning` and `grammar` guardrails in the default game now use Haiku 5.5. So does the grammar check in `pnpm generate`. The `score-v1` harness figures in B.10 describe Haiku 4.5 and have not been re-measured.
+- **Wider effect.** `scorers.jev` takes its `meaning_preserved` and `grammatically_correct` verdicts from `score-v1` (B.19), so the `meaning` and `grammar` guardrails in the default game now use Haiku 5.5. So does the grammar check in `pnpm generate`.
 - `generate-v1` still writes with `claude-haiku-4-5` at temperature 0; only the scorer changed.
+
+**Harness, `pnpm harness --task score-v1`,** on whole sets (both splits, since this measures a model change and tunes nothing). The Haiku 4.5 column comes from the `score-v1@2` disk cache. Six human texts it had scored 10 were re-run live at temperature 0 and still scored 10.
+
+| | Haiku 4.5 | Haiku 5.5 |
+| --- | --- | --- |
+| AUC, `ai_eval` (180) vs human corpus (198) | 0.655 | 0.994 |
+| AUC, `ai_test` (400) vs human corpus | 0.667 | 0.995 |
+| AUC, game bank (60) vs human corpus | 0.657 | 0.998 |
+| Mean score, `ai_eval` / human corpus | 9.06 / 4.71 | 8.23 / 2.79 |
+| Human texts that win (≤ 2) | 92 (46%) | 88 (44%) |
+| Human texts at 6 or above (B.10 target ≤ 10%) | 90 (45%) | 34 (17%) |
+| AI passages won before any edit, any set | 0 | 0 |
+| Unedited texts judged ungrammatical | 17 human, 0 AI | 16 human, 1 AI |
+| Unedited texts judged to change meaning | 1 human | 1 AI |
+
+- **Separation is the gain.** Haiku 4.5 scored 80 of the 198 human texts 9 or 10, so its AUC was only about 0.66. Haiku 5.5 puts most human texts at 0–4, with a second cluster of 31 at 6. AUC is 0.991–0.998 for every generator and human source.
+- **The win line barely moves.** About the same share of human texts score ≤ 2 under either model. Line 2 is unchanged.
+- **Guardrail false flags are unchanged.** About 8% of unedited human texts still fail `grammar`, as under Haiku 4.5.
+- **Run-to-run noise,** from 70 texts scored three times each (30 from `ai_eval`, 40 human): 25 of the 30 AI passages scored the same every time and none moved more than 2 points, and no AI passage crossed line 2. 18 of the 40 human texts changed score, mostly by 1, and 7 crossed line 2 in one direction or the other. Two grammar verdicts flipped; no meaning verdict did. Near the line, the same edited passage can win on one Check and lose on another unless the text is identical, in which case the cache answers.
+
+## B.34 The Haiku judge adds uniform sentence length, and wins at 5 (2026-10-08)
+
+At the user's request, `scorers.llmBasic` (the "Claude Haiku 5.5" judge) adds one of `score-jev`'s code-measured tells to Haiku's score, and its win line in `web/src/config.ts` moves from 2 to 5. This supersedes the last line of A.2 and the `haiku` line in B.30. The `score-v1` and `score-jev` tasks, their versions and their caches are unchanged, and so is the Jev judge.
+
+- **The tell:** uniform sentence length, the coefficient of variation of the sentence lengths on `score-jev`'s ramp (strength 0 at 0.6, 1 at 0.3). The scorer measures it in the browser and adds its strength to Haiku's 0–10 score, rounds to one decimal and caps at 10. At strength 0.5 or more it is listed as the tell `uniform-sentence-length`, with no quote. `raw` keeps `score-v1`'s own result, including Haiku's score.
+- **Counted from 4 sentences.** `score-jev` keeps jevslop's 8, which skips 554 of the 580 AI passages in `ai_eval` and `ai_test`: they have 4–9 sentences, mostly 5–7. `measure()` in `shared/scoreJev.ts` now takes the minimum as an argument, defaulting to 8. On the few texts that reach 8, the tell does point the right way: AI passages average 0.86 and human texts 0.58.
+- **Why only this tell.** Checked on the cached `score-v1@3` results for all 778 texts (`ai_eval`, `ai_test` and the human corpus), with no new calls. On game-length texts, em dashes do not separate AI from human (AUC 0.49), and uniform paragraph length and emoji bullets never apply. Stock vocabulary adds nothing, because Haiku already quotes 72% of the matched phrases in its own tells. Adding those three as well gave a lower AUC than sentence length alone.
+- **The minimum.** Of 3 to 8, a minimum of 5 gave the highest AUC (0.9969, against 0.9947 for Haiku alone), then 4 (0.9963) and 3 (0.9962), with the same order on `tune` alone. The user chose 4: a player would have to merge a passage down to 3 sentences to dodge the tell, against 4 sentences at a minimum of 5, which 26 AI passages already have. A minimum of 3 changes only human texts: the 28 with three sentences average 0.71 on the tell, because three lengths are too few to measure spread.
+- **Weight 1.** Weights from 0.5 to 1.5 gave about the same AUC, and 2 or more gave less.
+- **Why line 5.** The tell adds about a point to almost every AI passage (459 of 580 get the full point) and half a point to human texts on average. At line 2 it only costs wins, because Haiku already lets no AI passage win there. It helps at higher lines, where Haiku alone starts letting AI passages through. On `ai_eval` and `ai_test` (580) against the human corpus (198), with the shipped scorer:
+
+  | Line | Human texts that win, Haiku alone → with tell | AI passages won before any edit |
+  | --- | --- | --- |
+  | 2 | 88 (44%) → 72 (36%) | 0 → 0 |
+  | 3 | 147 (74%) → 108 (55%) | 0 → 0 |
+  | 4 | 164 (83%) → 156 (79%) | 1 → 0 |
+  | **5** | **164 (83%) → 164 (83%)** | **2 → 1** |
+  | 6 | 195 (98%) → 169 (85%) | 18 → 3 |
+  | 7 | 197 (99%) → 195 (98%) | 61 → 18 |
+
+- **Harness, `pnpm harness --scorer haiku`,** entirely from cache. AUC is 0.998 on the game bank and 0.995 on both `ai_eval` and `ai_test`. At line 5, no game bank passage is won before any edit (lowest 8), nor any in `ai_eval` (lowest 5.8). In `ai_test`, 1 of 400 is, scoring exactly 5.0. 164 of 198 human texts win, against 88 at the old line.
+- **Rounding costs some AUC but no wins.** Unrounded, the AUC on `ai_eval` and `ai_test` together is 0.9963. Rounded to one decimal, as shown to the player, it is 0.9952: many AI passages land exactly on a whole number plus the full point (for example 7.0), and rounding ties them with human texts just below (6.97 shows as 7.0). The win counts above are the same either way.
+- **The tell is listed often:** on 566 of the 580 AI passages and 100 of the 198 human texts. For a player it is an instruction to vary sentence length.
+- **Caveats.**
+  - Haiku 5.5's run-to-run noise (B.33) moves human texts by about a point between calls, twice the tell's average effect on them. The tell itself is deterministic.
+  - The minimum and weight were compared on all 778 texts as well as `tune`, so `ai_test` has now informed a choice for the Haiku judge and is no longer a clean check for it.
+- **Elsewhere.**
+  - The app bundle now includes `measure()` and the stock-phrase list. The Jev questions, the TypeSafe URL, `TaskError` and `ProviderError` stay out (B.32).
+  - `pnpm generate --scorer haiku` now rejects candidates at or below 5. The default scorer is still Jev.
+
+## B.35 `score-jev` measures uniform sentence length from 4 sentences (2026-10-08)
+
+At the user's request, `score-jev` now uses the same minimum as the Haiku judge (B.34): uniform sentence length is measured on texts with 4 or more sentences, not jevslop's 8. `score-jev` is now version 7. `measure()` no longer takes the minimum as an argument (B.34): it is the constant `MIN_SENTENCES` in `shared/scoreJev.ts`, used by both judges. Jev's win line is unchanged at 2 for now; the table below is for choosing it.
+
+- **What changes:** the tell now applies to all 580 AI passages in `ai_eval` and `ai_test` (26 before) and to 154 of the 198 human texts (14 before). It is listed for 566 AI passages and 100 human texts. No Jev question changed.
+- **Harness, `pnpm harness --scorer jev`,** with Jev called afresh for all 778 texts. Version 6 figures come from the version 5 cache, which B.31 showed gives the same scores on these texts.
+
+  | AUC | Version 6 | Version 7 |
+  | --- | --- | --- |
+  | `ai_eval` (180) vs human corpus | 0.9952 | 0.9964 |
+  | `ai_test` (400) vs human corpus | 0.9933 | 0.9942 |
+  | Game bank (60) vs human corpus | 0.9990 | 0.9990 |
+  | `tune` split | 0.9960 | 0.9967 |
+
+- **Scores rise:** the mean shown score goes from 6.9 to 7.5 on AI passages and from 1.4 to 1.7 on human texts. The lowest game bank passage shows 4.7 (3.8 before), and the highest human text 6.2 (5.3 before).
+- **Win lines,** on the shown scale, for `ai_eval` and `ai_test` (580) against the human corpus (198):
+
+  | Line | Human texts that win, v6 → v7 | AI passages won before any edit, v6 → v7 | Game bank passages won |
+  | --- | --- | --- | --- |
+  | 1.5 | 128 (65%) → 95 (48%) | 1 → 1 | 0 → 0 |
+  | **2 (now)** | **180 (91%) → 162 (82%)** | **4 → 1** | 0 → 0 |
+  | 2.3 | 185 (93%) → 172 (87%) | 8 → 1 | 0 → 0 |
+  | 2.6 | 187 (94%) → 178 (90%) | 16 → 3 | 0 → 0 |
+  | 3 | 191 (96%) → 184 (93%) | 22 → 4 | 0 → 0 |
+  | 3.5 | 195 (98%) → 191 (96%) | 38 → 13 | 0 → 0 |
+  | 4 | 195 (98%) → 192 (97%) | 51 → 17 | 1 → 0 |
+  | 5 | 196 (99%) → 195 (98%) | 116 → 64 | 5 → 2 |
+
+  - At any share of human texts that win, version 7 lets fewer AI passages win. For example, about 93% win at line 2.3 under version 6 with 8 AI passages winning, and at line 3 under version 7 with 4.
+  - Version 7 at line 3 beats version 6 at line 2 on both counts: 184 human texts win against 180, and 4 AI passages against 4. On `tune` alone it is 125 of 136 (92%) with no AI passage, against 123 (90%) with 1.
+  - Kept at line 2, version 7 makes Jev harder: 82% of human texts win, against 91%.
+- **Deploy together:** `score-jev` runs in the Worker, so version 7 needs `pnpm deploy:worker`. Its line is in the client. Deployed with the line left at 2, fewer human-sounding rewrites would win.
+- **Caveat:** `holdout` and `ai_test` have both been seen, so a line picked from this table has no clean check left.
+
+## B.36 Jev's win line is 3 (2026-10-08)
+
+At the user's direction, the `jev` option in `web/src/config.ts` now wins at 3, up from 2 (B.27). The user chose it from the B.35 table. The line is on Jev's shown scale, where 3 is 2.33 from `score-jev`.
+
+- **With `score-jev` version 7, through the game's own rules** (`checkRules`, from cache): 184 of 198 human texts win (93%). 4 of 580 AI passages are won before any edit: 1 of 180 in `ai_eval` and 3 of 400 in `ai_test`. That compares with 180 human texts and 4 AI passages for version 6 at line 2.
+- **Game bank:** no passage is won before any edit; the lowest shows 4.7. `pnpm generate` now rejects candidates at or below 3.
+- **Deploy together:** this line belongs with `score-jev` version 7 (B.35), which needs `pnpm deploy:worker`. Version 6 at line 3 would let 22 AI passages win before any edit.
+
+## B.37 The Haiku judge drops Haiku's own sentence-rhythm tells (2026-10-08)
+
+At the user's request, `scorers.llmBasic` removes any tell from Haiku's list that is about uniform sentence length or rhythm, so it never repeats the measured `uniform-sentence-length` tell (B.34). Only the list shown to the player changes. The score, `score-v1` and `raw` are unchanged, and `raw` still holds every tell Haiku returned.
+
+- **Always, not only when the measured tell shows.** Sentence rhythm is now reported only by the measurement, so the player never sees Haiku call sentences uniform where the measurement does not.
+- **Matching:** Haiku's labels are free text (2,114 distinct labels among the 3,676 tells in the cached `score-v1@3` results). `isSentenceRhythmLabel` in `web/src/scorers.ts` splits a label into words and drops it if it has:
+  - a word for sameness (uniform, even, monotonous, unvaried, consistent, identical) and a word for sentences or rhythm (sentence, rhythm, length, cadence, pacing);
+  - both "sentence" and "length";
+  - "variety" or "variation" with a word for sentences or rhythm;
+  - or "burstiness".
+- **What it keeps:** rhythm from lists of three (`triadic-rhythm`, `tricolon-cadence`), parallelism (`polished-balanced-sentences`), tone (`uniform-polished-tone`) and sentence openers (`repetitive-sentence-openers`). These are other tells. "Same" alone does not count, so a label like `same-sentence-openers` is kept.
+- **On the 778 cached texts** the filter drops 23 tells: `uniform-sentence-rhythm` (10), `polished-uniform-sentences` (4), `uniform-sentence-structure` (2), and seven others, once each. 22 of them are on texts where the measured tell also shows.
+
+## B.38 The Haiku judge adds tacked-on "-ing" phrases and lists of three (2026-10-08)
+
+At the user's request, `scorers.llmBasic` measures two more tells in code, next to uniform sentence length (B.34). Haiku's score is now its own score plus the sentence tell, plus the "-ing" tell, plus half the list tell, rounded to one decimal and capped at 10. `score-v1`, Haiku's line (5) and the Jev judge are unchanged.
+
+- **Tacked-on "-ing" phrase** (`tacked-on-ing-phrase`, weight 1): a comma followed by a phrase starting with an -ing word, as in ", making it perfect for beginners". Strength is 0.5 for one and 1 for two or more. The quote is the first phrase, up to the next punctuation. Words that rarely start such a phrase are not counted: prepositions ("including", "during", "according") and nouns ("something", "morning", "building"). That list was drawn up after looking at the matches in all the texts.
+- **List of three** (`list-of-three`, weight 0.5): three items of one to three words with a comma before "and" or "or", as in "thoughts, ideas, and tasks". Strength is 0.5 for one and 1 for two or more, so it adds at most half a point. The quote runs from the first item's last word to the third item. The third item ends at punctuation within three words, or else is cut to the second item's length.
+- **How they were chosen.** 27 candidate measures were compared on the cached `score-v1@3` results, fitted on `tune` and checked on the rest. The others included average and longest sentence length, word length, abstract nouns, vocabulary variety, contractions, pronouns, digits, capitalized names, punctuation marks, hedging words and sentence openers. Only the "-ing" phrase gained on both halves. Lists of three gained nothing; the user asked for them anyway. Every version tried came out between −0.002 and +0.001 in AUC, because Haiku already penalizes lists of three (about 400 of its 3,676 cached tells name them). At weight 1 they lowered the AUC on the rest, hence weight 0.5.
+- **The comma before "and".** Without it, a clause boundary often passes for a list ("experience, both personally and professionally"), and the tell fired on 45% of human texts instead of 17%, at the same AUC. The cost: dropping that comma ("fast, cheap and easy") dodges the measured tell. Haiku's own list-of-three tell is then shown again, and Haiku still counts the list in its score.
+- **No tell twice.** Haiku's tells about the same thing are dropped when the measured tell is listed. For "-ing" phrases that means labels with "participle", "participial" or "ing", but not sentence openers. For lists, labels with "three", "triad", "triadic", "tricolon", "triplet", "triple" or "trio". When the pattern finds nothing, Haiku's tells stay, since Haiku also notices lists the pattern cannot match, such as three parallel clauses. This differs from sentence rhythm (B.37), which the measurement covers fully and which is dropped always. On the 778 cached texts, 267 Haiku tells are dropped in all, most of them lists of three (`triadic-listing` 18, `tidy-triadic-lists` 13, `tidy-triplet-list` 10).
+- **Results,** on shown (rounded) scores, `ai_eval` and `ai_test` (580) against the human corpus (198), entirely from cache:
+
+  | | AUC `tune` | AUC rest | AUC all | Line 5: human texts that win / AI passages won before any edit |
+  | --- | --- | --- | --- | --- |
+  | Haiku alone | 0.9946 | 0.9961 | 0.9947 | 164 / 2 |
+  | + sentence (B.34) | 0.9950 | 0.9971 | 0.9952 | 164 / 1 |
+  | + "-ing" | 0.9984 | 0.9984 | 0.9976 | 163 / 1 |
+  | + "-ing" + lists | 0.9989 | 0.9982 | 0.9979 | 162 / 1 |
+
+  - The "-ing" tell is listed on 408 of the 580 AI passages (70%) and 32 of the 198 human texts (16%). The list tell is listed on 320 (55%) and 34 (17%).
+  - 326 AI passages now reach the cap of 10.
+- **Caveats.** The rest has only 62 human texts. `ai_test` and the `holdout` split had both been used before, though not for these tells. A first version of the `tune`/rest comparison mixed up the two AI sets, because 180 ids appear in both `ai_eval.json` and `ai_test.json`. The figures above key the split by set as well as id.

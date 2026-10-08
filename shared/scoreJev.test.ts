@@ -81,6 +81,12 @@ describe("measure", () => {
       value: 0,
       strength: 1,
     });
+    // Measured from 4 sentences, not jevslop's 8 (spec B.35).
+    expect(measure("The dog ran home. ".repeat(4)).tells.low_burstiness).toEqual({
+      value: 0,
+      strength: 1,
+    });
+    expect(measure("The dog ran home. ".repeat(3)).tells.low_burstiness!.strength).toBeNull();
     const emoji = measure(`✅ Done\n🚀 Shipped\n\n${LONG}`).tells.emoji_bullets;
     expect(emoji).toEqual({ value: 2, strength: 1 });
   });

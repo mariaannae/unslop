@@ -72,6 +72,112 @@ describe("llm-basic scorer", () => {
     expect(result).toEqual({ score: 4, tells: taskResult.tells, raw: taskResult });
   });
 
+  it("adds uniform sentence length from 4 sentences, capped at 10, and lists it", async () => {
+    const answer = (score: number) =>
+      stubFetch(200, {
+        ok: true,
+        taskId: "score-v1",
+        version: 1,
+        result: { ...taskResult, score },
+        cached: false,
+      });
+    const uniform = "The dog ran home. ".repeat(4);
+
+    answer(4);
+    const result = await scorers.llmBasic.score({ original: uniform, current: uniform });
+    expect(result.score).toBe(5);
+    expect(result.tells).toEqual([...taskResult.tells, { label: "uniform-sentence-length" }]);
+    expect((result.raw as { score: number }).score).toBe(4);
+
+    answer(10);
+    expect((await scorers.llmBasic.score({ original: uniform, current: uniform })).score).toBe(10);
+
+    // Three sentences: not measured, so nothing is added.
+    const three = "The dog ran home. ".repeat(3);
+    answer(4);
+    const short = await scorers.llmBasic.score({ original: three, current: three });
+    expect(short).toMatchObject({ score: 4, tells: taskResult.tells });
+  });
+
+  it("drops Haiku's own sentence-rhythm tells, whether or not the measured tell shows", async () => {
+    const label = (l: string) => ({ label: l, quote: "q" });
+    const kept = [
+      "triadic-rhythm",
+      "uniform-polished-tone",
+      "repetitive-sentence-openers",
+      "polished-balanced-sentences",
+      "em-dash",
+    ].map(label);
+    const dropped = [
+      "uniform-sentence-rhythm",
+      "polished-uniform-sentences",
+      "even-rhythm-sentences",
+      "Monotonous sentence length",
+      "lack-of-sentence-variety",
+      "low-burstiness",
+    ].map(label);
+    stubFetch(200, {
+      ok: true,
+      taskId: "score-v1",
+      version: 1,
+      result: { ...taskResult, tells: [...dropped, ...kept] },
+      cached: false,
+    });
+
+    const three = "The dog ran home. ".repeat(3);
+    const result = await scorers.llmBasic.score({ original: three, current: three });
+    expect(result.tells).toEqual(kept);
+    // raw still has everything Haiku said.
+    expect((result.raw as typeof taskResult).tells).toHaveLength(dropped.length + kept.length);
+
+    const four = "The dog ran home. ".repeat(4);
+    expect((await scorers.llmBasic.score({ original: four, current: four })).tells).toEqual([
+      ...kept,
+      { label: "uniform-sentence-length" },
+    ]);
+  });
+
+  it("adds tacked-on -ing phrases and lists of three, quoting each", async () => {
+    const haikuTells = [
+      { label: "triadic-listing", quote: "bells, lights, and locks" },
+      { label: "repetitive-creating-participles", quote: "making it ready" },
+      { label: "stacked-ing-openers", quote: "Riding" },
+      { label: "em-dash", quote: "—" },
+    ];
+    stubFetch(200, {
+      ok: true,
+      taskId: "score-v1",
+      version: 1,
+      result: { ...taskResult, tells: haikuTells },
+      cached: false,
+    });
+    // One -ing phrase (", including" is not one) and one list: 4 + 0.5 + 0.5 × 0.5.
+    const text =
+      "We fixed the old bike, making it ready for spring, including the chain. " +
+      "Then we bought bells, lights, and locks for the trip.";
+
+    const result = await scorers.llmBasic.score({ original: text, current: text });
+
+    expect(result.score).toBe(4.8);
+    // Haiku's tells for the same two things are dropped; sentence openers are another tell.
+    expect(result.tells).toEqual([
+      { label: "stacked-ing-openers", quote: "Riding" },
+      { label: "em-dash", quote: "—" },
+      { label: "tacked-on-ing-phrase", quote: "making it ready for spring" },
+      { label: "list-of-three", quote: "bells, lights, and locks" },
+    ]);
+  });
+
+  it("quotes a list's last item up to punctuation, or as long as the second item", async () => {
+    stubFetch(200, { ok: true, taskId: "score-v1", version: 1, result: taskResult, cached: false });
+    const text = "The pothos, snake plant, and peace lily are easy. Buy soil, pots, and trays.";
+    const { tells } = await scorers.llmBasic.score({ original: text, current: text });
+    expect(tells).toContainEqual({
+      label: "list-of-three",
+      quote: "pothos, snake plant, and peace lily",
+    });
+  });
+
   it("lets task errors propagate so the game can report them", async () => {
     stubFetch(502, {
       ok: false,
