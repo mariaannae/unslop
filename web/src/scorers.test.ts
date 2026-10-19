@@ -178,6 +178,23 @@ describe("llm-basic scorer", () => {
     });
   });
 
+  it("lists each match of a measured tell, without changing the score", async () => {
+    stubFetch(200, { ok: true, taskId: "score-v1", version: 1, result: taskResult, cached: false });
+    // Two -ing phrases (strength 1) and two lists (strength 1): 4 + 1 + 0.5.
+    const text =
+      "We fixed the bike, making it ready. We oiled the chain, leaving it smooth. " +
+      "Then we bought bells, lights, and locks, and later packed tea, bread, and jam.";
+    const result = await scorers.llmBasic.score({ original: text, current: text });
+
+    expect(result.score).toBe(5.5);
+    expect(result.tells!.filter((t) => t.label !== "em-dash")).toEqual([
+      { label: "tacked-on-ing-phrase", quote: "making it ready" },
+      { label: "tacked-on-ing-phrase", quote: "leaving it smooth" },
+      { label: "list-of-three", quote: "bells, lights, and locks" },
+      { label: "list-of-three", quote: "tea, bread, and jam" },
+    ]);
+  });
+
   it("lets task errors propagate so the game can report them", async () => {
     stubFetch(502, {
       ok: false,

@@ -54,10 +54,11 @@ export const mock: Scorer = {
  *
  * Three tells are also measured here in code (codeTells below). Each one's weight
  * times its strength (0–1) is added to Haiku's score, capped at 10 (spec B.34,
- * B.38), and each is listed at strength 0.5 or more. Haiku's own tells about
- * sentence rhythm are always dropped (spec B.37), and its tells about lists of
- * three or tacked-on "-ing" phrases are dropped when the measured one is listed,
- * so no tell is reported twice. `raw` keeps score-v1's own result.
+ * B.38), and each is listed at strength 0.5 or more, once per match (spec B.43).
+ * Haiku's own tells about sentence rhythm are always dropped (spec B.37), and its
+ * tells about lists of three or tacked-on "-ing" phrases are dropped when the
+ * measured one is listed, so no tell is reported twice. `raw` keeps score-v1's
+ * own result.
  *
  * offline scorer scorers.mock is rules based
  */
@@ -76,9 +77,12 @@ export const llmBasic: Scorer = {
     const added = measured.reduce((sum, t) => sum + t.weight * t.strength, 0);
     return {
       score: Math.min(10, Math.round(10 * (result.score + added)) / 10),
+      // One tell per quoted match, so the player can find and edit each one.
       tells: [
         ...tells,
-        ...listed.map(({ label, quote }) => (quote ? { label, quote } : { label })),
+        ...listed.flatMap(({ label, quotes }) =>
+          quotes ? quotes.map((quote) => ({ label, quote })) : [{ label }],
+        ),
       ],
       raw: result,
     };
@@ -89,7 +93,8 @@ type CodeTell = {
   label: string;
   weight: number;
   strength: number;
-  quote?: string;
+  /** Every match, in text order. Absent when the tell has nothing to quote. */
+  quotes?: string[];
   /** Recognizes Haiku's labels for the same tell. */
   duplicates?: (label: string) => boolean;
 };
@@ -108,7 +113,7 @@ function codeTells(text: string): CodeTell[] {
       label: "tacked-on-ing-phrase",
       weight: 1,
       strength: Math.min(1, tails.length / 2),
-      quote: tails[0]?.[1]!.trim(),
+      quotes: tails.map((m) => m[1]!.trim()),
       duplicates: (label) => {
         const words = labelWords(label);
         const ing = words.some((w) => /^(?:ing|participles?|participial)$/.test(w));
@@ -121,7 +126,7 @@ function codeTells(text: string): CodeTell[] {
       label: "list-of-three",
       weight: 0.5,
       strength: Math.min(1, lists.length / 2),
-      quote: lists[0] && listQuote(lists[0], text),
+      quotes: lists.map((m) => listQuote(m, text)),
       duplicates: (label) =>
         labelWords(label).some((w) =>
           /^(?:three|triads?|triadic|tricolons?|triplets?|triple|trio)$/.test(w),

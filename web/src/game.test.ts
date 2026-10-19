@@ -444,3 +444,88 @@ describe("game state: choosing a scorer", () => {
     expect(rules).toEqual({ scorer, guardrails: [guardrail], win: { scoreAtOrBelow: 3 } });
   });
 });
+
+describe("game state: check history", () => {
+  it("records each Check that spent one, with the text the scorer saw", async () => {
+    const { game } = gameWith(fakeScorer({ score: 5, tells: [{ label: "t", quote: "edit" }] }));
+    await game.newPassage();
+    game.setCurrent("first edit");
+    await game.check();
+    game.setCurrent("second edit");
+    await game.check();
+
+    const { checks } = game.getState();
+    expect(checks.map((c) => c.text)).toEqual(["first edit", "second edit"]);
+    expect(checks[1]!.outcome.score).toEqual({ score: 5, tells: [{ label: "t", quote: "edit" }] });
+  });
+
+  it("skips a Check a local guardrail refused, keeping the last score", async () => {
+    const { game } = gameWith();
+    await game.newPassage();
+    await game.check();
+    game.setCurrent("   ");
+    await game.check();
+
+    const state = game.getState();
+    expect(state.outcome?.score).toBeUndefined();
+    expect(state.checks).toHaveLength(1);
+    expect(state.checks[0]!.outcome.score.score).toBe(5);
+  });
+
+  it("is cleared by a new passage, a scorer switch and a mode switch", async () => {
+    const { game } = gameWith();
+    const checkOnce = async () => {
+      await game.check();
+      expect(game.getState().checks).toHaveLength(1);
+    };
+    await game.newPassage();
+    await checkOnce();
+    await game.newPassage();
+    expect(game.getState().checks).toEqual([]);
+    await checkOnce();
+    game.setScorer("other");
+    expect(game.getState().checks).toEqual([]);
+    await checkOnce();
+    game.setMode("challenge");
+    expect(game.getState().checks).toEqual([]);
+  });
+});
+
+describe("game state: choosing a mode", () => {
+  it("starts in practice, and switching restarts the passage", async () => {
+    const { game } = gameWith();
+    expect(game.getState().mode).toBe("practice");
+    await game.newPassage();
+    game.setCurrent("my edit");
+    await game.check();
+
+    game.setMode("challenge");
+
+    expect(game.getState()).toMatchObject({
+      mode: "challenge",
+      scorerId: "main",
+      phase: "playing",
+      passage: passages[0],
+      current: passages[0]!.text,
+      checksUsed: 0,
+      outcome: null,
+    });
+  });
+
+  it("is ignored mid-check and when unchanged", async () => {
+    let finish!: (r: ScoreResult) => void;
+    const slow = { score: vi.fn(() => new Promise<ScoreResult>((resolve) => (finish = resolve))) };
+    const { game } = gameWith(slow);
+    await game.newPassage();
+    game.setCurrent("my edit");
+    game.setMode("practice");
+    expect(game.getState().current).toBe("my edit");
+
+    const pending = game.check();
+    await Promise.resolve();
+    game.setMode("challenge");
+    expect(game.getState()).toMatchObject({ mode: "practice", phase: "checking" });
+    finish({ score: 5 });
+    await pending;
+  });
+});

@@ -2017,3 +2017,18 @@ At the user's direction, following B.41, `web/src/config.ts` now lists `guardrai
 - **Haiku's refusals** (B.41) no longer affect the Jev scorer. Under the Haiku scorer a scrambled text can still make `score-v1` refuse, which the player sees as an error.
 - **Scripts:** `pnpm harness --scorer jev` makes no Haiku calls; its scores are unchanged. `pnpm generate` now screens candidates with the Jev guardrails, and kept entries record `score-jev@7 + judge-jev@1`.
 - **Deploy the Worker first.** It must serve `judge-jev` before the client lists the Jev guardrails; otherwise every Check fails with `unknown_task`. The same `pnpm deploy:worker` also ships `score-jev` version 7, which Jev's line 3 needs (B.36).
+
+## B.43 Gameplay feedback: live tell highlights (2026-10-19)
+
+At the user's direction, the game gets more game-like feedback between Checks. The user chose in-editor highlights; a goal line and score trail; a win recap; a live sentence-length strip; and a challenge mode. They kept §2.1's non-goals (streaks, sharing, daily puzzles) out for now. This entry records step 1, the highlights.
+
+- **The textarea stays (§4).** An `aria-hidden` copy of the text sits behind a transparent textarea, with transparent text of its own, and draws each tell's quote as a highlight (`PassageEditor` in `web/src/App.tsx`). The two layers share padding, font, scrollbar gutter and scroll position. Kerning and ligatures are off in both, because WebKit does not kern across the copy's highlight boundaries, which shifted the rest of a line by about a pixel. Checked in headless Chrome at 1280 px and 375 px, and in WebKit at 375 px, with the copy drawn in red: there was no doubled text, including after scrolling and with a trailing newline. A real iPhone has not been checked yet.
+- **Highlights follow the edit.** After each Check the UI looks for each quote again, with `indexOf`, every time the text changes (`trackTells` in `web/src/feedback.ts`).
+  - A tell is tracked only if its quote was in the checked text. Tells with no quote are listed but not tracked: the uniform-sentence-length tell, most Jev tells, and Jev's stock-vocabulary list, which names dictionary entries rather than quoting the passage.
+  - Tells that share a quote take one occurrence each, in order. The Offline judge lists one em-dash tell per dash.
+  - A tracked tell whose quote is gone is crossed off as "edited, check to confirm". This is a hint, not a verdict: the judge reads the whole passage again on the next Check and may find new tells.
+- **Tells link both ways.** Hovering or focusing a tell in the list lights up its phrase. Tapping one keeps it lit and scrolls the passage to it. Putting the cursor inside a highlighted phrase lights up its tell and names it in a caption under the editor; that is how it works on phones, which have no hover. Haiku's kebab-case labels are shown as words ("Stock phrasing").
+- **The Haiku judge lists one tell per match of the tacked-on "-ing" phrase and list-of-three tells,** not just the first, so each can be found and crossed off. Strength and score are unchanged.
+- **The engine keeps a Check history.** `GameState.checks` holds the text and outcome of each Check that spent one. The UI takes the score and tells from the last of them, so a Check refused by a local guardrail ("Too short") no longer hides the last score.
+- **The engine records a mode.** `GameState.mode` (practice or challenge) is fixed for a puzzle like the scorer: `setMode` restarts the passage. The engine plays both modes the same way; the mode only tells the UI what to show. No UI exposes it yet.
+- **No scorer, task or Worker change.** Nothing here alters a score, so no task version changes and the harness numbers stand.

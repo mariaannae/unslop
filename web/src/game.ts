@@ -125,6 +125,19 @@ export async function runCheck(ctx: EvalContext, rules: CheckRules): Promise<Che
 
 export type GamePhase = "loading" | "playing" | "checking" | "won" | "lost";
 
+/**
+ * Practice shows the scorer's tells; challenge hides them and shows only the
+ * score. The engine plays both the same way: the mode only tells the UI what to
+ * show, and like the scorer it is fixed for a puzzle (spec B.43).
+ */
+export type GameMode = "practice" | "challenge";
+
+/** A Check that spent one: the text the scorer saw, and what came back. */
+export type CheckRecord = {
+  text: string;
+  outcome: CheckOutcome & { score: ScoreResult };
+};
+
 export type GameState = {
   phase: GamePhase;
   passage: Passage | null;
@@ -133,7 +146,11 @@ export type GameState = {
   checksPerPuzzle: number;
   /** Id of the scorer the current puzzle is played under (GameConfig.scorers). */
   scorerId: string;
+  mode: GameMode;
+  /** The latest Check's outcome, including one a local guardrail refused. */
   outcome: CheckOutcome | null;
+  /** Every Check this puzzle that spent one, oldest first. */
+  checks: CheckRecord[];
   /** Last scorer/provider failure. Cleared on the next edit, check, or new passage. */
   error: string | null;
 };
@@ -152,6 +169,8 @@ export interface Game {
    * current passage: original text, full budget, no outcome. Ignored mid-check.
    */
   setScorer(id: string): void;
+  /** Switches mode, restarting the current passage the same way. Ignored mid-check. */
+  setMode(mode: GameMode): void;
 }
 
 export function createGame(config: GameConfig): Game {
@@ -163,7 +182,9 @@ export function createGame(config: GameConfig): Game {
     checksUsed: 0,
     checksPerPuzzle: config.budget.checksPerPuzzle,
     scorerId: config.defaultScorer,
+    mode: "practice",
     outcome: null,
+    checks: [],
     error: null,
   };
   const listeners = new Set<() => void>();
@@ -171,6 +192,27 @@ export function createGame(config: GameConfig): Game {
   function set(patch: Partial<GameState>) {
     state = { ...state, ...patch };
     for (const listener of listeners) listener();
+  }
+
+  /**
+   * Applies a rule change (scorer or mode). A puzzle is played under one set of
+   * rules, so this restarts the current passage: original text, full budget, no
+   * outcome. While a passage is loading there is nothing to restart.
+   */
+  function restart(patch: Pick<Partial<GameState>, "scorerId" | "mode">) {
+    if (state.phase === "loading" || !state.passage) {
+      set(patch);
+      return;
+    }
+    set({
+      ...patch,
+      phase: "playing",
+      current: state.passage.text,
+      checksUsed: 0,
+      outcome: null,
+      checks: [],
+      error: null,
+    });
   }
 
   return {
@@ -190,6 +232,7 @@ export function createGame(config: GameConfig): Game {
         current: passage.text,
         checksUsed: 0,
         outcome: null,
+        checks: [],
         error: null,
       });
     },
@@ -220,26 +263,22 @@ export function createGame(config: GameConfig): Game {
         : checksUsed >= state.checksPerPuzzle
           ? "lost"
           : "playing";
-      set({ phase, checksUsed, outcome });
+      const checks = outcome.score
+        ? [...state.checks, { text: state.current, outcome: { ...outcome, score: outcome.score } }]
+        : state.checks;
+      set({ phase, checksUsed, outcome, checks });
       return outcome;
     },
 
     setScorer(id) {
       if (state.phase === "checking" || id === state.scorerId) return;
       checkRules(config, id);
-      // While a passage is loading there is nothing to restart; it arrives fresh.
-      if (state.phase === "loading" || !state.passage) {
-        set({ scorerId: id });
-        return;
-      }
-      set({
-        scorerId: id,
-        phase: "playing",
-        current: state.passage.text,
-        checksUsed: 0,
-        outcome: null,
-        error: null,
-      });
+      restart({ scorerId: id });
+    },
+
+    setMode(mode) {
+      if (state.phase === "checking" || mode === state.mode) return;
+      restart({ mode });
     },
   };
 }

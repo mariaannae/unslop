@@ -1,6 +1,29 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Ref,
+} from "react";
 import { gameConfig } from "./config";
-import { createGame, type CheckOutcome, type GamePhase, type ScorerOption } from "./game";
+import {
+  createGame,
+  type CheckOutcome,
+  type CheckRecord,
+  type GamePhase,
+  type ScorerOption,
+} from "./game";
+import {
+  segments,
+  tellAt,
+  tellLabel,
+  trackTells,
+  type Segment,
+  type TrackedTell,
+} from "./feedback";
 
 /**
  * The whole screen. Builds the game from config once, subscribes to its store,
@@ -14,7 +37,13 @@ export function App() {
   const game = useMemo(() => createGame(gameConfig), []);
   const state = useSyncExternalStore(game.subscribe, game.getState, game.getState);
   const [showOriginal, setShowOriginal] = useState(false);
+  // A tell lights up while hovered or focused in the list, stays lit once tapped
+  // (until the cursor moves in the passage), or when the cursor is inside it.
+  const [hoverTell, setHoverTell] = useState<number | null>(null);
+  const [pickedTell, setPickedTell] = useState<number | null>(null);
+  const [caret, setCaret] = useState<number | null>(null);
   const outcomeRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<EditorHandle>(null);
 
   const checksLeft = state.checksPerPuzzle - state.checksUsed;
   const loading = state.phase === "loading";
@@ -23,6 +52,24 @@ export function App() {
   const editable = state.phase === "playing";
   const over = state.phase === "won" || state.phase === "lost";
   const edited = state.passage !== null && state.current !== state.passage.text;
+
+  // The last Check's tells, found again in the text as it is edited (spec B.43).
+  // Practice mode only, and not once the puzzle is won.
+  const last = state.checks.at(-1);
+  const showTells = state.mode === "practice";
+  const highlight = showTells && state.phase !== "won";
+  const tells = useMemo(
+    () => (last ? trackTells(last.text, last.outcome.score.tells ?? [], state.current) : []),
+    [last, state.current],
+  );
+  const caretTell = caret === null ? null : tellAt(tells, caret);
+  const activeTell = hoverTell ?? pickedTell ?? caretTell;
+  const anyTracked = highlight && tells.some((t) => t.tracked && !t.edited);
+
+  useEffect(() => {
+    setHoverTell(null);
+    setPickedTell(null);
+  }, [last]);
 
   useEffect(() => {
     if (game.getState().phase === "loading" && game.getState().passage === null) {
@@ -87,11 +134,30 @@ export function App() {
           </div>
         ) : (
           <PassageEditor
+            ref={editorRef}
             value={state.current}
             disabled={!editable}
+            segments={highlight && tells.length > 0 ? segments(state.current, tells) : null}
+            active={highlight ? activeTell : null}
             onChange={(text) => game.setCurrent(text)}
+            onCaret={(position) => {
+              setCaret(position);
+              if (position !== null) setPickedTell(null);
+            }}
           />
         )}
+
+        {anyTracked ? (
+          <p className="-mt-2 min-h-5 text-sm text-amber-900">
+            {caretTell !== null ? (
+              <>↳ {tellLabel(tells[caretTell]!.tell.label)}</>
+            ) : (
+              <span className="text-neutral-500">
+                Highlights mark the judge&apos;s tells. Tap one to see which.
+              </span>
+            )}
+          </p>
+        ) : null}
 
         {state.passage ? (
           <details
@@ -109,7 +175,20 @@ export function App() {
         ) : null}
 
         <div ref={outcomeRef} className="scroll-mt-4">
-          <OutcomePanel phase={state.phase} outcome={state.outcome} error={state.error} />
+          <OutcomePanel
+            phase={state.phase}
+            outcome={state.outcome}
+            last={last}
+            error={state.error}
+            tells={showTells ? tells : []}
+            activeTell={activeTell}
+            onTellHover={setHoverTell}
+            onTellPick={(i) => {
+              const unpick = pickedTell === i;
+              setPickedTell(unpick ? null : i);
+              if (!unpick) editorRef.current?.reveal(i);
+            }}
+          />
         </div>
       </main>
 
@@ -172,29 +251,132 @@ function ScorerMenu(props: {
   );
 }
 
-/** A plain textarea, per spec §4. Swap this component for a richer editor later. */
-function PassageEditor(props: { value: string; disabled: boolean; onChange(text: string): void }) {
+type EditorHandle = {
+  /** Scrolls the passage to this tell's first highlight and brings the editor into view. */
+  reveal(tell: number): void;
+};
+
+/**
+ * What the text and its highlight copy share, so both lay out the same lines.
+ * Kerning and ligatures are off because WebKit does not apply them across the
+ * copy's highlight boundaries, which shifted the rest of a line by a pixel or so
+ * and could wrap it differently.
+ */
+const PASSAGE_LAYOUT =
+  "p-3 font-serif text-base leading-relaxed [font-kerning:none] [font-variant-ligatures:none] [scrollbar-gutter:stable]";
+
+/**
+ * A plain textarea, per spec §4, over a copy of its text that draws the tell
+ * highlights (spec B.43). The copy sits behind a transparent textarea with
+ * transparent text of its own, so only the highlight colour shows through. The
+ * two must wrap identically: same padding, font, and scrollbar gutter.
+ */
+function PassageEditor(props: {
+  ref: Ref<EditorHandle>;
+  value: string;
+  disabled: boolean;
+  /** The text split into highlight runs, or null to draw none. */
+  segments: Segment[] | null;
+  /** The tell to draw stronger. */
+  active: number | null;
+  onChange(text: string): void;
+  onCaret(position: number | null): void;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  // Keep the copy scrolled with the textarea, including when it first appears.
+  const syncScroll = () => {
+    if (backdropRef.current && textareaRef.current) {
+      backdropRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
+  useLayoutEffect(syncScroll);
+
+  useImperativeHandle(props.ref, () => ({
+    reveal(tell) {
+      const mark = backdropRef.current?.querySelector<HTMLElement>(`mark[data-tells~="${tell}"]`);
+      const textarea = textareaRef.current;
+      if (!mark || !textarea) return;
+      textarea.scrollTop = Math.max(0, mark.offsetTop - textarea.clientHeight / 3);
+      syncScroll();
+      wrapperRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    },
+  }));
+
   return (
-    <textarea
-      value={props.value}
-      disabled={props.disabled}
-      onChange={(e) => props.onChange(e.target.value)}
-      aria-label="Passage"
-      rows={10}
-      spellCheck
-      autoCapitalize="sentences"
-      className="min-h-56 w-full resize-y rounded-md border border-neutral-300 bg-white p-3 font-serif text-base leading-relaxed text-neutral-900 focus:border-neutral-900 focus:outline-none disabled:bg-neutral-100 disabled:text-neutral-500"
-    />
+    <div
+      ref={wrapperRef}
+      className={
+        "relative rounded-md border border-neutral-300 focus-within:border-neutral-900 " +
+        (props.disabled ? "bg-neutral-100" : "bg-white")
+      }
+    >
+      {props.segments ? (
+        <div
+          ref={backdropRef}
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 overflow-hidden break-words whitespace-pre-wrap text-transparent ${PASSAGE_LAYOUT}`}
+        >
+          {props.segments.map((s) =>
+            s.tells.length === 0 ? (
+              s.text
+            ) : (
+              <mark
+                key={s.start}
+                data-tells={s.tells.join(" ")}
+                className={
+                  "box-decoration-clone rounded-sm text-transparent " +
+                  (props.active !== null && s.tells.includes(props.active)
+                    ? "bg-amber-300"
+                    : s.tells.length > 1
+                      ? "bg-amber-200"
+                      : "bg-amber-100")
+                }
+              >
+                {s.text}
+              </mark>
+            ),
+          )}
+          {/* A trailing newline only makes a line once something follows it. */}
+          {props.value.endsWith("\n") ? " " : null}
+        </div>
+      ) : null}
+      <textarea
+        ref={textareaRef}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(e) => props.onChange(e.target.value)}
+        onSelect={(e) => props.onCaret(e.currentTarget.selectionStart)}
+        onBlur={() => props.onCaret(null)}
+        onScroll={syncScroll}
+        aria-label="Passage"
+        rows={10}
+        spellCheck
+        autoCapitalize="sentences"
+        className={`relative block min-h-56 w-full resize-y rounded-md bg-transparent text-neutral-900 focus:outline-none disabled:text-neutral-500 ${PASSAGE_LAYOUT}`}
+      />
+    </div>
   );
 }
 
-/** Renders whatever the engine reported: guardrail feedback, score, tells, and win/loss. */
+/**
+ * Renders whatever the engine reported: guardrail feedback, score, tells, and
+ * win/loss. Guardrail messages come from the latest Check; the score and tells
+ * from the last one that was scored, so a refused Check does not hide them.
+ */
 function OutcomePanel(props: {
   phase: GamePhase;
   outcome: CheckOutcome | null;
+  last: CheckRecord | undefined;
   error: string | null;
+  tells: TrackedTell[];
+  activeTell: number | null;
+  onTellHover(tell: number | null): void;
+  onTellPick(tell: number): void;
 }) {
-  const { phase, outcome, error } = props;
+  const { phase, outcome, last, error } = props;
   if (error) {
     return (
       <section
@@ -210,7 +392,6 @@ function OutcomePanel(props: {
   if (!outcome) return null;
 
   const failed = outcome.guardrails.filter((g) => !g.result.pass);
-  const tells = outcome.score?.tells ?? [];
 
   return (
     <section aria-live="polite" className="flex flex-col gap-3">
@@ -232,24 +413,85 @@ function OutcomePanel(props: {
         </ul>
       ) : null}
 
-      {outcome.score ? <ScoreMeter score={outcome.score.score} /> : null}
+      {last ? <ScoreMeter score={last.outcome.score.score} /> : null}
 
-      {tells.length > 0 ? (
-        <div className="text-sm">
-          <p className="mb-1 font-semibold">Tells</p>
-          <ul className="flex flex-col gap-1">
-            {tells.map((tell, i) => (
-              <li key={i} className="flex flex-wrap gap-x-2">
-                <span className="rounded bg-neutral-200 px-1.5 text-xs leading-5 text-neutral-700">
-                  {tell.label}
-                </span>
-                {tell.quote ? <q className="text-neutral-800">{tell.quote}</q> : null}
-              </li>
-            ))}
-          </ul>
-        </div>
+      {props.tells.length > 0 ? (
+        <TellList
+          tells={props.tells}
+          active={props.activeTell}
+          onHover={props.onTellHover}
+          onPick={props.onTellPick}
+        />
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The last Check's tells. A tell whose phrase is still in the passage is a button
+ * that lights the phrase up (hover or focus) and scrolls to it (tap). One whose
+ * phrase has been edited away is crossed off, though only the next Check can say
+ * whether the judge agrees.
+ */
+function TellList(props: {
+  tells: TrackedTell[];
+  active: number | null;
+  onHover(tell: number | null): void;
+  onPick(tell: number): void;
+}) {
+  const tracked = props.tells.filter((t) => t.tracked).length;
+  const edited = props.tells.filter((t) => t.edited).length;
+  const row = "-mx-1 flex flex-wrap items-baseline gap-x-2 rounded px-1 py-0.5 text-left";
+  return (
+    <div className="text-sm">
+      <p className="mb-1 font-semibold">
+        Tells
+        {tracked > 0 ? (
+          <span className="font-normal text-neutral-600">
+            {" "}
+            · {edited} of {tracked} edited
+          </span>
+        ) : null}
+      </p>
+      <ul className="flex flex-col gap-0.5">
+        {props.tells.map((t, i) => {
+          const body = (
+            <>
+              <span className="rounded bg-neutral-200 px-1.5 text-xs leading-5 text-neutral-700">
+                {tellLabel(t.tell.label)}
+              </span>
+              {t.tell.quote ? (
+                <q className={t.edited ? "text-neutral-400 line-through" : "text-neutral-800"}>
+                  {t.tell.quote}
+                </q>
+              ) : null}
+              {t.edited ? (
+                <span className="text-xs text-neutral-500">edited, check to confirm</span>
+              ) : null}
+            </>
+          );
+          return (
+            <li key={i}>
+              {t.tracked && !t.edited ? (
+                <button
+                  type="button"
+                  onMouseEnter={() => props.onHover(i)}
+                  onMouseLeave={() => props.onHover(null)}
+                  onFocus={() => props.onHover(i)}
+                  onBlur={() => props.onHover(null)}
+                  onClick={() => props.onPick(i)}
+                  className={`${row} w-full ${props.active === i ? "bg-amber-100" : "hover:bg-neutral-100"}`}
+                >
+                  {body}
+                </button>
+              ) : (
+                <div className={row}>{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
