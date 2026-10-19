@@ -2032,3 +2032,13 @@ At the user's direction, the game gets more game-like feedback between Checks. T
 - **The engine keeps a Check history.** `GameState.checks` holds the text and outcome of each Check that spent one. The UI takes the score and tells from the last of them, so a Check refused by a local guardrail ("Too short") no longer hides the last score.
 - **The engine records a mode.** `GameState.mode` (practice or challenge) is fixed for a puzzle like the scorer: `setMode` restarts the passage. The engine plays both modes the same way; the mode only tells the UI what to show. No UI exposes it yet.
 - **No scorer, task or Worker change.** Nothing here alters a score, so no task version changes and the harness numbers stand.
+
+## B.44 Claude Haiku is the default judge (2026-10-19)
+
+At the user's request, `defaultScorer` in `web/src/config.ts` is now `haiku` (`scorers.llmBasic`, Claude Haiku 5.5 with the code-measured tells, line 5) instead of `jev`. The Judge menu still offers Jev and Offline, in the same order. This supersedes the default set in B.19.
+
+- **Every game starts on Haiku.** The app does not remember the player's last choice, so a page load or new game always starts on the default.
+- **Meaning and grammar are still Jev's** (B.42), so a Check under the default makes two Worker requests: `score-v1`, then `judge-jev`. The local Worker needs both `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY`.
+- **Scripts follow the default** (B.29). `pnpm harness` now reports the Haiku judge unless given `--scorer`. On the game bank it scores every passage 8 or more (50 of 60 at 10), so none is won before any edit; against the human corpus the AUC is 0.999, or 1.000 against the modern sources. `pnpm generate` now keeps a candidate only if the Haiku judge scores it above 5 and it passes the Jev guardrails.
+- **What the player gets.** At line 5, 95% of the human texts win as edits of their AI originals, and 1 of the 580 AI passages in `ai_eval` and `ai_test` is won before any edit (B.40). Haiku quotes the passage in most of its tells, so more of them can be highlighted and tracked than under Jev (B.43).
+- **Caveats carried over.** Haiku 5.5 scores vary between calls by about a point on human-like text (B.33), and it can refuse scrambled text, which the player sees as an error rather than a failed guardrail (B.41).

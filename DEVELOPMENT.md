@@ -24,7 +24,7 @@ pnpm dev:web        # http://localhost:5173, proxies /api to the worker
 pnpm dev:worker     # http://localhost:8787, needs worker/.dev.vars
 ```
 
-The game scores through the Worker by default, so run both commands. The default scorer, `scorers.jev`, calls both `score-jev` and `score-v1`, so `worker/.dev.vars` needs `TYPESAFE_API_KEY` as well as `ANTHROPIC_API_KEY`. To play with no server, pick Offline in the app's Judge menu (`scorers.mock`). The `meaning` and `grammar` guardrails can stay: they pass when the scorer reports no judge verdict.
+The game scores through the Worker by default, so run both commands. The default judge, Claude Haiku (`scorers.llmBasic`), calls `score-v1`, and the meaning and grammar guardrails call Jev's `judge-jev` under any judge, so `worker/.dev.vars` needs `ANTHROPIC_API_KEY` as well as `TYPESAFE_API_KEY`. To play with no server, pick Offline in the app's Judge menu (`scorers.mock`); the Jev guardrails skip themselves after it.
 
 ## Verify
 
@@ -37,7 +37,7 @@ pnpm build        # web app into web/dist
 
 ## Scripts
 
-`pnpm generate` and `pnpm harness` read `ANTHROPIC_API_KEY` (plus `TYPESAFE_API_KEY` whenever Jev scores, which it does under the default `scorers.jev`, and `OPENAI_API_KEY` for `pnpm generate` with a GPT model and for `pnpm originals`) from `worker/.dev.vars`, the same git-ignored file the local Worker uses, so there is nothing to export. A key exported in your shell takes precedence.
+`pnpm generate` and `pnpm harness` read `ANTHROPIC_API_KEY` (plus `TYPESAFE_API_KEY` for the Jev judge and, in `pnpm generate`, for the Jev guardrails, and `OPENAI_API_KEY` for `pnpm generate` with a GPT model and for `pnpm originals`) from `worker/.dev.vars`, the same git-ignored file the local Worker uses, so there is nothing to export. A key exported in your shell takes precedence.
 
 ```bash
 pnpm corpus                                   # rebuild data/human_corpus.json (network only, no model calls)

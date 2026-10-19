@@ -23,7 +23,7 @@ export const gameConfig: GameConfig = {
 
   // The scorer a new game starts with. `pnpm generate` and `pnpm harness` score
   // with it too, unless given --scorer.
-  defaultScorer: "jev",
+  defaultScorer: "haiku",
 
   // Local guardrails run before the scorer and cost no Check; remote ones run after it.
   // Jev judges meaning and grammar, in one extra call per Check (spec B.41, B.42).
