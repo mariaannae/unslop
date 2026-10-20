@@ -44,6 +44,7 @@ import {
   tellLabel,
   trackTells,
   trailMark,
+  workedOnEarlier,
   type Headline,
   type Hit,
   type Range,
@@ -79,6 +80,8 @@ export function App() {
   const [pickedTell, setPickedTell] = useState<number | null>(null);
   const [caret, setCaret] = useState<number | null>(null);
   const [moved, setMoved] = useState<Carried | null>(null);
+  // The carried ranges each Check was pressed with, kept past the Check (spec B.58).
+  const [kept, setKept] = useState<Carried[]>([]);
   const [sound, setSound] = useState(soundOn);
   const [rhythm, setRhythm] = useState(rhythmOn);
   // The floating score change after a Check (spec B.48), keyed so each one plays once.
@@ -111,6 +114,15 @@ export function App() {
         ? trackTells(last.text, last.outcome.score.tells ?? [], state.current, carried?.places)
         : [],
     [last, state.current, carried?.places],
+  );
+  // Tells worked on before an earlier Check stay crossed off under these (spec B.58).
+  const earlier = useMemo(
+    () =>
+      workedOnEarlier(
+        state.checks,
+        (check, text) => kept.find((c) => c.last === check && c.text === text)?.places,
+      ),
+    [state.checks, kept],
   );
   const caretTell = caret === null ? null : tellAt(tells, caret);
   const activeTell = hoverTell ?? pickedTell ?? caretTell;
@@ -318,7 +330,7 @@ export function App() {
                 <>↳ {tellLabel(tells[caretTell]!.tell.label)}</>
               ) : (
                 <span className="text-neutral-400">
-                  Highlights mark the judge&apos;s tells. Tap one to see which.
+                  Wavy underlines mark the judge&apos;s tells. Tap one to see which.
                 </span>
               )}
             </p>
@@ -355,10 +367,11 @@ export function App() {
               original={state.passage.text}
               last={last}
               tells={
-                showTells && tells.length > 0 && state.phase !== "won" ? (
+                showTells && tells.length + earlier.length > 0 && state.phase !== "won" ? (
                   <TellList
                     ref={listRef}
                     tells={tells}
+                    earlier={earlier}
                     active={activeTell}
                     onHover={setHoverTell}
                     onPick={(i) => {
@@ -383,6 +396,11 @@ export function App() {
               type="button"
               onClick={() => {
                 play("check");
+                if (carried) {
+                  const keep = (c: Carried) =>
+                    c.last !== carried.last && state.checks.includes(c.last);
+                  setKept((k) => [...k.filter(keep), carried]);
+                }
                 void game.check();
               }}
               disabled={!canCheck || checking}
@@ -555,6 +573,14 @@ const PASSAGE_LAYOUT =
 const WORKED_ON = "bg-sky-200";
 
 /**
+ * Mark of a tell not yet worked on: a fine wavy magenta underline, like a spell
+ * checker's, unbroken under descenders (spec B.57). Its colour is added where
+ * it is used.
+ */
+const TO_DO =
+  "underline decoration-wavy decoration-1 underline-offset-4 [text-decoration-skip-ink:none]";
+
+/**
  * A plain textarea, per spec §4, over a copy of its text that draws the tell
  * highlights (spec B.43). The copy sits behind a transparent textarea with
  * transparent text of its own, so only the highlight colour shows through. The
@@ -648,9 +674,8 @@ function PassageEditor(props: {
                     ? "bg-amber-300"
                     : s.changed
                       ? WORKED_ON
-                      : s.tells.length > 1
-                        ? "bg-amber-200"
-                        : "bg-amber-100")
+                      : // A mark's own background is yellow, so it is cleared.
+                        `bg-transparent ${TO_DO} ${s.tells.length > 1 ? "decoration-fuchsia-700" : "decoration-fuchsia-500"}`)
                 }
               >
                 {s.text}
@@ -1099,19 +1124,68 @@ const PANEL_TABS: readonly PanelTab[] = ["tells", "original"];
  * it (tap), and lights up itself while the cursor is in the phrase. Each quote is
  * coloured like its highlight. Once the player has worked on every place a quote
  * was, it is struck through and followed by what the player wrote, though only the
- * next Check can say whether the judge agrees (spec B.46).
+ * next Check can say whether the judge agrees (spec B.46). After that Check it
+ * stays, struck through, under the new tells (spec B.58).
  */
 function TellList(props: {
   ref: Ref<HTMLDivElement>;
   tells: TrackedTell[];
+  /** Tells worked on before an earlier Check, oldest first. */
+  earlier: TrackedTell[];
   active: number | null;
   onHover(tell: number | null): void;
   onPick(tell: number): void;
 }) {
-  const tracked = props.tells.filter((t) => t.tracked).length;
-  const edited = props.tells.filter((t) => t.edited).length;
+  const tracked = props.tells.filter((t) => t.tracked).length + props.earlier.length;
+  const edited = props.tells.filter((t) => t.edited).length + props.earlier.length;
   const row = "-mx-1 flex flex-wrap items-baseline gap-x-2 rounded px-1 py-0.5 text-left";
   const swatch = "inline-block size-2.5 rounded-sm align-baseline";
+  // A tell's label and quote. Once worked on, the quote is struck through and
+  // followed by what the player wrote in its place; `checked` once a Check has read that.
+  const body = (t: TrackedTell, lit: boolean, checked: boolean) => {
+    const after = t.edited ? [...new Set(t.now.map((s) => s.trim()).filter(Boolean))] : [];
+    return (
+      <>
+        <span className="rounded-full bg-accent/80 px-2 text-fine leading-5 text-ink ring-1 ring-white/40">
+          {tellLabel(t.tell.label)}
+        </span>
+        {t.tell.quote ? (
+          <q
+            className={
+              "box-decoration-clone rounded-sm " +
+              (t.edited
+                ? `${WORKED_ON} text-neutral-600 line-through`
+                : t.tracked && !lit
+                  ? `${TO_DO} decoration-fuchsia-500`
+                  : "")
+            }
+          >
+            {t.tell.quote}
+          </q>
+        ) : null}
+        {t.edited ? (
+          <>
+            <span>
+              →{" "}
+              {after.length > 0 ? (
+                after.map((text, j) => (
+                  <span key={j}>
+                    {j > 0 ? ", " : null}
+                    <q>{clip(text)}</q>
+                  </span>
+                ))
+              ) : (
+                <span className="italic opacity-70">removed</span>
+              )}
+            </span>
+            {checked ? null : (
+              <span className="text-fine opacity-70">worked on, check to confirm</span>
+            )}
+          </>
+        ) : null}
+      </>
+    );
+  };
   return (
     <div ref={props.ref}>
       <p className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
@@ -1123,7 +1197,7 @@ function TellList(props: {
         {tracked > 0 ? (
           <span aria-hidden className="flex gap-3 text-fine font-normal text-neutral-400">
             <span>
-              <span className={`${swatch} bg-amber-100 ring-1 ring-amber-300`} /> to do
+              <span className={`${TO_DO} decoration-fuchsia-500`}>to do</span>
             </span>
             <span>
               <span className={`${swatch} ${WORKED_ON} ring-1 ring-sky-400`} /> worked on
@@ -1134,47 +1208,6 @@ function TellList(props: {
       <ul className="flex flex-col gap-0.5">
         {props.tells.map((t, i) => {
           const lit = props.active === i;
-          // What the player wrote in its place, once it is worked on everywhere.
-          const after = t.edited ? [...new Set(t.now.map((s) => s.trim()).filter(Boolean))] : [];
-          const body = (
-            <>
-              <span className="rounded-full bg-accent/80 px-2 text-fine leading-5 text-ink ring-1 ring-white/40">
-                {tellLabel(t.tell.label)}
-              </span>
-              {t.tell.quote ? (
-                <q
-                  className={
-                    "box-decoration-clone rounded-sm " +
-                    (t.edited
-                      ? `${WORKED_ON} text-neutral-600 line-through`
-                      : t.tracked && !lit
-                        ? "bg-amber-100 text-neutral-800"
-                        : "")
-                  }
-                >
-                  {t.tell.quote}
-                </q>
-              ) : null}
-              {t.edited ? (
-                <>
-                  <span>
-                    →{" "}
-                    {after.length > 0 ? (
-                      after.map((text, j) => (
-                        <span key={j}>
-                          {j > 0 ? ", " : null}
-                          <q>{clip(text)}</q>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="italic opacity-70">removed</span>
-                    )}
-                  </span>
-                  <span className="text-fine opacity-70">worked on, check to confirm</span>
-                </>
-              ) : null}
-            </>
-          );
           return (
             <li key={i} data-tell={i}>
               {t.ranges.some(([s, e]) => s < e) ? (
@@ -1187,14 +1220,20 @@ function TellList(props: {
                   onClick={() => props.onPick(i)}
                   className={`${row} w-full transition-colors ${lit ? "bg-amber-300 text-neutral-900" : "text-neutral-200 hover:bg-white/10"}`}
                 >
-                  {body}
+                  {body(t, lit, false)}
                 </button>
               ) : (
-                <div className={`${row} text-neutral-200`}>{body}</div>
+                <div className={`${row} text-neutral-200`}>{body(t, lit, false)}</div>
               )}
             </li>
           );
         })}
+        {/* Their phrases are gone from the passage, so there is nothing to light up. */}
+        {props.earlier.map((t, i) => (
+          <li key={`earlier-${i}`}>
+            <div className={`${row} text-neutral-200`}>{body(t, false, true)}</div>
+          </li>
+        ))}
       </ul>
     </div>
   );

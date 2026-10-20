@@ -2458,3 +2458,25 @@ At the user's request, text sizes are now uniform. Before, the user found them "
   - At 1024 × 768 about four lines of the passage scroll inside its box, up from two: the passage there is now 16 px, where it was 15.
   - At 375 × 667 and 390 × 844 the order, the sticky bar and the 16 px fields were unchanged, and nothing scrolled sideways.
   - A Haiku Check showed the error headline in the new style, with the page still fitting.
+
+## B.57 Tells to do get a magenta underline, not a yellow highlight (2026-10-20)
+
+At the user's request, a tell the player has not worked on is now marked with a fine wavy underline, like a spell checker's, in place of the light yellow highlight. This supersedes the colours in B.46 for untouched tells.
+
+- **In the passage.** Untouched tells have a 1 px wavy underline in fuchsia-500, or fuchsia-700 where tells overlap (it was amber-100 and amber-200). It sits 4 px below the baseline and runs unbroken under descenders. The active tell is still amber-300, and worked-on tells are still sky-200.
+- **Magenta, not red.** The underline was red at first. The passage keeps the browser's spell check (§4), whose own red underline looked too alike (dotted in Chrome and Safari on macOS, wavy in Firefox), so the user asked for another colour. Magenta is the game's accent (B.53), and blue and yellow were already taken.
+- **In the tell list.** The "to do" key is the words themselves with the same underline, in place of a yellow square. Quotes of untouched tells are underlined the same way, where they had a yellow background.
+- **Phone hint:** "Wavy underlines mark the judge's tells. Tap one to see which."
+- **No engine, scorer or Worker change.**
+- **Checked** in headless Chrome against the built CSS: the underline lines up with the text, clears descenders, and shows on both the white passage and the dark tell list.
+
+## B.58 Worked-on tells stay crossed out after a Check (2026-10-20)
+
+At the user's request, a tell the player has worked on stays in the tell list, crossed out, after the next Check. Before, a Check replaced the list with its own tells, so every phrase the player had fixed disappeared from it. This extends the list of B.46.
+
+- **Under the new tells.** The user chose the bottom of the list: the last Check's tells come first, as before, then each tell worked on before an earlier Check, oldest first. They pile up over the puzzle, and a new puzzle (New passage, a judge or mode switch) starts the list again.
+- **Only tells worked on.** A tell joins them if its quote was in the passage it was found in and the player had changed every place it was by the next Check (`edited`, B.46). A tell with no quote, or one the judge stops listing by itself, still drops out.
+- **What they show.** The struck quote and what the player wrote, or "removed", as the next Check read it. They have no "check to confirm" note, because a Check has read them since. They are not buttons: their phrases are no longer in the passage, so there is nothing to light up.
+- **The count includes them**, so the heading reads "3 of 9 worked on" with three earlier tells and six new ones.
+- **Where it comes from.** `workedOnEarlier` in `web/src/feedback.ts` runs `trackTells` on each pair of Checks in `GameState.checks`. When Check is pressed, the UI keeps the ranges the last Check's tells were carried to (B.46), so each earlier tell shows exactly what replaced it. Without them, after select all and paste, its quote is searched for and the tell reads "removed", as in the live list.
+- **No engine, scorer or Worker change.** The list is still hidden on a win.

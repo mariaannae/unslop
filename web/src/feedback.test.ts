@@ -11,6 +11,7 @@ import {
   tellLabel,
   trackTells,
   trailMark,
+  workedOnEarlier,
 } from "./feedback";
 import type { CheckRecord, Tell } from "./game";
 
@@ -325,6 +326,45 @@ describe("trackTells with carried ranges", () => {
     // Search alone cannot tell which dash went, and crosses off the last.
     const searched = trackTells("a — b — c — d", [dash, dash, dash], "a b — c — d");
     expect(searched.map((t) => t.edited)).toEqual([false, false, true]);
+  });
+});
+
+describe("workedOnEarlier", () => {
+  const record = (text: string, tells: Tell[]): CheckRecord => ({
+    text,
+    outcome: { score: { score: 9, tells }, guardrails: [], win: false, checkConsumed: true },
+  });
+  const tells = [
+    { label: "x", quote: "big red" },
+    { label: "y", quote: "dog" },
+  ];
+
+  it("has nothing before a second Check", () => {
+    expect(workedOnEarlier([record("the big red dog", tells)])).toEqual([]);
+  });
+
+  it("keeps the tells worked on before the next Check, with what replaced them", () => {
+    const [start, next] = [record("the big red dog", tells), record("the small dog", [])];
+    const carried = play(start.text, tells, [[next.text, 9]]);
+    const places = (check: CheckRecord, text: string) =>
+      check === start && text === next.text ? carried.map((t) => t.ranges) : undefined;
+    expect(workedOnEarlier([start, next], places)).toMatchObject([
+      { tell: tells[0], now: ["small"], edited: true },
+    ]);
+  });
+
+  it("finds the quotes by search without carried ranges, so a rewrite reads as removed", () => {
+    const [start, next] = [record("the big red dog", tells), record("the small dog", [])];
+    expect(workedOnEarlier([start, next])).toMatchObject([{ tell: tells[0], now: [] }]);
+  });
+
+  it("keeps the tells of every earlier Check, oldest first", () => {
+    const checks = [
+      record("the big red dog", tells),
+      record("the small dog", [{ label: "z", quote: "small" }]),
+      record("the little dog", []),
+    ];
+    expect(workedOnEarlier(checks).map((t) => t.tell.label)).toEqual(["x", "z"]);
   });
 });
 

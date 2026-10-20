@@ -90,6 +90,23 @@ export function trackTells(
   });
 }
 
+/**
+ * The tells of each earlier Check that the player had worked on everywhere by the
+ * next one, oldest first, so the list keeps them crossed off (spec B.58). `places`
+ * gives the ranges a Check's tells were carried to in the next Check's text, where
+ * the UI kept them; without them each quote is found by search.
+ */
+export function workedOnEarlier(
+  checks: readonly CheckRecord[],
+  places: (check: CheckRecord, text: string) => Range[][] | undefined = () => undefined,
+): TrackedTell[] {
+  return checks.slice(0, -1).flatMap((check, i) => {
+    const next = checks[i + 1]!.text;
+    const tells = check.outcome.score.tells ?? [];
+    return trackTells(check.text, tells, next, places(check, next)).filter((t) => t.edited);
+  });
+}
+
 /** Tells repeated on one phrase share its places; different tells on it each take them all. */
 const key = (tell: Tell) => `${tell.label}\u0000${tell.quote}`;
 
