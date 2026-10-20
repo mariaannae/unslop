@@ -2480,3 +2480,7 @@ At the user's request, a tell the player has worked on stays in the tell list, c
 - **The count includes them**, so the heading reads "3 of 9 worked on" with three earlier tells and six new ones.
 - **Where it comes from.** `workedOnEarlier` in `web/src/feedback.ts` runs `trackTells` on each pair of Checks in `GameState.checks`. When Check is pressed, the UI keeps the ranges the last Check's tells were carried to (B.46), so each earlier tell shows exactly what replaced it. Without them, after select all and paste, its quote is searched for and the tell reads "removed", as in the live list.
 - **No engine, scorer or Worker change.** The list is still hidden on a win.
+
+## B.59 A white passage box (2026-10-20)
+
+At the user's request, the passage box is much lighter. It was 85% white over the dark violet screen (B.53), which read as grey-lavender; it is now solid white. While a Check runs or the passage is otherwise locked it is 85% white, where it was 60%, so it still dims. The loading placeholder is white too. The tell highlights and underlines are unchanged. No engine, scorer or Worker change.

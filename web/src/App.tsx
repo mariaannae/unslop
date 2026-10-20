@@ -300,7 +300,7 @@ export function App() {
           {loading ? (
             <div
               role="status"
-              className="min-h-56 animate-pulse rounded-[2.5rem] border-4 border-accent bg-white/85 px-6 py-5 text-neutral-600 lg:flex-1"
+              className="min-h-56 animate-pulse rounded-[2.5rem] border-4 border-accent bg-white px-6 py-5 text-neutral-600 lg:flex-1"
             >
               Retrieving specimen…
             </div>
@@ -652,7 +652,8 @@ function PassageEditor(props: {
         // On lg it fills the column (flex 1 0 auto): a height set with the resize
         // grip becomes its base size, so dragging still works.
         "relative rounded-[2.5rem] border-4 border-accent p-3 shadow-[0_0_18px_rgb(122_7_130/0.45)] [color-scheme:light] focus-within:border-frame lg:flex lg:flex-[1_0_auto] lg:flex-col " +
-        (props.disabled ? "bg-white/60" : "bg-white/85")
+        // Solid white; it dims a little while the passage is locked (spec B.59).
+        (props.disabled ? "bg-white/85" : "bg-white")
       }
     >
       {props.segments ? (
