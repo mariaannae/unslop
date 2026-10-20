@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { callableTasks, runTask, type TaskCache } from "./runTask";
-import { measure, scoreJevTask } from "./scoreJev";
+import { measure, scoreJevTask, sentenceLengths } from "./scoreJev";
 import { ProviderError, TaskError } from "./types";
 
 const P1 = "My starter smells like beer, and I still do not trust it to raise a loaf.";
@@ -44,7 +44,7 @@ function stubJev(
 }
 
 async function scoreText(current: string) {
-  const payload = { original: current, current };
+  const payload = { text: current };
   const raw = await scoreJevTask.call(payload, { typesafeApiKey: "test-key" });
   return scoreJevTask.parse(raw, payload);
 }
@@ -89,6 +89,16 @@ describe("measure", () => {
     expect(measure("The dog ran home. ".repeat(3)).tells.low_burstiness!.strength).toBeNull();
     const emoji = measure(`✅ Done\n🚀 Shipped\n\n${LONG}`).tells.emoji_bullets;
     expect(emoji).toEqual({ value: 2, strength: 1 });
+  });
+});
+
+describe("sentenceLengths", () => {
+  it("counts the words of each prose sentence, as the rhythm tell does", () => {
+    expect(
+      sentenceLengths("The dog ran home. It rained. Then, at last, the sun came out!"),
+    ).toEqual([4, 2, 7]);
+    expect(sentenceLengths("# Heading\n\n- a list item\n\nOne sentence here.")).toEqual([3]);
+    expect(sentenceLengths("   ")).toEqual([]);
   });
 });
 
@@ -186,7 +196,7 @@ describe("score-jev", () => {
       },
     };
     const deps = { provider: { complete: vi.fn() }, typesafeApiKey: "test-key", cache };
-    const payload = { original: P1, current: P1 };
+    const payload = { text: P1 };
 
     expect((await runTask(scoreJevTask, payload, deps)).cached).toBe(false);
     expect((await runTask(scoreJevTask, payload, deps)).cached).toBe(true);
@@ -195,7 +205,7 @@ describe("score-jev", () => {
   });
 
   it("reports Jev failures and a missing key as provider errors", async () => {
-    const payload = { original: P1, current: P1 };
+    const payload = { text: P1 };
     await expect(scoreJevTask.call(payload, {})).rejects.toThrow(/TYPESAFE_API_KEY/);
 
     vi.stubGlobal("fetch", async () => new Response("bad key", { status: 401 }));
@@ -204,8 +214,15 @@ describe("score-jev", () => {
     await expect(failure).rejects.toMatchObject({ status: 401 });
   });
 
+  it("scores the text alone, dropping an original if one is sent (spec B.51)", () => {
+    expect(scoreJevTask.validatePayload({ original: "AI text", text: P1 })).toEqual({ text: P1 });
+    expect(() => scoreJevTask.validatePayload({ original: P1, current: P1 })).toThrow(
+      /"text" must be a string/,
+    );
+  });
+
   it("rejects a result with a missing answer", () => {
-    const payload = { original: P1, current: P1 };
+    const payload = { text: P1 };
     expect(() => scoreJevTask.parse({ model: "jev", doc: {}, paragraphs: [] }, payload)).toThrow(
       TaskError,
     );

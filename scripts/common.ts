@@ -266,3 +266,156 @@ export function formatSet(label: string, scores: readonly number[], sep: Separat
     `  mean ${stats.mean.toFixed(1)}  median ${stats.median}   >=${sep.threshold}: ${pct.padEnd(7)} ${targetText}  ${meetsTarget(scores, sep) ? "PASS" : "MISS"}`,
   ].join("\n");
 }
+
+/**
+ * Spearman's rank correlation: 1 when both lists rank the texts the same way, -1
+ * when one reverses the other. Ties share their average rank. NaN when either list
+ * is constant or shorter than 2.
+ */
+export function spearman(xs: readonly number[], ys: readonly number[]): number {
+  const rx = ranks(xs);
+  const ry = ranks(ys);
+  const n = rx.length;
+  if (n < 2 || ry.length !== n) return NaN;
+  const mean = (n + 1) / 2;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (rx[i]! - mean) * (ry[i]! - mean);
+    sxx += (rx[i]! - mean) ** 2;
+    syy += (ry[i]! - mean) ** 2;
+  }
+  return sxx === 0 || syy === 0 ? NaN : sxy / Math.sqrt(sxx * syy);
+}
+
+function ranks(values: readonly number[]): number[] {
+  const order = values.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
+  const out = new Array<number>(values.length);
+  for (let i = 0; i < order.length;) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1]![0] === order[i]![0]) j++;
+    for (let k = i; k <= j; k++) out[order[k]![1]] = (i + j) / 2 + 1;
+    i = j + 1;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Pangram, the commercial AI detector `pnpm pangram` compares the judges with (spec B.50)
+
+const PANGRAM_API = "https://text.external-api.pangram.com";
+
+/**
+ * The fields `pnpm pangram` reads from a finished Pangram task. The disk cache
+ * keeps the whole response, so other fields can be read later without paying again.
+ */
+export type PangramResult = {
+  stage: "STAGE_SUCCESS";
+  version: string;
+  /** "AI", "Human" or "Mixed" under Pangram 4. */
+  prediction_short: string;
+  fraction_ai: number;
+  fraction_ai_assisted: number;
+  fraction_human: number;
+  windows: Array<{ label: string; ai_assistance_score: number; word_count: number }>;
+};
+
+export class PangramError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "PangramError";
+  }
+}
+
+export type PangramClient = {
+  /** The model selectors the key may use, in Pangram's order. Costs nothing. */
+  models(): Promise<string[]>;
+  /** Scores one text. Spends credits: one billing unit per started 100 words under Pangram 4. */
+  detect(text: string, model: string): Promise<PangramResult>;
+};
+
+/**
+ * Pangram's async inference API: POST /task, then poll GET /task/{id} until the task
+ * succeeds or fails. A 429 or 503 is retried with backoff; any other error status
+ * throws a PangramError that carries it. `fetch` and `sleep` are for tests.
+ */
+export function createPangramClient(
+  apiKey: string,
+  {
+    fetch: fetchFn = fetch,
+    sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    pollMs = 1000,
+    timeoutMs = 120_000,
+  }: {
+    fetch?: typeof fetch;
+    sleep?: (ms: number) => Promise<void>;
+    pollMs?: number;
+    timeoutMs?: number;
+  } = {},
+): PangramClient {
+  async function call(route: string, body?: unknown): Promise<unknown> {
+    const method = body === undefined ? "GET" : "POST";
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetchFn(`${PANGRAM_API}${route}`, {
+        method,
+        headers: {
+          "x-api-key": apiKey,
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      if (response.ok) return response.json();
+      if ((response.status === 429 || response.status === 503) && attempt < 4) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
+      }
+      const detail = (await response.text()).slice(0, 300);
+      throw new PangramError(
+        `Pangram API error ${response.status} on ${method} ${route}: ${detail}`,
+        response.status,
+      );
+    }
+  }
+
+  return {
+    async models() {
+      return ((await call("/models")) as { models: string[] }).models;
+    },
+    async detect(text, model) {
+      const { task_id } = (await call("/task", { text, model })) as { task_id: string };
+      for (let waited = 0; waited < timeoutMs; waited += pollMs) {
+        await sleep(pollMs);
+        const task = (await call(`/task/${encodeURIComponent(task_id)}`)) as {
+          stage: string;
+          headline?: string;
+        };
+        if (task.stage === "STAGE_SUCCESS") return task as PangramResult;
+        if (task.stage === "STAGE_FAILED") {
+          throw new PangramError(`Pangram task failed: ${task.headline ?? "no reason given"}`);
+        }
+      }
+      throw new PangramError(`Pangram task ${task_id} had not finished after ${timeoutMs / 1000}s`);
+    },
+  };
+}
+
+/**
+ * Pangram's verdict as one number, for AUC and rank correlation: the windows'
+ * ai_assistance_score (0 human, 1 AI) averaged by word count. A text of about 100
+ * words is usually a single window.
+ */
+export function pangramScore(result: PangramResult): number {
+  const weight = (w: PangramResult["windows"][number]) => w.word_count || 1;
+  const total = result.windows.reduce((sum, w) => sum + weight(w), 0);
+  if (total === 0) throw new PangramError("Pangram returned no windows");
+  return result.windows.reduce((sum, w) => sum + w.ai_assistance_score * weight(w), 0) / total;
+}
+
+/** Pangram 4 bills each text per started 100 words. */
+export function pangramUnits(text: string): number {
+  return Math.max(1, Math.ceil(countWords(text) / 100));
+}

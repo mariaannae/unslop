@@ -1,0 +1,215 @@
+[
+  {
+    "id": "p0016",
+    "set": "data/passages.json",
+    "kind": "ai",
+    "group": "gpt-4o",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 10,
+      "jev": 8.5
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "gameShowed": {
+      "haiku": 10
+    },
+    "text": "Commuting by train offers a blend of convenience and efficiency that is hard to match. The experience is generally smooth, with trains running on a reliable schedule that allows passengers to plan their day with precision. The seating is comfortable, and the environment is conducive to productivity, making it easy to catch up on work or enjoy a good book. The scenic views from the window provide a pleasant backdrop, transforming the mundane act of commuting into a more enjoyable experience. Additionally, trains are an eco-friendly alternative to driving, reducing one's carbon footprint. However, occasional delays and crowded peak hours can be drawbacks. Overall, train commuting is a practical choice for those seeking a balance between comfort and sustainability."
+  },
+  {
+    "id": "p0040",
+    "set": "data/passages.json",
+    "kind": "ai",
+    "group": "gpt-4o",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 9.3,
+      "jev": 6.5
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "gameShowed": {
+      "haiku": 9.3
+    },
+    "text": "A vintage film camera is a type of camera that uses photographic film to capture images, as opposed to digital sensors found in modern cameras. These cameras are often prized for their mechanical craftsmanship, unique aesthetic, and the distinctive quality of images they produce. Film cameras typically require manual operation, including focusing and exposure settings, which can offer a more hands-on and engaging photography experience. Many enthusiasts appreciate the tangible nature of film, as well as the anticipation involved in developing photos. While film and processing can be more costly and time-consuming than digital photography, the results often have a timeless, artistic quality that many photographers find rewarding."
+  },
+  {
+    "id": "p0006",
+    "set": "data/passages.json",
+    "kind": "ai",
+    "group": "gpt-4o",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 10,
+      "jev": 8.1
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "gameShowed": {
+      "haiku": 10
+    },
+    "text": "For those new to the world of houseplants, the pothos, snake plant, and peace lily are excellent choices that combine ease of care with aesthetic appeal. The pothos, with its trailing vines and heart-shaped leaves, thrives in various lighting conditions and requires minimal watering, making it perfect for beginners. The snake plant, known for its striking upright leaves, is nearly indestructible, tolerating low light and infrequent watering. Meanwhile, the peace lily offers lush foliage and elegant white blooms, thriving in low to medium light and signaling its need for water by drooping slightly. These plants not only enhance indoor spaces with their beauty but also improve air quality, making them ideal for novice plant enthusiasts seeking low-maintenance greenery."
+  },
+  {
+    "id": "gpt-4o-p0086",
+    "set": "data/ai_test.json",
+    "kind": "ai",
+    "group": "gpt-4o",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 4,
+      "jev": 4.4
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "I recently purchased the XYZ laptop, and while its performance is commendable, I've encountered a significant issue with its charging capabilities. After just a few weeks of use, the laptop suddenly stopped charging. Initially, I thought it might be a problem with the power outlet or the charger itself, but after testing with multiple outlets and a new charger, the issue persisted. The charging port seems to be the culprit, as it feels loose and doesn't securely hold the charger. This is quite disappointing for a device in this price range, especially considering its otherwise impressive specifications. Customer support has been responsive, but the inconvenience of sending it for repairs so soon after purchase is frustrating."
+  },
+  {
+    "id": "claude-haiku-4-5-p0038",
+    "set": "data/ai_test.json",
+    "kind": "ai",
+    "group": "claude-haiku-4-5",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 6,
+      "jev": 4.4
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "The Riverside Community Center is pleased to announce an upcoming presentation by local historian Margaret Chen, who will share her fascinating account of how a wrong turn on Millbrook Road in 1987 led to the discovery of a previously unknown Civil War-era homestead. During a routine drive through the countryside, Chen took an unexpected detour that revealed crumbling stone foundations hidden beneath overgrown vegetation. Her subsequent research uncovered the site's rich historical significance and the stories of the families who once lived there. This engaging talk will explore how chance encounters can unlock important pieces of our regional heritage. The event takes place Saturday, March 15th at 7 PM. Admission is free for all community members. Light refreshments will be served following the presentation."
+  },
+  {
+    "id": "gpt-3.5-turbo-p0085",
+    "set": "data/ai_test.json",
+    "kind": "ai",
+    "group": "gpt-3.5-turbo",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 6,
+      "jev": 3.5
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "I recently purchased a laptop that has been giving me trouble when it comes to charging. Despite trying different outlets and power cords, the laptop simply won't charge. This has been incredibly frustrating as I rely on my laptop for work and personal use. I have contacted customer support multiple times, but the issue still persists. The laptop itself is great in terms of performance and features, but the charging problem is a major drawback. I hope to find a solution soon as this issue is hindering my productivity and overall satisfaction with the product."
+  },
+  {
+    "id": "claude-haiku-4-5-p0085",
+    "set": "data/ai_test.json",
+    "kind": "ai",
+    "group": "claude-haiku-4-5",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 100,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 4.4,
+      "jev": 1.3
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "My laptop has become frustratingly unreliable when it comes to charging. Despite being only two years old, it now refuses to hold a charge for more than an hour, and getting it to charge at all requires positioning the cable at an awkward angle. I've tried multiple chargers and different outlets, ruling out external factors. The battery indicator flickers between charging and not charging, suggesting an internal hardware issue. Customer support was unhelpful, offering only expensive repair options outside the warranty period. For the price I paid, I expected better longevity. Unless you're willing to invest in repairs, I'd recommend looking at competing brands with more reliable power management systems before purchasing this model."
+  },
+  {
+    "id": "h0152",
+    "set": "data/human_corpus.json",
+    "kind": "human",
+    "group": "Stack Exchange (parenting), answer by Michael MacAskill, CC BY-SA 4.0, https://parenting.stackexchange.com/a/34193",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 0,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 7,
+      "jev": 6.2
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "Your sister got herself into a situation that she felt she needed to lie about. She could have continued doing that in the hope that she never got caught out, or until some crisis point where she was found out involuntarily. But instead, she chose to take the tough decision and confess to you, to allow things to be better in the future. She took the adult path of dealing with an uncomfortable situation actively: despite the immediate negative consequences of admitting her past behaviour, she wanted to be open with you and resolve the problem."
+  },
+  {
+    "id": "h0086",
+    "set": "data/human_corpus.json",
+    "kind": "human",
+    "group": "Wikipedia, \"Fountain pen\" (revision of 2022-11-26), CC BY-SA 3.0, https://en.wikipedia.org/w/index.php?oldid=1123842502",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 0,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 8,
+      "jev": 2.6
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "There is compelling evidence that a working fountain pen was constructed and used during the Renaissance by artist and inventor Leonardo da Vinci. Leonardo's journals contain drawings with cross-sections of what appears to be a reservoir pen that works by both gravity and capillary action. Historians also took note of the fact that the handwriting in the inventor's surviving journals is of a consistent contrast throughout, rather than exhibiting the characteristic fading pattern typical of a quill pen caused by expending and re-dipping. While no physical item survives, several working models were reconstructed in 2011 by artist Amerigo Bombara that have since been put on display in museums dedicated to Leonardo."
+  },
+  {
+    "id": "h0197",
+    "set": "data/human_corpus.json",
+    "kind": "human",
+    "group": "Wikivoyage, \"Beaches\" (revision of 2022-10-16), CC BY-SA 3.0, https://en.wikivoyage.org/w/index.php?oldid=4542202",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 0,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 7.5,
+      "jev": 3.8
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "First, when you're planning the trip, think about whether you really don't like beaches or just don't like something about the beaches you've been to. If you dislike the crowds, head to a remote, lesser-known beach, or visit in the off season or early morning when all the tourists aren't around. If sand irritates you, some beaches are covered in pebbles instead. If the beach houses and hotels spoil your view, try a wild beach, maybe one in a national park. If you get frustrated lugging all the gear and going back in wet, sandy clothes, a beachfront hotel brings effortless convenience. If waves, sand, and sky don't do it for you, look for a beach with spectacular scenery (cliffs, inlets, caves, varied vegetation)."
+  },
+  {
+    "id": "h0133",
+    "set": "data/human_corpus.json",
+    "kind": "human",
+    "group": "Stack Exchange (bicycles), answer by Dent7777, CC BY-SA 4.0, https://bicycles.stackexchange.com/a/56650",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 0,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 7,
+      "jev": 6.2
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "In conclusion, I recommend finding a bike that fits your specific needs. If you can only have one bike, find the bike that allows you to do everything. If you live somewhere that gets significant snow, if you live in a place with terrible roads and worse drivers, you may need that mountain bike. If you live in a city with as many shortcuts and stairs as potholes, you'll love the \"Go Anywhere\" ability. If you live in a very hilly environment, you'll love the climbing gear on your MB. If you have any interest in actually mountain biking, keep in mind that a mountain bike can do both while a road bike has to stay out of the trails."
+  },
+  {
+    "id": "h0068",
+    "set": "data/human_corpus.json",
+    "kind": "human",
+    "group": "Wikipedia, \"Public library\" (revision of 2022-11-21), CC BY-SA 3.0, https://en.wikipedia.org/w/index.php?oldid=1123100422",
+    "checkedOn": "2026-10-19",
+    "pangram": {
+      "aiPercent": 0,
+      "via": "pangram.com website (free plan)"
+    },
+    "judges": {
+      "haiku": 6.8,
+      "jev": 4.1
+    },
+    "judgedWith": "score-v1@4, score-jev@7, each text alone",
+    "text": "The establishment of circulating libraries in the 18th century, by booksellers and publishers provided a means of gaining profit and creating social centers within the community. The circulating libraries not only provided a place to sell books, but also a place to lend books for a price. These circulating libraries provided a variety of materials including the increasingly popular novels. Although the circulating libraries filled an important role in society, members of the middle and upper classes often looked down upon these libraries that regularly sold material from their collections and provided materials that were less sophisticated."
+  }
+]

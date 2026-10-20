@@ -9,8 +9,8 @@ One pnpm package, TypeScript everywhere, no build step for shared code. Tests si
 | `web/`     | Vite + React + Tailwind v4 game client. `src/config.ts` lists the scorers the player can pick from, each with its win line, the default one, and the guardrails (and the model `pnpm generate` uses), `src/game.ts` is the engine (check sequence and game state), `src/scorers.ts` holds the scorers and the one function that calls the Worker, `src/App.tsx` only renders state.                                                         |
 | `worker/`  | Cloudflare Worker: `POST /api/task`, KV cache, per-IP rate limit, CORS. All of it is in `index.ts`: entry and router, then the task handler, then the KV cache and rate limiter. The only code that holds an API key.                                                                                              |
 | `shared/`  | The `score-v1` task definition (`scoreV1.ts`: prompt, model, schema, parser), the `score-jev` task (`scoreJev.ts`: the jevslop port, its tells, weights and Jev call), the task, provider and `/api/task` wire types (`types.ts`), the task runner and cache key (`runTask.ts`), and the Anthropic adapter (`anthropic.ts`). The web app imports only types from here.        |
-| `scripts/` | Node scripts run with tsx: eval harness, bank generator (with its `generate-v1` task in `generateV1.ts`), human-corpus builder. They call the provider directly with `ANTHROPIC_API_KEY` (and `OPENAI_API_KEY` when generating with a GPT model) from the environment and never go through the Worker. Helpers, including the OpenAI adapter, are in `common.ts`.                                           |
-| `data/`    | `passages.json` (the bank the game draws from), `human_corpus.json` (the harness's human baseline) with `human_originals.json` (an AI rewrite of each, scored as the passage the player started from), `ai_eval.json` (three generated banks, for tuning a scorer), and `ai_test.json` with `test_topics.json` (passages from four models on 100 other topics, only for testing a finished scorer).                                                                                                                                                              |
+| `scripts/` | Node scripts run with tsx: eval harness, bank generator (with its `generate-v1` task in `generateV1.ts`), human-corpus builder, Pangram comparison. They call the provider directly with `ANTHROPIC_API_KEY` (and `OPENAI_API_KEY` when generating with a GPT model) from the environment and never go through the Worker. Helpers, including the OpenAI adapter, are in `common.ts`.                                           |
+| `data/`    | `passages.json` (the bank the game draws from), `human_corpus.json` (the harness's human baseline), `human_originals.json` (an AI rewrite of each, which the harness no longer uses since the judges score each text alone, spec B.51), `ai_eval.json` (three generated banks, for tuning a scorer), `ai_test.json` with `test_topics.json` (passages from four models on 100 other topics, only for testing a finished scorer), and `pangram_spot_checks.json` (Pangram verdicts checked by hand on its website, next to both judges' scores).                                                                                                                                                              |
 
 Hosting: GitHub Pages at unslop.app for the app, Cloudflare for the Worker (spec Appendix B.8).
 
@@ -41,13 +41,13 @@ pnpm build        # web app into web/dist
 
 ```bash
 pnpm corpus                                   # rebuild data/human_corpus.json (network only, no model calls)
-pnpm originals                                # AI rewrites of new or changed human texts, for the harness
+pnpm originals                                # AI rewrites of new or changed human texts (unused since spec B.51)
 pnpm generate --out data/passages.new.json    # generate a bank (default 60 passages) into a new file
 pnpm harness --bank data/passages.new.json    # separation report for it; add --strict to fail on a miss
 mv data/passages.new.json data/passages.json  # when both targets PASS, the game uses it
 ```
 
-To measure a scorer's accuracy, run it over the generated banks in `data/ai_eval.json` on the tuning split. The report ends with the AUC against the modern human sources, the AUC against all of them (Gutenberg included), and both by generator and by human source. Each human text is scored as a player's rewrite of its AI original in `data/human_originals.json`; after `pnpm corpus` changes a text, run `pnpm originals` before the harness, which stops until you do (spec B.40). Use `--split holdout` only to confirm a finished change (spec B.24).
+To measure a scorer's accuracy, run it over the generated banks in `data/ai_eval.json` on the tuning split. The report ends with the AUC against the modern human sources, the AUC against all of them (Gutenberg included), and both by generator and by human source. Every text is scored on its own, the way the judges always score: both send only the current text, never the original (spec B.51). Use `--split holdout` only to confirm a finished change (spec B.24).
 
 ```bash
 pnpm harness --scorer jev --bank data/ai_eval.json --split tune
@@ -56,6 +56,14 @@ pnpm harness --scorer jev --bank data/ai_eval.json --split tune
 `generate` writes with `generationModel` from `web/src/config.ts` (gpt-4o at present; the options, Claude and GPT, are listed there), or with `--model <id>` for one run. `--topics <file>` takes the topics from a JSON array instead of the built-in 60. Every model gets the same prompt. Each candidate then goes through the game's own Check, with the default scorer (`defaultScorer` in `web/src/config.ts`), its win line and the guardrails, so changing the default there changes it here too (spec B.29). `--scorer <id>` picks another of the configured scorers for one run. A candidate is kept only if it passes every guardrail and scores above the win line: one the game would count as won before any edit is no puzzle. Each bank entry records its model in `generatedWith.model` and the tasks that scored it in `generatedWith.scoredWith`.
 
 `pnpm harness` also scores with the default scorer, on that scorer's display scale, unless `--scorer` picks another or `--task` names one task. A task reports its own scale: `--task score-jev` gives Jev's composite without the display scale `scorers.jev` applies (spec B.30).
+
+`pnpm pangram` compares the judges with Pangram, a commercial AI detector (spec B.50). It needs `PANGRAM_API_KEY` in `worker/.dev.vars`, plus the judges' keys. It scores the harness's texts with each judge (all but Offline, or `--scorers jev,haiku`) and with Pangram (`--model pangram-4.1` by default). For each one it reports how many texts pass as human, the AUC, agreement with Pangram's verdict, and the rank correlation with Pangram's score. `--show-disagreements` lists the texts where a judge and Pangram disagree. Pangram charges per started 100 words, about $21.55 for the default sets. It never pays twice for a text: results are cached under `scripts/.cache/pangram/<model>`. It calls nothing when the uncached texts would cost more than `--max-units` (default 500).
+
+```bash
+pnpm pangram --max-units 0                    # cost estimate only, no calls
+pnpm pangram --limit 5                        # a cheap first run
+pnpm pangram --show-disagreements             # the default sets, about $21.55 the first time
+```
 
 `generate` writes its output file even when it keeps fewer passages than requested, so write to a new file and replace `data/passages.json` only after the harness passes. The harness makes no model calls for passages the generator already scored.
 

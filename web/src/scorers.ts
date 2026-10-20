@@ -48,9 +48,11 @@ export const mock: Scorer = {
 
 /**
  * First real scorer (spec §15): one `score-v1` task call through the Worker.
- * Score and tells are returned as game values; the full task result rides along
- * in `raw` for remote guardrails (see meaning and grammar in guardrails.ts). Errors
- * propagate so the game can report them without spending a Check.
+ * Haiku sees only the current text, never the original, so a player's edit is
+ * judged exactly as a text written by a person would be (spec B.51). Score and
+ * tells are returned as game values; the full task result rides along in `raw`
+ * for remote guardrails (see grammar in guardrails.ts). Errors propagate so the
+ * game can report them without spending a Check.
  *
  * Three tells are also measured here in code (codeTells below). Each one's weight
  * times its strength (0–1) is added to Haiku's score, capped at 10 (spec B.34,
@@ -64,10 +66,7 @@ export const mock: Scorer = {
  */
 export const llmBasic: Scorer = {
   async score(ctx) {
-    const result = await transport<ScoreV1Result>("score-v1", {
-      original: ctx.original,
-      current: ctx.current,
-    });
+    const result = await transport<ScoreV1Result>("score-v1", { text: ctx.current });
     const measured = codeTells(ctx.current);
     const listed = measured.filter((t) => t.strength >= 0.5);
     const tells = result.tells.filter(
@@ -224,16 +223,14 @@ export function scaleJevScore(raw: number): number {
 
 /**
  * The jevslop port (shared/scoreJev.ts): Jev's composite score, on the display
- * scale above, and tells. `raw` is the task's own result. It has no meaning or
- * grammar verdict: those come from Jev's guardrails (spec B.42), so this scorer
- * calls no Haiku.
+ * scale above, and tells. Like the Haiku judge, it sees only the current text
+ * (spec B.51). `raw` is the task's own result. It has no meaning or grammar
+ * verdict: those come from Jev's guardrails (spec B.42), so this scorer calls no
+ * Haiku.
  */
 export const jev: Scorer = {
   async score(ctx) {
-    const result = await transport<ScoreJevResult>("score-jev", {
-      original: ctx.original,
-      current: ctx.current,
-    });
+    const result = await transport<ScoreJevResult>("score-jev", { text: ctx.current });
     return { score: scaleJevScore(result.score), tells: result.tells, raw: result };
   },
 };

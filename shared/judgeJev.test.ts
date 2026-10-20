@@ -70,6 +70,13 @@ describe("judge-jev", () => {
     expect(() => judgeJevTask.parse(null, payload)).toThrow(TaskError);
   });
 
+  it("takes both texts, unlike the scorers (spec B.51)", () => {
+    expect(judgeJevTask.validatePayload({ ...payload, extra: 1 })).toEqual(payload);
+    expect(() => judgeJevTask.validatePayload({ text: payload.current })).toThrow(
+      /"original" must be a string/,
+    );
+  });
+
   it("needs the TypeSafe key", async () => {
     await expect(judgeJevTask.call(payload, {})).rejects.toThrow(ProviderError);
   });

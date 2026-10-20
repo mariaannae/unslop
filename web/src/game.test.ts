@@ -187,6 +187,7 @@ function gameWith(
   scorer = fakeScorer({ score: 5 }),
   checksPerPuzzle = 3,
   other = fakeScorer({ score: 1 }),
+  extra: { openingCheck?: boolean; remote?: ReturnType<typeof fakeGuardrail>[] } = {},
 ) {
   const local = fakeGuardrail("not-empty", true);
   local.check.mockImplementation(async (c) =>
@@ -200,8 +201,9 @@ function gameWith(
       { id: "other", label: "Other", scorer: other, win: { scoreAtOrBelow: 1 } },
     ],
     defaultScorer: "main",
-    guardrails: [local],
+    guardrails: [local, ...(extra.remote ?? [])],
     budget: { checksPerPuzzle },
+    openingCheck: extra.openingCheck,
   });
   return { game, scorer, other, drawPassage };
 }
@@ -527,5 +529,129 @@ describe("game state: choosing a mode", () => {
     expect(game.getState()).toMatchObject({ mode: "practice", phase: "checking" });
     finish({ score: 5 });
     await pending;
+  });
+});
+
+describe("opening Check", () => {
+  const opening = (
+    scorer = fakeScorer({ score: 5 }),
+    remote: ReturnType<typeof fakeGuardrail>[] = [],
+  ) => gameWith(scorer, 3, fakeScorer({ score: 1 }), { openingCheck: true, remote });
+
+  it("checks the unedited passage when it is drawn, for free", async () => {
+    const { game, scorer } = opening();
+    await game.newPassage();
+
+    const text = passages[0]!.text;
+    expect(scorer.score).toHaveBeenCalledTimes(1);
+    expect(scorer.score).toHaveBeenCalledWith({ original: text, current: text });
+    const state = game.getState();
+    expect(state).toMatchObject({ phase: "playing", checksUsed: 0, current: text, error: null });
+    expect(state.checks).toEqual([
+      { text, outcome: expect.objectContaining({ score: { score: 5 } }), opening: true },
+    ]);
+    expect(state.outcome).toBe(state.checks[0]!.outcome);
+  });
+
+  it("never wins, even at or below the win line", async () => {
+    const { game } = opening(fakeScorer({ score: 0 }));
+    await game.newPassage();
+    expect(game.getState()).toMatchObject({ phase: "playing", checksUsed: 0 });
+  });
+
+  it("runs the meaning and grammar guardrails too, and reports a failure without spending", async () => {
+    const meaning = fakeGuardrail("meaning", false, { pass: false, reason: "meaning changed" });
+    const { game } = opening(fakeScorer({ score: 5 }), [meaning]);
+    await game.newPassage();
+
+    expect(meaning.check).toHaveBeenCalledTimes(1);
+    expect(game.getState().outcome?.guardrails).toContainEqual({
+      id: "meaning",
+      result: { pass: false, reason: "meaning changed" },
+    });
+    expect(game.getState()).toMatchObject({ phase: "playing", checksUsed: 0 });
+  });
+
+  it("reports a scorer error without spending, so the player can still Check", async () => {
+    const { game } = opening(fakeScorer(new Error("worker down")));
+    await game.newPassage();
+    expect(game.getState()).toMatchObject({
+      phase: "playing",
+      checksUsed: 0,
+      checks: [],
+      error: "worker down",
+    });
+  });
+
+  it("runs again under the new rules when the scorer or mode changes", async () => {
+    const { game, scorer, other } = opening();
+    await game.newPassage();
+    game.setScorer("other");
+    await vi.waitFor(() => expect(game.getState().phase).toBe("playing"));
+    expect(other.score).toHaveBeenCalledTimes(1);
+    expect(game.getState().checks).toEqual([expect.objectContaining({ opening: true })]);
+
+    game.setMode("challenge");
+    await vi.waitFor(() => expect(game.getState().phase).toBe("playing"));
+    expect(other.score).toHaveBeenCalledTimes(2);
+    expect(scorer.score).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the player's Checks as they were: each spends one and is appended", async () => {
+    const { game } = opening();
+    await game.newPassage();
+    game.setCurrent("my own words here");
+    await game.check();
+
+    const state = game.getState();
+    expect(state.checksUsed).toBe(1);
+    expect(state.checks.map((c) => [c.text, c.opening ?? false])).toEqual([
+      [passages[0]!.text, true],
+      ["my own words here", false],
+    ]);
+  });
+
+  it("still runs meaning and grammar on every Check after an edit, blocking a winning score", async () => {
+    const meaning = fakeGuardrail("meaning", false, { pass: true });
+    const { game } = opening(fakeScorer({ score: 1 }), [meaning]);
+    await game.newPassage();
+    meaning.check.mockResolvedValue({ pass: false, reason: "meaning changed" });
+    game.setCurrent("an edit that changes the meaning");
+
+    const outcome = await game.check();
+
+    expect(meaning.check).toHaveBeenCalledTimes(2);
+    expect(meaning.check).toHaveBeenLastCalledWith(
+      { original: passages[0]!.text, current: "an edit that changes the meaning" },
+      { score: 1 },
+    );
+    expect(outcome).toMatchObject({ win: false, checkConsumed: true });
+    expect(game.getState()).toMatchObject({ phase: "playing", checksUsed: 1 });
+  });
+
+  it("drops a result that arrives after its puzzle was replaced", async () => {
+    const pending: Array<(r: ScoreResult) => void> = [];
+    const slow = {
+      score: vi.fn(() => new Promise<ScoreResult>((resolve) => pending.push(resolve))),
+    };
+    const { game } = opening(slow as unknown as ReturnType<typeof fakeScorer>);
+
+    const first = game.newPassage();
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const second = game.newPassage();
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[1]!({ score: 7 });
+    await second;
+    pending[0]!({ score: 3 });
+    await first;
+
+    const state = game.getState();
+    expect(state.passage).toBe(passages[1]);
+    expect(state.checks).toEqual([
+      expect.objectContaining({
+        text: passages[1]!.text,
+        outcome: expect.objectContaining({ score: { score: 7 } }),
+      }),
+    ]);
   });
 });

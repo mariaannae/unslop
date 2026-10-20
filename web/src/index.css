@@ -1,11 +1,315 @@
 @import "tailwindcss";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+@import "@fontsource/vt323/400.css";
+
+/*
+ * The look of NONSLOP, this game's predecessor (spec B.53): its hard-mode violet
+ * palette, IBM Plex Mono for text, VT323 for buttons and pops, and Barcade 3D
+ * (Iconian Fonts, from the nonslop project) for the logo and titles.
+ */
+@font-face {
+  font-family: "Barcade 3D";
+  src: url("./barcade3d.ttf") format("truetype");
+  font-display: swap;
+}
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-serif: ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-pixel: "VT323", ui-monospace, monospace;
+  --font-title: "Barcade 3D", "VT323", monospace;
+
+  /* NONSLOP's design.js: shared colours and the hard-mode ones. */
+  --color-ink: #ebfff7;
+  --color-title: #fbf056;
+  --color-panel: #00060f;
+  --color-frame: #00e5ff;
+  --color-accent: #7a0782;
+  --color-button: #9e0e77;
+  --color-button-top: #b91255;
+  --color-danger: #d71a27;
+  --color-success: #009972;
+  --color-warning: #f8ac3a;
+  /* Its result headlines: "NOT BAD, HUMAN" and "NOT QUITE". */
+  --color-good: #33ff33;
+  --color-meh: #ffaa00;
+
+  --animate-float-up: float-up 1.2s ease-out forwards;
+  --animate-pill-pulse: pill-pulse 1.5s ease-in-out infinite alternate;
+  --animate-title-pop: title-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-glow: glow 1s ease-in-out 4 alternate;
+  --animate-grow: grow 1.5s ease-in-out 2 alternate;
+  --animate-fade-late: fade-out 1s ease-out 5s forwards;
+  --animate-flash-out: fade-out 0.6s ease-out forwards;
+  --animate-red-flash: red-flash 0.3s linear 5;
+  --animate-corrupt: corrupt 0.6s steps(6) forwards;
+
+  @keyframes float-up {
+    0% {
+      opacity: 0;
+      transform: translateY(6px) scale(0.8);
+    }
+    15% {
+      opacity: 1;
+      transform: translateY(0) scale(1.2);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-28px) scale(1);
+    }
+  }
+
+  @keyframes pill-pulse {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.8;
+    }
+  }
+
+  @keyframes title-pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.3);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes glow {
+    from {
+      text-shadow: 0 0 0 rgb(255 255 255 / 0);
+    }
+    to {
+      text-shadow: 0 0 14px rgb(255 255 255 / 0.9);
+    }
+  }
+
+  @keyframes grow {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes red-flash {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes corrupt {
+    0% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 0.8;
+      transform: translateY(40px);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(90px);
+    }
+  }
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
   -webkit-text-size-adjust: 100%;
+  background-color: #000;
+}
+
+/*
+ * NONSLOP's hard-mode background, "Intense Energy Field": a violet gradient with
+ * glows and faint rays under a 40% black veil, slowly breathing (8 s, alpha 0.9
+ * to 1, scale 1 to 1.03). It sits behind the page, so it never crosses the passage.
+ */
+.arcade-backdrop {
+  position: fixed;
+  inset: -2%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgb(0 0 0 / 0.4), rgb(0 0 0 / 0.4)),
+    radial-gradient(circle at 50% 30%, rgb(136 0 255 / 0.35), transparent 45%),
+    radial-gradient(circle at 12% 85%, rgb(102 0 204 / 0.3), transparent 40%),
+    radial-gradient(circle at 88% 70%, rgb(68 0 136 / 0.4), transparent 45%),
+    repeating-conic-gradient(
+      from 0deg at 50% 30%,
+      rgb(136 0 255 / 0.07) 0deg 5deg,
+      transparent 5deg 20deg
+    ),
+    linear-gradient(160deg, #0c0020 0%, #1a0045 30%, #280068 70%, #360088 100%);
+  animation: breathe 8s ease-in-out infinite alternate;
+}
+
+@keyframes breathe {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+@layer components {
+  /*
+   * NONSLOP's logo: yellow Barcade 3D with a black drop shadow. It slides in from
+   * the left with a small bounce, then a shine sweeps across it every 3 s.
+   */
+  .arcade-logo {
+    font-family: var(--font-title);
+    line-height: 1;
+    color: transparent;
+    background: linear-gradient(110deg, var(--color-title) 40%, #fffde6 50%, var(--color-title) 60%)
+      100% 0 / 300% 100% no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: drop-shadow(2px 2px 2px #000);
+    animation:
+      logo-in 0.6s ease-out both,
+      shine 3s linear 0.6s infinite;
+  }
+
+  /*
+   * NONSLOP's button: magenta, a darker pink top half at 70%, a white shine on
+   * the top third, a white rim, radius 10, an upper-case VT323 label. It grows a
+   * little on hover and squashes on press.
+   */
+  .arcade-button {
+    position: relative;
+    isolation: isolate;
+    border: 3px solid #fff;
+    border-radius: 10px;
+    background: linear-gradient(to bottom, rgb(185 18 85 / 0.7) 50%, transparent 50%)
+      var(--color-button);
+    color: var(--color-ink);
+    font-family: var(--font-pixel);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition:
+      transform 150ms ease-out,
+      filter 150ms;
+  }
+  .arcade-button::before {
+    content: "";
+    position: absolute;
+    inset: 4px 5px auto;
+    height: 30%;
+    z-index: -1;
+    border-radius: 5px;
+    background: rgb(255 255 255 / 0.4);
+    pointer-events: none;
+  }
+  /* The quieter partner: the same shape and label on a dark panel with a cyan rim. */
+  .arcade-button-quiet {
+    border: 3px solid rgb(0 229 255 / 0.7);
+    border-radius: 10px;
+    background: rgb(0 6 15 / 0.8);
+    color: var(--color-ink);
+    font-family: var(--font-pixel);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition:
+      transform 150ms ease-out,
+      filter 150ms;
+  }
+  .arcade-button:disabled,
+  .arcade-button-quiet:disabled {
+    filter: grayscale(1) brightness(0.55);
+    cursor: not-allowed;
+  }
+  .arcade-button:not(:disabled):active,
+  .arcade-button-quiet:not(:disabled):active {
+    transform: scale(0.95);
+  }
+  @media (hover: hover) {
+    .arcade-button:not(:disabled):hover,
+    .arcade-button-quiet:not(:disabled):hover {
+      transform: scale(1.05);
+    }
+
+    /* NONSLOP's tooltip: black at 80%, a faint white rim, radius 8. */
+    [data-tip] {
+      position: relative;
+    }
+    [data-tip]:hover::after {
+      /* Decorative for assistive tech, so it never joins the button's name. */
+      content: attr(data-tip);
+      content: attr(data-tip) / "";
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      z-index: 30;
+      transform: translateX(-50%);
+      padding: 6px 10px;
+      border: 1px solid rgb(255 255 255 / 0.3);
+      border-radius: 8px;
+      background: rgb(0 0 0 / 0.8);
+      color: #fff;
+      font: 500 13px/1.3 var(--font-mono);
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+  }
+}
+
+@keyframes logo-in {
+  0% {
+    transform: translateX(-120%);
+  }
+  80% {
+    transform: translateX(10px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes shine {
+  0% {
+    background-position: 100% 0;
+  }
+  35%,
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcade-backdrop,
+  .arcade-logo {
+    animation: none;
+  }
+  .arcade-logo {
+    background-position: 100% 0;
+  }
+  .arcade-button,
+  .arcade-button-quiet {
+    transition: none;
+  }
 }

@@ -25,6 +25,12 @@ export type ScoreResult = {
 export type GuardrailResult = {
   pass: boolean;
   reason?: string;
+  /**
+   * A short verdict to show the player ("Meaning kept"), pass or fail. Set only
+   * when the guardrail actually judged the text, so a check that was skipped (no
+   * judge offline) shows nothing rather than a pass it never made (spec B.49).
+   */
+  verdict?: string;
 };
 
 export type Passage = {
@@ -64,6 +70,11 @@ export type GameConfig = {
   defaultScorer: string;
   guardrails: readonly Guardrail[];
   budget: { checksPerPuzzle: number };
+  /**
+   * Checks each puzzle's unedited passage as soon as it starts, so it opens with a
+   * score and tells. Free: it spends no Check, and never wins or loses (spec B.45).
+   */
+  openingCheck?: boolean;
 };
 
 /** What one Check runs: a scorer and its win line, and the guardrails. */
@@ -132,10 +143,12 @@ export type GamePhase = "loading" | "playing" | "checking" | "won" | "lost";
  */
 export type GameMode = "practice" | "challenge";
 
-/** A Check that spent one: the text the scorer saw, and what came back. */
+/** A scored Check: the text the scorer saw, and what came back. */
 export type CheckRecord = {
   text: string;
   outcome: CheckOutcome & { score: ScoreResult };
+  /** The free Check of the unedited passage a puzzle opens with (spec B.45). */
+  opening?: boolean;
 };
 
 export type GameState = {
@@ -149,7 +162,7 @@ export type GameState = {
   mode: GameMode;
   /** The latest Check's outcome, including one a local guardrail refused. */
   outcome: CheckOutcome | null;
-  /** Every Check this puzzle that spent one, oldest first. */
+  /** The opening Check, if any, then every Check this puzzle that spent one, oldest first. */
   checks: CheckRecord[];
   /** Last scorer/provider failure. Cleared on the next edit, check, or new passage. */
   error: string | null;
@@ -188,10 +201,44 @@ export function createGame(config: GameConfig): Game {
     error: null,
   };
   const listeners = new Set<() => void>();
+  // Bumped whenever a puzzle starts. A Check that resolves after its puzzle was
+  // replaced (a new passage, scorer or mode) is dropped rather than applied.
+  let puzzle = 0;
 
   function set(patch: Partial<GameState>) {
     state = { ...state, ...patch };
     for (const listener of listeners) listener();
+  }
+
+  /**
+   * The opening Check (spec B.45): the whole pipeline on the unedited passage, so
+   * the puzzle starts with the judge's score and tells. It spends nothing and
+   * never ends the puzzle, whatever the score or the guardrails say.
+   */
+  async function open() {
+    if (!config.openingCheck || !state.passage) return;
+    const token = puzzle;
+    const text = state.passage.text;
+    set({ phase: "checking" });
+    let outcome: CheckOutcome;
+    try {
+      outcome = await runCheck(
+        { original: text, current: text },
+        checkRules(config, state.scorerId),
+      );
+    } catch (error) {
+      if (token !== puzzle) return;
+      set({ phase: "playing", error: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    if (token !== puzzle) return;
+    if (!outcome.score) {
+      set({ phase: "playing", outcome });
+      return;
+    }
+    // The record shares the outcome object, so the UI can tell this one apart.
+    const scored = { ...outcome, score: outcome.score };
+    set({ phase: "playing", outcome: scored, checks: [{ text, outcome: scored, opening: true }] });
   }
 
   /**
@@ -204,6 +251,7 @@ export function createGame(config: GameConfig): Game {
       set(patch);
       return;
     }
+    puzzle++;
     set({
       ...patch,
       phase: "playing",
@@ -213,6 +261,7 @@ export function createGame(config: GameConfig): Game {
       checks: [],
       error: null,
     });
+    void open();
   }
 
   return {
@@ -224,8 +273,10 @@ export function createGame(config: GameConfig): Game {
     },
 
     async newPassage() {
+      const token = ++puzzle;
       set({ phase: "loading", error: null });
       const passage = await config.drawPassage(state.passage?.id);
+      if (token !== puzzle) return;
       set({
         phase: "playing",
         passage,
@@ -235,6 +286,7 @@ export function createGame(config: GameConfig): Game {
         checks: [],
         error: null,
       });
+      await open();
     },
 
     setCurrent(text) {
@@ -247,15 +299,18 @@ export function createGame(config: GameConfig): Game {
       if (state.checksUsed >= state.checksPerPuzzle) return null;
 
       const rules = checkRules(config, state.scorerId);
+      const token = puzzle;
       set({ phase: "checking", error: null });
       let outcome: CheckOutcome;
       try {
         outcome = await runCheck({ original: state.passage.text, current: state.current }, rules);
       } catch (error) {
+        if (token !== puzzle) return null;
         // A scorer/API failure costs nothing (spec §13) but must be surfaced, never swallowed.
         set({ phase: "playing", error: error instanceof Error ? error.message : String(error) });
         return null;
       }
+      if (token !== puzzle) return null;
 
       const checksUsed = state.checksUsed + (outcome.checkConsumed ? 1 : 0);
       const phase: GamePhase = outcome.win

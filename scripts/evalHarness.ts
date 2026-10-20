@@ -8,15 +8,14 @@
  * never goes through the Worker.
  *
  *   pnpm harness [--scorer jev | --task score-jev] [--bank file] [--human file]
- *                [--originals file] [--split tune|holdout] [--limit N]
- *                [--concurrency 4] [--no-cache] [--strict] [--show-misses]
+ *                [--split tune|holdout] [--limit N] [--concurrency 4] [--no-cache]
+ *                [--strict] [--show-misses]
  *
  * `--split` keeps only that part of both sets (spec B.24). Tune scorers on
  * "tune"; "holdout" is for confirming the result once.
  *
- * An AI passage is scored unedited, as the player first sees it. A human text is
- * scored as the edit of its AI rewrite from data/human_originals.json (spec B.40),
- * as if a player had rewritten that passage into this text.
+ * Every text is scored on its own, as the judges always score since spec B.51: an
+ * AI passage as the player first sees it, a human text as its author wrote it.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -28,8 +27,6 @@ import { checkRules } from "../web/src/game";
 import {
   cacheDir,
   createDiskCache,
-  sha256,
-  type HumanOriginal,
   createScriptProvider,
   dataDir,
   auc,
@@ -50,7 +47,6 @@ const args = readArgs({
   task: { type: "string" },
   bank: { type: "string" },
   human: { type: "string" },
-  originals: { type: "string" },
   split: { type: "string" },
   limit: { type: "string" },
   concurrency: { type: "string" },
@@ -106,9 +102,10 @@ type Scored = {
   error?: string;
   cached?: boolean;
 };
-async function scoreAll(items: Item[], originalOf: (item: Item) => string): Promise<Scored[]> {
+async function scoreAll(items: Item[]): Promise<Scored[]> {
   return mapWithConcurrency(items, concurrency, async (item) => {
-    const ctx = { original: originalOf(item), current: item.text };
+    // The judges read only `current` (spec B.51).
+    const ctx = { original: item.text, current: item.text };
     try {
       if (!task) {
         const { score } = await scorer.score(ctx);
@@ -134,22 +131,8 @@ function groupOf(item: Item): string | undefined {
 
 const bank = await loadItems(path.resolve(args.bank ?? path.join(dataDir, "passages.json")));
 const human = await loadItems(path.resolve(args.human ?? path.join(dataDir, "human_corpus.json")));
-const originalsFile = path.resolve(args.originals ?? path.join(dataDir, "human_originals.json"));
-const originals = new Map(
-  (JSON.parse(await readFile(originalsFile, "utf8")) as HumanOriginal[]).map((o) => [o.id, o]),
-);
-for (const item of human) {
-  if (originals.get(item.id)?.textSha256 !== sha256(item.text)) {
-    throw new Error(
-      `${originalsFile} has no AI original for ${item.id}'s current text. Run pnpm originals.`,
-    );
-  }
-}
 
-const [bankScored, humanScored] = await Promise.all([
-  scoreAll(bank, (item) => item.text),
-  scoreAll(human, (item) => originals.get(item.id)!.original),
-]);
+const [bankScored, humanScored] = await Promise.all([scoreAll(bank), scoreAll(human)]);
 const scorerLabel = task
   ? `scorer task: ${task.id}@${task.version} (${task.model})`
   : `scorer "${scorerId}" (web/src/config.ts): ${[...scorerTasks].join(" + ") || "offline"}`;

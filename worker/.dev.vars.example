@@ -3,3 +3,5 @@ ANTHROPIC_API_KEY=
 TYPESAFE_API_KEY=
 # Only `pnpm generate` reads this, when generationModel in web/src/config.ts is a GPT model.
 OPENAI_API_KEY=
+# Only `pnpm pangram` reads this, to compare the judges with Pangram's AI detector.
+PANGRAM_API_KEY=

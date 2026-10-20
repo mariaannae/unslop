@@ -407,6 +407,14 @@ function sentences(text: string): string[] {
   );
 }
 
+/**
+ * The word count of each sentence, as the uniform-sentence-length tell measures
+ * it. The game's rhythm track uses it, so its sentences are the judges' (spec B.52).
+ */
+export function sentenceLengths(text: string): number[] {
+  return sentences(text).map((s) => words(s).length);
+}
+
 /** Coefficient of variation (population stdev / mean), or null when undefined. */
 function cv(values: number[]): number | null {
   if (values.length < 2) return null;
@@ -450,7 +458,7 @@ export function measure(text: string): {
     stockCount += n;
   });
 
-  const sentLengths = sentences(text).map((s) => words(s).length);
+  const sentLengths = sentenceLengths(text);
   const paraLengths = paragraphs(text).map((p) => words(p).length);
   const emDashes = text.split("—").length - 1;
 
@@ -577,7 +585,7 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
   version: 7,
   model: "jev-1.13.0",
 
-  // Same {original, current} payload as score-v1; only `current` is scored.
+  // The same payload as score-v1: the text alone (spec B.51).
   validatePayload: (input) => scoreV1Task.validatePayload(input),
 
   async call(payload, { typesafeApiKey }): Promise<JevRaw> {
@@ -589,7 +597,7 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
     const ask = (state: Record<string, string>, questions: Record<string, JevQuestion>) =>
       systemOne(typesafeApiKey, this.model, state, questions);
 
-    const long = isLong(payload.current);
+    const long = isLong(payload.text);
     const docQuestions = Object.fromEntries([
       ...DOCUMENT_TELLS.filter((t) => long || !t.longForm).map((t) => [t.id, noul(t)]),
       ...SCORE_TELLS.map((t) => [t.id, score(t)]),
@@ -597,12 +605,10 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
     const paraQuestions = Object.fromEntries(
       PARAGRAPH_TELLS.filter((t) => long || !t.longForm).map((t) => [t.id, noul(t)]),
     );
-    const eligible = paragraphs(payload.current).filter(
-      (p) => words(p).length >= MIN_PARAGRAPH_WORDS,
-    );
+    const eligible = paragraphs(payload.text).filter((p) => words(p).length >= MIN_PARAGRAPH_WORDS);
 
     const [doc, ...paras] = await Promise.all([
-      ask({ text: payload.current }, docQuestions),
+      ask({ text: payload.text }, docQuestions),
       ...eligible.map((p) => ask({ paragraph: p }, paraQuestions)),
     ]);
     return { model: doc!.model, doc: doc!.answers, paragraphs: paras.map((p) => p.answers) };
@@ -614,8 +620,8 @@ export const scoreJevTask: CallTask<ScoreV1Payload, ScoreJevResult> = {
       throw new TaskError("parse_error", "Jev result is missing its paragraph answers");
     }
     const paras = jev.paragraphs;
-    const long = isLong(payload.current);
-    const { tells: measured, stockHits } = measure(payload.current);
+    const long = isLong(payload.text);
+    const { tells: measured, stockHits } = measure(payload.text);
 
     const breakdown: ScoreJevResult["breakdown"] = [
       ...CODE_TELLS.map((t) => ({ id: t.id, name: t.name, weight: t.weight, ...measured[t.id]! })),

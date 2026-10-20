@@ -48,13 +48,12 @@ afterEach(() => {
 const taskResult = {
   score: 4,
   tells: [{ label: "em-dash", quote: "—" }],
-  meaning_preserved: false,
   grammatically_correct: true,
   warnings: [],
 };
 
 describe("llm-basic scorer", () => {
-  it("runs score-v1 with original and current, and exposes the task result as raw", async () => {
+  it("runs score-v1 on the current text alone, and exposes the task result as raw", async () => {
     const fetch = stubFetch(200, {
       ok: true,
       taskId: "score-v1",
@@ -67,7 +66,7 @@ describe("llm-basic scorer", () => {
 
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({
       taskId: "score-v1",
-      payload: { original: "orig", current: "cur" },
+      payload: { text: "cur" },
     });
     expect(result).toEqual({ score: 4, tells: taskResult.tells, raw: taskResult });
   });
@@ -207,7 +206,7 @@ describe("llm-basic scorer", () => {
 });
 
 describe("jev scorer", () => {
-  it("runs score-jev alone, with no Haiku call", async () => {
+  it("runs score-jev alone on the current text, with no Haiku call", async () => {
     const jevResult = { score: 3, composite: 30, tells: [{ label: "Generic filler" }] };
     const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const { taskId } = JSON.parse(init!.body as string) as { taskId: string };
@@ -220,7 +219,10 @@ describe("jev scorer", () => {
     const result = await scorers.jev.score({ original: "orig", current: "cur" });
 
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string).taskId).toBe("score-jev");
+    expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({
+      taskId: "score-jev",
+      payload: { text: "cur" },
+    });
     // The score is on the display scale; raw keeps the task's own score of 3.
     expect(result).toEqual({ score: 5, tells: jevResult.tells, raw: jevResult });
   });
@@ -277,13 +279,13 @@ describe("callTask", () => {
       cached: true,
     });
 
-    const result = await scorers.callTask("score-v1", { original: "a", current: "b" });
+    const result = await scorers.callTask("score-v1", { text: "b" });
 
     expect(result).toEqual({ score: 3 });
     expect(fetch).toHaveBeenCalledWith("/api/task", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ taskId: "score-v1", payload: { original: "a", current: "b" } }),
+      body: JSON.stringify({ taskId: "score-v1", payload: { text: "b" } }),
     });
   });
 

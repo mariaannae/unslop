@@ -27,8 +27,9 @@ export const gameConfig: GameConfig = {
 
   // Local guardrails run before the scorer and cost no Check; remote ones run after it.
   // Jev judges meaning and grammar, in one extra call per Check (spec B.41, B.42).
-  // guardrails.meaning and guardrails.grammar would take Haiku's verdicts instead,
-  // but only scorers.llmBasic returns them: under Jev they would check nothing.
+  // guardrails.grammar would take Haiku's grammar verdict instead, but only
+  // scorers.llmBasic returns it: under Jev it would check nothing. Haiku no longer
+  // judges meaning, since it never sees the original (spec B.51).
   guardrails: [
     guardrails.notEmpty,
     guardrails.lengthRatio({ min: 0.7, max: 1.3 }),
@@ -37,8 +38,12 @@ export const gameConfig: GameConfig = {
   ],
 
   budget: {
-    checksPerPuzzle: 6,
+    checksPerPuzzle: 10,
   },
+
+  // Each new puzzle opens already checked: the full pipeline on the unedited
+  // passage, free, and it never wins (spec B.45).
+  openingCheck: true,
 };
 
 /**

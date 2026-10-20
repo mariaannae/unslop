@@ -20,10 +20,13 @@
     "corpus": "tsx scripts/buildHumanCorpus.ts",
     "originals": "tsx --env-file-if-exists=worker/.dev.vars scripts/buildHumanOriginals.ts",
     "harness": "tsx --env-file-if-exists=worker/.dev.vars scripts/evalHarness.ts",
-    "generate": "tsx --env-file-if-exists=worker/.dev.vars scripts/generateBank.ts"
+    "generate": "tsx --env-file-if-exists=worker/.dev.vars scripts/generateBank.ts",
+    "pangram": "tsx --env-file-if-exists=worker/.dev.vars scripts/comparePangram.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

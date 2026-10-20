@@ -9,14 +9,12 @@ import {
 } from "./scoreV1";
 
 const payload: ScoreV1Payload = {
-  original: "In today's fast-paced world, sourdough is a testament to patience.",
-  current: "My starter smells like beer and I still don't trust it.",
+  text: "My starter smells like beer and I still don't trust it.",
 };
 
 const valid = {
   score: 3,
   tells: [{ label: "generic-opener", quote: "My starter" }],
-  meaning_preserved: true,
   grammatically_correct: true,
 };
 
@@ -72,7 +70,7 @@ describe("score-v1 parse", () => {
       expect(scoreV1Task.parse({ score: 5, tells: "nope" }, payload).tells).toEqual([]);
     });
 
-    it("drops tells whose quote is not a substring of current", () => {
+    it("drops tells whose quote is not a substring of the passage", () => {
       const result = scoreV1Task.parse(
         {
           score: 5,
@@ -121,76 +119,76 @@ describe("score-v1 parse", () => {
     });
 
     it("caps tells at 8, counting only valid ones", () => {
-      const current = "a b c d e f g h i j k l";
-      const tells = current.split(" ").map((word) => ({ label: `t-${word}`, quote: word }));
+      const text = "a b c d e f g h i j k l";
+      const tells = text.split(" ").map((word) => ({ label: `t-${word}`, quote: word }));
       // Insert an invalid tell at the front to make sure it does not use up a slot.
       tells.unshift({ label: "bad", quote: "zzz" });
-      const result = scoreV1Task.parse({ score: 5, tells }, { ...payload, current });
+      const result = scoreV1Task.parse({ score: 5, tells }, { text });
       expect(result.tells).toHaveLength(8);
       expect(result.tells.map((t) => t.quote)).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
     });
   });
 
-  describe("meaning_preserved / grammatically_correct defaults", () => {
-    it("defaults both to true with a warning when absent", () => {
+  describe("grammatically_correct default", () => {
+    it("defaults to true with a warning when absent", () => {
       const result = scoreV1Task.parse({ score: 5 }, payload);
-      expect(result.meaning_preserved).toBe(true);
       expect(result.grammatically_correct).toBe(true);
-      expect(result.warnings).toHaveLength(2);
-      expect(result.warnings[0]).toMatch(/meaning_preserved/);
-      expect(result.warnings[1]).toMatch(/grammatically_correct/);
+      expect(result.warnings).toEqual([
+        '"grammatically_correct" missing or not boolean; defaulted to true',
+      ]);
     });
 
-    it("treats non-boolean values as absent", () => {
-      const result = scoreV1Task.parse(
-        { score: 5, meaning_preserved: "false", grammatically_correct: 0 },
-        payload,
-      );
-      expect(result.meaning_preserved).toBe(true);
+    it("treats a non-boolean value as absent", () => {
+      const result = scoreV1Task.parse({ score: 5, grammatically_correct: 0 }, payload);
       expect(result.grammatically_correct).toBe(true);
-      expect(result.warnings).toHaveLength(2);
+      expect(result.warnings).toHaveLength(1);
     });
 
-    it("preserves explicit false values without warnings", () => {
-      const result = scoreV1Task.parse(
-        { score: 5, meaning_preserved: false, grammatically_correct: false },
-        payload,
-      );
-      expect(result.meaning_preserved).toBe(false);
+    it("preserves an explicit false without a warning", () => {
+      const result = scoreV1Task.parse({ score: 5, grammatically_correct: false }, payload);
       expect(result.grammatically_correct).toBe(false);
       expect(result.warnings).toEqual([]);
+    });
+
+    it("no longer reports a meaning verdict (spec B.51)", () => {
+      const result = scoreV1Task.parse({ ...valid, meaning_preserved: false }, payload);
+      expect(result).not.toHaveProperty("meaning_preserved");
     });
   });
 });
 
 describe("score-v1 validatePayload", () => {
-  it("returns only the two known fields", () => {
-    expect(scoreV1Task.validatePayload({ ...payload, extra: 1 })).toEqual(payload);
+  it("returns only the text, dropping anything else, including an original (spec B.51)", () => {
+    expect(scoreV1Task.validatePayload({ ...payload, original: "AI text", extra: 1 })).toEqual(
+      payload,
+    );
   });
 
   it.each([
     [null, /must be an object/],
     ["text", /must be an object/],
-    [{ original: "x" }, /"current" must be a string/],
-    [{ original: 1, current: "x" }, /"original" must be a string/],
-    [{ original: "x", current: "   " }, /"current" must not be empty/],
-    [{ original: "x".repeat(SCORE_V1_MAX_CHARS + 1), current: "x" }, /exceeds/],
+    [{ original: "x", current: "x" }, /"text" must be a string/],
+    [{ text: 1 }, /"text" must be a string/],
+    [{ text: "   " }, /"text" must not be empty/],
+    [{ text: "x".repeat(SCORE_V1_MAX_CHARS + 1) }, /exceeds/],
   ])("rejects %j", (input, message) => {
     expect(() => scoreV1Task.validatePayload(input)).toThrow(message);
   });
 });
 
 describe("score-v1 buildRequest", () => {
-  it("builds a provider request with the shared prompt", () => {
+  it("builds a provider request with the shared prompt and the passage alone", () => {
     const request = scoreV1Task.buildRequest(payload);
     expect(request.model).toBe("claude-haiku-5-5");
     expect(request.temperature).toBeUndefined();
     expect(request.system).toBe(SCORE_V1_SYSTEM_PROMPT);
     expect(request.outputSchema).toBe(SCORE_V1_RESPONSE_SCHEMA);
+    // Nothing tells Haiku the passage started as AI text.
+    expect(request.system).not.toMatch(/ORIGINAL|game|player/i);
     expect(request.messages).toEqual([
       {
         role: "user",
-        content: `ORIGINAL:\n${payload.original}\n\nCURRENT:\n${payload.current}`,
+        content: `PASSAGE:\n${payload.text}`,
       },
     ]);
   });

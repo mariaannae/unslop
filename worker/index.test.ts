@@ -108,14 +108,12 @@ function createMemoryKv(clock: () => number = Date.now): KvStore & {
 }
 
 const payload = {
-  original: "In today's fast-paced world, sourdough is a testament to patience.",
-  current: "My starter smells like beer and I still don't trust it.",
+  text: "My starter smells like beer and I still don't trust it.",
 };
 
 const goodJson = JSON.stringify({
   score: 4,
   tells: [{ label: "beer", quote: "smells like beer" }],
-  meaning_preserved: true,
   grammatically_correct: true,
 });
 
@@ -162,12 +160,11 @@ describe("POST /api/task", () => {
     expect(body).toEqual({
       ok: true,
       taskId: "score-v1",
-      version: 3,
+      version: 4,
       cached: false,
       result: {
         score: 4,
         tells: [{ label: "beer", quote: "smells like beer" }],
-        meaning_preserved: true,
         grammatically_correct: true,
         warnings: [],
       },
@@ -205,7 +202,10 @@ describe("POST /api/task", () => {
 
   it("returns 400 for a payload the task rejects", async () => {
     const deps = makeDeps();
-    const res = await handleTask(post({ taskId: "score-v1", payload: { original: "x" } }), deps);
+    const res = await handleTask(
+      post({ taskId: "score-v1", payload: { original: "x", current: "x" } }),
+      deps,
+    );
     expect(res.status).toBe(400);
     const body = await readJson(res);
     expect(body.error.code).toBe("invalid_payload");

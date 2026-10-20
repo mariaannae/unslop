@@ -7,11 +7,16 @@ import { TaskError, type ProviderRequest, type TaskDefinition } from "./types";
  * `temperature`, so the request leaves it at the model's default.
  * Prompt text, model, schema, and parser rules all live here so the Worker
  * and Node scripts share one definition. Bump `version` when any of them change.
+ *
+ * Since version 4 it rates the passage on its own (spec B.51): the prompt says
+ * nothing about who wrote it, and the original passage is never sent, so a
+ * player's edit and a text written by a person are judged the same way. Without
+ * the original it cannot judge meaning; Jev's guardrail does (spec B.42).
  */
 
+/** Also the payload of `score-jev` (shared/scoreJev.ts). */
 export type ScoreV1Payload = {
-  original: string;
-  current: string;
+  text: string;
 };
 
 export type ScoreV1Tell = {
@@ -23,7 +28,6 @@ export type ScoreV1Result = {
   /** Integer 0–10. 10 = obviously AI-assistant prose, 0 = unmistakably human. */
   score: number;
   tells: ScoreV1Tell[];
-  meaning_preserved: boolean;
   grammatically_correct: boolean;
   /** Parser notes (for example a defaulted field). Empty on a clean response. */
   warnings: string[];
@@ -32,18 +36,17 @@ export type ScoreV1Result = {
 export const SCORE_V1_MAX_CHARS = 4000;
 export const SCORE_V1_MAX_TELLS = 8;
 
-export const SCORE_V1_SYSTEM_PROMPT = `You are the judge in a game. Players are given a passage that was written by an AI assistant and edit it until it reads like a human wrote it. Rate how strongly the CURRENT passage still reads as AI-assistant prose to a careful, experienced reader.
+export const SCORE_V1_SYSTEM_PROMPT = `Rate how strongly a passage reads as AI-assistant prose to a careful, experienced reader. Judge the passage on its own: nothing is known about who wrote it.
 
-Also judge whether the CURRENT passage preserves the meaning of the ORIGINAL, and whether it is grammatically correct. Typos, gibberish, deleted content, or nonsense do not make text "human"; mark grammatically_correct=false or meaning_preserved=false instead of lowering the score.
+Also judge whether the passage is grammatically correct. Typos, gibberish, or nonsense do not make text "human"; mark grammatically_correct=false instead of lowering the score.
 
 Respond with JSON only:
 {
   "score": <integer 0-10; 10 = obviously AI-assistant prose, 0 = unmistakably human>,
-  "tells": [ { "label": "<short-kebab-label>", "quote": "<exact short quote from CURRENT passage>" } ],
-  "meaning_preserved": <true|false>,
+  "tells": [ { "label": "<short-kebab-label>", "quote": "<exact short quote from the passage>" } ],
   "grammatically_correct": <true|false>
 }
-List at most 8 tells. Quotes must appear verbatim in the CURRENT passage. If score <= 2, tells may be empty.`;
+List at most 8 tells. Quotes must appear verbatim in the passage. If score <= 2, tells may be empty.`;
 
 /*export const SCORE_V1_SYSTEM_PROMPT = `You are the judge in a game. Players are given a passage that was written by an AI assistant and edit it until it reads like a human wrote it. Rate how strongly the CURRENT passage still reads as AI-assistant prose to a careful, experienced reader.
 
@@ -80,15 +83,32 @@ export const SCORE_V1_RESPONSE_SCHEMA: Record<string, unknown> = {
         additionalProperties: false,
       },
     },
-    meaning_preserved: { type: "boolean" },
     grammatically_correct: { type: "boolean" },
   },
-  required: ["score", "tells", "meaning_preserved", "grammatically_correct"],
+  required: ["score", "tells", "grammatically_correct"],
   additionalProperties: false,
 };
 
 function buildUserMessage(payload: ScoreV1Payload): string {
-  return `ORIGINAL:\n${payload.original}\n\nCURRENT:\n${payload.current}`;
+  return `PASSAGE:\n${payload.text}`;
+}
+
+/**
+ * A task payload's text fields: `input` must be an object whose named fields are
+ * non-empty strings within SCORE_V1_MAX_CHARS. Returns those fields only.
+ */
+export function validateTexts<Field extends string>(
+  input: unknown,
+  fields: readonly Field[],
+): Record<Field, string> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new TaskError("invalid_payload", "payload must be an object");
+  }
+  const record = input as Record<string, unknown>;
+  return Object.fromEntries(fields.map((field) => [field, requireText(record, field)])) as Record<
+    Field,
+    string
+  >;
 }
 
 function requireText(input: Record<string, unknown>, field: string): string {
@@ -140,9 +160,9 @@ function clampScore(value: unknown): number {
 
 /**
  * Keeps only well-formed tells whose trimmed quote appears verbatim
- * (case-sensitive) in the current passage. Caps the list at 8.
+ * (case-sensitive) in the passage. Caps the list at 8.
  */
-function sanitizeTells(value: unknown, current: string): ScoreV1Tell[] {
+function sanitizeTells(value: unknown, text: string): ScoreV1Tell[] {
   if (!Array.isArray(value)) return [];
   const tells: ScoreV1Tell[] = [];
   for (const item of value) {
@@ -153,7 +173,7 @@ function sanitizeTells(value: unknown, current: string): ScoreV1Tell[] {
     const trimmedQuote = quote.trim();
     const trimmedLabel = label.trim();
     if (trimmedQuote.length === 0 || trimmedLabel.length === 0) continue;
-    if (!current.includes(trimmedQuote)) continue;
+    if (!text.includes(trimmedQuote)) continue;
     tells.push({ label: trimmedLabel, quote: trimmedQuote });
   }
   return tells;
@@ -172,18 +192,11 @@ function booleanOrDefault(
 
 export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
   id: "score-v1",
-  version: 3,
+  version: 4,
   model: "claude-haiku-5-5",
 
   validatePayload(input: unknown): ScoreV1Payload {
-    if (!input || typeof input !== "object" || Array.isArray(input)) {
-      throw new TaskError("invalid_payload", "payload must be an object");
-    }
-    const record = input as Record<string, unknown>;
-    return {
-      original: requireText(record, "original"),
-      current: requireText(record, "current"),
-    };
+    return validateTexts(input, ["text"]);
   },
 
   buildRequest(payload: ScoreV1Payload): ProviderRequest {
@@ -202,8 +215,7 @@ export const scoreV1Task: TaskDefinition<ScoreV1Payload, ScoreV1Result> = {
     const warnings: string[] = [];
     return {
       score: clampScore(json.score),
-      tells: sanitizeTells(json.tells, payload.current),
-      meaning_preserved: booleanOrDefault(json, "meaning_preserved", warnings),
+      tells: sanitizeTells(json.tells, payload.text),
       grammatically_correct: booleanOrDefault(json, "grammatically_correct", warnings),
       warnings,
     };

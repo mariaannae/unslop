@@ -6,7 +6,6 @@ import {
   jevGrammar,
   jevMeaning,
   lengthRatio,
-  meaning,
   MEANING_CHANGED_REASON,
   NOT_GRAMMATICAL_REASON,
   notEmpty,
@@ -82,54 +81,33 @@ describe("length-ratio", () => {
   });
 });
 
-describe("meaning and grammar", () => {
+describe("grammar from the Haiku judge", () => {
   const judged = (raw: Record<string, unknown>) => ({
     scorer: { score: async () => ({ score: 0, raw }) },
-    guardrails: [meaning, grammar],
+    guardrails: [grammar],
     win: { scoreAtOrBelow: 2 },
   });
 
-  it("run after the scorer, so the judge's verdict can block a winning score", async () => {
-    const outcome = await runCheck(
-      ctx(),
-      judged({ meaning_preserved: false, grammatically_correct: true }),
-    );
+  it("runs after the scorer, so the judge's verdict can block a winning score", async () => {
+    const outcome = await runCheck(ctx(), judged({ grammatically_correct: false }));
     expect(outcome.win).toBe(false);
     expect(outcome.guardrails).toEqual([
-      { id: "meaning", result: { pass: false, reason: MEANING_CHANGED_REASON } },
-      { id: "grammar", result: { pass: true } },
+      {
+        id: "grammar",
+        result: { pass: false, reason: NOT_GRAMMATICAL_REASON, verdict: "Grammar not correct" },
+      },
+    ]);
+    const passed = await runCheck(ctx(), judged({ grammatically_correct: true }));
+    expect(passed.win).toBe(true);
+    expect(passed.guardrails).toEqual([
+      { id: "grammar", result: { pass: true, verdict: "Grammar correct" } },
     ]);
   });
 
-  it("report each problem separately when both fail", async () => {
-    const outcome = await runCheck(
-      ctx(),
-      judged({ meaning_preserved: false, grammatically_correct: false }),
-    );
-    expect(outcome.guardrails).toEqual([
-      { id: "meaning", result: { pass: false, reason: MEANING_CHANGED_REASON } },
-      { id: "grammar", result: { pass: false, reason: NOT_GRAMMATICAL_REASON } },
-    ]);
-  });
-
-  it("each fail only on their own field", async () => {
-    const onlyGrammar = {
-      score: 0,
-      raw: { meaning_preserved: true, grammatically_correct: false },
-    };
-    expect(await meaning.check(ctx(), onlyGrammar)).toEqual({ pass: true });
-    expect(await grammar.check(ctx(), onlyGrammar)).toEqual({
-      pass: false,
-      reason: NOT_GRAMMATICAL_REASON,
-    });
-  });
-
-  it("pass when the score or raw payload is missing or lacks the fields", async () => {
-    for (const guardrail of [meaning, grammar]) {
-      expect(await guardrail.check(ctx())).toEqual({ pass: true });
-      expect(await guardrail.check(ctx(), { score: 0 })).toEqual({ pass: true });
-      expect(await guardrail.check(ctx(), { score: 0, raw: {} })).toEqual({ pass: true });
-    }
+  it("passes with no verdict when the score or raw payload is missing or lacks the field", async () => {
+    expect(await grammar.check(ctx())).toEqual({ pass: true });
+    expect(await grammar.check(ctx(), { score: 0 })).toEqual({ pass: true });
+    expect(await grammar.check(ctx(), { score: 0, raw: {} })).toEqual({ pass: true });
   });
 });
 
@@ -160,8 +138,11 @@ describe("meaning and grammar from Jev", () => {
     ]);
     expect(outcome.win).toBe(false);
     expect(outcome.guardrails).toEqual([
-      { id: "meaning-jev", result: { pass: false, reason: MEANING_CHANGED_REASON } },
-      { id: "grammar-jev", result: { pass: true } },
+      {
+        id: "meaning-jev",
+        result: { pass: false, reason: MEANING_CHANGED_REASON, verdict: "Meaning changed" },
+      },
+      { id: "grammar-jev", result: { pass: true, verdict: "Grammar correct" } },
     ]);
   });
 
@@ -172,7 +153,7 @@ describe("meaning and grammar from Jev", () => {
     expect(calls).toHaveLength(2);
     expect(first.guardrails[1]).toEqual({
       id: "grammar-jev",
-      result: { pass: false, reason: NOT_GRAMMATICAL_REASON },
+      result: { pass: false, reason: NOT_GRAMMATICAL_REASON, verdict: "Grammar not correct" },
     });
   });
 
@@ -187,5 +168,7 @@ describe("meaning and grammar from Jev", () => {
     const outcome = await runCheck(ctx(), offline);
     expect(calls).toEqual([]);
     expect(outcome.win).toBe(true);
+    // Nothing was judged, so there is no verdict to show.
+    expect(outcome.guardrails.map((g) => g.result.verdict)).toEqual([undefined, undefined]);
   });
 });

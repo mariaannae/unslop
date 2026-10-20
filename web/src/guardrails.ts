@@ -1,5 +1,5 @@
 import type { JudgeJevResult } from "../../shared/judgeJev";
-import type { EvalContext, Guardrail } from "./game";
+import type { EvalContext, Guardrail, GuardrailResult } from "./game";
 import { runRemoteTask } from "./scorers";
 
 /** Local: the current text must contain something other than whitespace (spec §10.2). */
@@ -53,28 +53,44 @@ export function lengthRatio({ min, max }: { min: number; max: number }): Guardra
 export const MEANING_CHANGED_REASON = "The judge thinks the meaning changed.";
 export const NOT_GRAMMATICAL_REASON = "The judge thinks this isn't grammatically correct.";
 
+/** What the player is shown for each verdict, pass and fail (spec B.49). */
+type Verdicts = { pass: string; fail: string };
+const MEANING: Verdicts = { pass: "Meaning kept", fail: "Meaning changed" };
+const GRAMMAR: Verdicts = { pass: "Grammar correct", fail: "Grammar not correct" };
+
+/** A judge's yes or no as a result; no answer passes with no verdict. */
+function verdictResult(answer: unknown, reason: string, verdicts: Verdicts): GuardrailResult {
+  if (answer === false) return { pass: false, reason, verdict: verdicts.fail };
+  if (answer === true) return { pass: true, verdict: verdicts.pass };
+  return { pass: true };
+}
+
 /**
  * Remote (spec §23): reads one of the judge's verdicts from the scorer's raw
  * payload, so it costs no extra call. It only fails on an explicit `false`; if
  * the payload is missing the field, it passes and the judgement rests on the
  * score alone. That also makes it harmless with the mock scorer. Only
- * scorers.llmBasic carries Haiku's verdicts since spec B.42, so with any other
- * scorer these two check nothing.
+ * scorers.llmBasic carries Haiku's grammar verdict since spec B.42, so with any
+ * other scorer it checks nothing. Haiku's meaning verdict went in spec B.51: it
+ * never sees the original, so meaning comes from Jev alone.
  */
-function judgeVerdict(id: string, field: string, reason: string): Guardrail {
+function judgeVerdict(id: string, field: string, reason: string, verdicts: Verdicts): Guardrail {
   return {
     id,
     local: false,
     async check(_ctx, score) {
       const raw = (score?.raw ?? {}) as Record<string, unknown>;
-      if (raw[field] === false) return { pass: false, reason };
-      return { pass: true };
+      return verdictResult(raw[field], reason, verdicts);
     },
   };
 }
 
-export const meaning = judgeVerdict("meaning", "meaning_preserved", MEANING_CHANGED_REASON);
-export const grammar = judgeVerdict("grammar", "grammatically_correct", NOT_GRAMMATICAL_REASON);
+export const grammar = judgeVerdict(
+  "grammar",
+  "grammatically_correct",
+  NOT_GRAMMATICAL_REASON,
+  GRAMMAR,
+);
 
 /**
  * Remote: the same two verdicts from TypeSafe's Jev (`judge-jev`, spec B.41,
@@ -83,35 +99,41 @@ export const grammar = judgeVerdict("grammar", "grammatically_correct", NOT_GRAM
  * server call (no `raw`, as with the mock) they pass without asking, so offline
  * play still needs no server.
  */
-const jevVerdicts = new WeakMap<EvalContext, Promise<JudgeJevResult>>();
+const jevAnswers = new WeakMap<EvalContext, Promise<JudgeJevResult>>();
 
 function jevVerdict(
   id: string,
   field: "meaning_preserved" | "grammatically_correct",
   reason: string,
+  verdicts: Verdicts,
 ): Guardrail {
   return {
     id,
     local: false,
     async check(ctx, score) {
       if (score?.raw === undefined) return { pass: true };
-      let verdicts = jevVerdicts.get(ctx);
-      if (!verdicts) {
-        verdicts = runRemoteTask<JudgeJevResult>("judge-jev", {
+      let answers = jevAnswers.get(ctx);
+      if (!answers) {
+        answers = runRemoteTask<JudgeJevResult>("judge-jev", {
           original: ctx.original,
           current: ctx.current,
         });
-        jevVerdicts.set(ctx, verdicts);
+        jevAnswers.set(ctx, answers);
       }
-      if ((await verdicts)[field] === false) return { pass: false, reason };
-      return { pass: true };
+      return verdictResult((await answers)[field], reason, verdicts);
     },
   };
 }
 
-export const jevMeaning = jevVerdict("meaning-jev", "meaning_preserved", MEANING_CHANGED_REASON);
+export const jevMeaning = jevVerdict(
+  "meaning-jev",
+  "meaning_preserved",
+  MEANING_CHANGED_REASON,
+  MEANING,
+);
 export const jevGrammar = jevVerdict(
   "grammar-jev",
   "grammatically_correct",
   NOT_GRAMMATICAL_REASON,
+  GRAMMAR,
 );

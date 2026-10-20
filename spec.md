@@ -2033,6 +2033,29 @@ At the user's direction, the game gets more game-like feedback between Checks. T
 - **The engine records a mode.** `GameState.mode` (practice or challenge) is fixed for a puzzle like the scorer: `setMode` restarts the passage. The engine plays both modes the same way; the mode only tells the UI what to show. No UI exposes it yet.
 - **No scorer, task or Worker change.** Nothing here alters a score, so no task version changes and the harness numbers stand.
 
+**Step 2: goal line and score trail (2026-10-19).** All of it is presentation in `web/src/App.tsx`, with pure helpers in `web/src/feedback.ts`. The engine, scorers and Worker are unchanged.
+
+- **The meter shows the goal.** A tick marks the active judge's win line (`win.scoreAtOrBelow` from `gameConfig.scorers`, labelled "goal ≤ 5"), and the human side of it is tinted green.
+  - The bar turns green once the score is at or under the line.
+  - After a second scored Check, the meter shows the change since the one before: "▼ 2.8" in green, "▲ 1" in red, or "no change". The opening Check (B.45) counts as the one before the first.
+  - Before any score, the meter shows the goal with "Check to get a score.", or "Scoring…" while a Check runs.
+- **The score trail.** A row of chips sits under the meter, one per scored Check, starting from the opening one ("start 10 › 7.2 › ⚠ 6.3").
+  - Green: at or under the goal, every guardrail passed.
+  - Amber with ⚠: meaning or grammar blocked it. The chip's title gives the reasons.
+  - Grey: above the goal.
+  - The latest chip is outlined.
+- **No win recap.** A recap was built here and removed the same day, at the user's request: they found it confusing. It replaced the win banner with:
+  - stars for Checks spent;
+  - the share of words changed;
+  - a track-changes view of the edits.
+
+  A win shows the plain banner again, with the meter and trail below it. On a win, highlights and the tell list are hidden (B.46). On a loss, the tells and the trail stay.
+- **A failed Check no longer hides the score.** The error shows above the meter and trail, which stay. The previous Check's guardrail messages give way to it.
+- **Checked** with unit tests for `trailMark` and `formatScore`. Also checked in headless Chrome against the local Worker, at 1280 × 800 and 375 × 700:
+  - Under Haiku, trimming two phrases scored 10 → 6.3 (▼ 3.7). Meaning and grammar blocked it (amber ⚠ chip). A plainer rewrite of the original scored 7.3 (▲ 1).
+  - Under Offline, a two-word edit won on the first Check.
+  - A scrambled text made the Worker answer 502 (a refusal, B.41). That is how the missing-score gap was found.
+
 ## B.44 Claude Haiku is the default judge (2026-10-19)
 
 At the user's request, `defaultScorer` in `web/src/config.ts` is now `haiku` (`scorers.llmBasic`, Claude Haiku 5.5 with the code-measured tells, line 5) instead of `jev`. The Judge menu still offers Jev and Offline, in the same order. This supersedes the default set in B.19.
@@ -2042,3 +2065,284 @@ At the user's request, `defaultScorer` in `web/src/config.ts` is now `haiku` (`s
 - **Scripts follow the default** (B.29). `pnpm harness` now reports the Haiku judge unless given `--scorer`. On the game bank it scores every passage 8 or more (50 of 60 at 10), so none is won before any edit; against the human corpus the AUC is 0.999, or 1.000 against the modern sources. `pnpm generate` now keeps a candidate only if the Haiku judge scores it above 5 and it passes the Jev guardrails.
 - **What the player gets.** At line 5, 95% of the human texts win as edits of their AI originals, and 1 of the 580 AI passages in `ai_eval` and `ai_test` is won before any edit (B.40). Haiku quotes the passage in most of its tells, so more of them can be highlighted and tracked than under Jev (B.43).
 - **Caveats carried over.** Haiku 5.5 scores vary between calls by about a point on human-like text (B.33), and it can refuse scrambled text, which the player sees as an error rather than a failed guardrail (B.41).
+
+## B.45 Every puzzle opens with a free Check (2026-10-19)
+
+At the user's request, each puzzle now opens already checked, so the player sees the judge's score, tells and highlights before editing anything. The user chose that this Check is free and that it runs for every new puzzle: on page load, after New passage, and after a judge switch (a mode switch restarts the same way). This changes §1.1's flow (the score comes first), and makes one exception to §9 and §13, where every Check that reaches the scorer spends one. §12.2's "New passage clears the previous score" now means it shows the new passage's opening score instead.
+
+- **The engine runs it** (`openingCheck: true` in `web/src/config.ts`; `open()` in `web/src/game.ts`). It is the whole pipeline on the unedited passage (`runCheck` with the puzzle's rules, meaning and grammar included), recorded as the first entry of `GameState.checks` with `opening: true`. The UI already takes the score and tells from the last entry, so nothing else had to change for them to show.
+  - It spends no Check: the header still reads 6 / 6.
+  - It never wins or loses, whatever the score or the guardrails say. This matters under Offline, which scores most bank passages at or below its line of 2 (B.30).
+  - While it runs the phase is `checking`, so the UI shows "Checking…" and locks the passage, the judge menu and New passage, as during any Check.
+  - If it fails (the Worker is unreachable, the rate limit, a refusal), the error shows as after any failed Check, nothing is spent, and the player can press Check.
+- **The player's Checks are unchanged.** Every Check after an edit runs the full pipeline, so meaning and grammar are judged each time, can block a win, and the Check is spent.
+- **Stale results are dropped.** A counter in `createGame` changes whenever a puzzle starts, and a Check that resolves after its puzzle was replaced is ignored. In development React's StrictMode starts two draws on load; only the second is kept and checked, so the page makes one opening Check, not two.
+- **The UI:** the score panel reads "Starting score. Edit the passage, then Check." above the opening score, and the page does not scroll to the result for the opening Check, so the passage stays in view on load.
+- **Tells on one phrase.** The Haiku judge sometimes lists two different tells on the same phrase, its own and a measured "-ing" phrase (B.38). Tells that shared a quote took one occurrence each, a rule meant for the same tell repeated (one em-dash tell per dash, B.43), so with one occurrence the second was crossed off as edited. On the opening Check that showed "1 of 8 edited" before any edit, in 23 of the 60 bank passages. `trackTells` now shares occurrences only among tells with the same label and quote; different tells on one phrase all mark it. That leaves 0 of 60.
+- **Cost:** two Worker requests per puzzle start under Haiku (`score-v1`, `judge-jev`) or Jev (`score-jev`, `judge-jev`), none under Offline. For an unedited passage the payload is the same for every player, so after the first player the Worker's KV cache answers. Cache hits still count against the per-IP limit of 30 requests a minute.
+- **Checked** in headless Chrome against the local Worker, at 1280 px and 375 px. On load, after New passage, and after each judge switch, the opening score and tells showed, the header read 6 / 6, the page stayed at the top, and the only requests were the judge's task and `judge-jev`. Offline made no request and declared no win. After an edit, Check spent one (5 / 6) and called both again. Swapping two letters in every fourth word scored 3 under Haiku, below its line of 5, and the grammar guardrail blocked the win. Reordering the words within each sentence under Jev failed both meaning and grammar.
+
+## B.46 Tells under the editor; worked-on areas turn blue (2026-10-19)
+
+At the user's request, clicking a highlight should visibly light its tell, and a highlight the player has changed should change colour once the cursor leaves it, so the player can see which areas they have already worked on. The user chose to move the tell list under the editor, and to show each worked-on tell's new text. A next-tell button, a ready-to-check nudge, and reverting a phrase were offered and left out. This supersedes parts of B.43 where they differ.
+
+- **The list sits under the editor.** The order is now: editor, tell list, Show original, then the score panel (win or loss banner, guardrail messages, meter). Before, the lit row was below the meter and behind the sticky action bar, even at 1280 × 800.
+  - The lit row is `bg-amber-300`, the same colour as its highlight. Each quote in the list is coloured like its highlight.
+  - On wide screens, when the cursor enters a phrase whose row is hidden, the page scrolls just far enough to show the row. It stops before the phrase would leave the top of the screen.
+  - The one-line caption under the editor ("↳ Stock phrasing") now shows on phones only, where the list is often under the keyboard.
+  - The list is hidden once the puzzle is won. It stays visible after a failed Check, since it no longer sits inside the score panel.
+  - The score panel scrolls into view clear of the action bar (`scroll-mb-24`).
+- **Highlights follow the phrase through edits instead of being searched for again.** After a Check, each quote is found by search as before (B.43). From then on, each range is carried through every edit (`findEdit` and `moveRanges` in `web/src/feedback.ts`).
+  - Text typed or pasted inside a range becomes part of it. So does text that replaces part of it.
+  - Text typed at a range's edge joins it only while the player keeps typing there, and only once the quote is already changed. Retyping a deleted phrase, or typing over a selected one, keeps all the new text marked. Typing beside an untouched phrase, or coming back later to the edge of a worked-on one, never spreads its highlight.
+  - The editor records the selection before each edit, so a paste or a letter typed over a selection maps exactly. Without that record, pasting text over similar text looks like a smaller change.
+  - Replacing the whole text (select all, then paste) falls back to search.
+  - A tell counts as worked on when none of its ranges still contains its quote. A range that still contains the quote is trimmed back to it.
+  - A tell whose quote is still somewhere in the text after being cut and pasted, or put back by an undo, is found again and stays to do.
+  - Repeated tells (one per em dash) keep their own places. Deleting the first dash now marks the first tell worked on, where search alone crossed off the last.
+- **Colours.** The active tell is amber-300, untouched highlights are amber-100 (amber-200 where tells overlap), and worked-on highlights are sky-200.
+  - Blue, not green: as in B.43, worked on is a hint, not a verdict, and the next Check reads the whole passage again.
+  - A highlight stays amber-300 while the cursor is in it, and turns blue when the cursor leaves. That moment is the user's "clicking out".
+  - Where a worked-on tell contains an untouched one, the untouched part stays amber.
+- **Before → after.** A worked-on tell's quote is struck through and followed by what the player wrote ("→ “the daily rush”", cut at about 60 characters), or "removed". The note reads "worked on, check to confirm", and the heading "Tells · 2 of 7 worked on" with a small "to do" / "worked on" legend. "Edited" is renamed "worked on" throughout.
+- **No engine, scorer or Worker change.** All of this is presentation; `GameState` is unchanged.
+- **Checked** with unit tests for `findEdit`, `moveRanges`, `trackTells` with carried ranges, and `segments`. Also checked in headless Chrome against the local Worker under Haiku, at 1280 × 800 and 375 × 700, through these scenarios:
+  - clicking a highlight lit its row, which scrolled into view on desktop;
+  - typing inside a highlight kept it amber, and clicking out turned it blue;
+  - deleting a phrase and retyping it stayed marked;
+  - deleting one, moving away, then typing at the same spot read "removed";
+  - an undo;
+  - cutting a phrase and pasting it at the end found it again;
+  - select all and paste reset to search;
+  - after a Check, the new tells came back amber.
+
+  A real iPhone (IME, autocorrect, highlight alignment) is still unchecked.
+
+## B.47 Ten Checks per puzzle (2026-10-19)
+
+At the user's request, `budget.checksPerPuzzle` in `web/src/config.ts` is now 10, up from §13's default of 6. Nothing else about the budget changes:
+- the free opening Check (B.45) still spends none;
+- a refused or failed Check still spends none;
+- New passage and a judge switch still reset it.
+
+- **Cost:** up to eight more Worker requests per puzzle under Haiku or Jev: four more Checks, each making two requests (the judge's task, then `judge-jev`).
+
+## B.48 Arcade screen: dark theme, hit effects, chiptune sounds, stage clear and game over (2026-10-19)
+
+At the user's request, the game should feel like an old-school video game. They chose screen shake, hit effects, chiptune sounds that stay off until turned on, STAGE CLEAR and GAME OVER screens, and a dark arcade screen. They did not choose a pixel font for the whole interface, hearts for Checks, or a block meter. The win recap of B.43 was removed earlier the same day, because the user found it confusing.
+
+- **The dark screen.** The page is near-black with neon accents: cyan title and editor border, lime Check button and goal line, fuchsia meter fill above the goal, yellow Checks count. Faint CRT scanlines are drawn on the page background (`web/src/index.css`).
+  - The passage stays on a white panel (`[color-scheme:light]`), so it reads as before and the amber and blue highlights keep their contrast. The scanlines never cross it.
+  - The pixel font (Press Start 2P, OFL) is used only on the end-of-puzzle banners and the score pops. It is bundled from `@fontsource/press-start-2p`, not loaded from Google, and browsers fetch only the character sets they need.
+- **Effects** (`web/src/effects.ts`, triggered from `App.tsx`; which effect a Check gets is `lastHit` in `web/src/feedback.ts`):
+  - **Score pop.** After each Check that does not end the puzzle, the change floats up from the meter and fades, like arcade points: "-2.5" in lime, "+1" or "+0" in pink, "BLOCKED" in amber.
+  - **Screen shake.** The page content jolts for about 0.4 s when a Check comes back worse (the score did not drop), is blocked by a guardrail (local or remote), or runs out the Checks. A better score does not shake.
+  - **Worked-on flash.** When a highlight turns blue (B.46), it gets a cyan glow ring that fades out. Each new version of an edit flashes once; hovering a tell does not replay it. The first try faded the background colour itself, and Chrome mixed a hex colour with the theme's OKLCH one into a yellow mid-fade. Only the shadow animates now.
+  - **Pixel confetti** on a win: a burst drawn on a canvas at a quarter of the screen's resolution and scaled up without smoothing, removed after about 2 s.
+  - All motion is skipped when the device asks to reduce motion. The blinking "NEXT STAGE >" and "CONTINUE? >" stop after four blinks.
+- **Chiptune sounds,** generated with the Web Audio API (no audio files):
+  - a blip on Check;
+  - a coin when the score drops;
+  - a sagging buzz when blocked;
+  - a low two-note drop when the score does not fall;
+  - a tick when a highlight turns blue;
+  - a fanfare on a win;
+  - four falling notes on game over.
+
+  Sound is off until the player presses "♪ Sound off" in the header. The choice is kept in `localStorage` on that device, and a private window falls back to off. The opening Check (B.45) makes no sound or motion.
+- **STAGE CLEAR and GAME OVER** replace the win and loss banners. Each has a pixel headline, one line of text ("The judge no longer thinks this reads as AI." or "Out of Checks."), and a button that draws a new passage, as New passage does. The meter and score trail stay below.
+- **No engine, scorer or Worker change.** One new dependency, `@fontsource/press-start-2p`.
+- **Checked** with unit tests for `lastHit`, and a production build. Also checked in headless Chrome against the local Worker at 1280 × 800 and 375 × 700, recording every animation and oscillator the page started:
+  - the opening Check made none;
+  - turning sound on played one note;
+  - clicking out of an edited phrase flashed it and ticked;
+  - a Check blocked by grammar under Haiku shook the page, buzzed, and floated "BLOCKED";
+  - a better score floated "-1" and played the coin, with no shake;
+  - an Offline win showed STAGE CLEAR with confetti, and the canvas was gone 2.5 s later;
+  - ten Checks kept at 4 under Offline ended in GAME OVER with a shake and the falling tune.
+
+  Real speakers and a real phone have not been tried.
+
+## B.49 The judge's meaning and grammar verdicts show after every Check (2026-10-19)
+
+At the user's request, the meaning and grammar verdicts now show after every Check the player presses, pass or fail. Before, only a failure showed, so a Check that passed both looked as if nothing had been judged.
+
+- **Guardrails report a verdict.** `GuardrailResult` gains an optional `verdict`: "Meaning kept" or "Meaning changed", "Grammar correct" or "Grammar not correct" (`web/src/guardrails.ts`).
+  - It is set only when the guardrail actually judged the text, that is, when Jev, or Haiku's raw payload, gave a yes or no.
+  - Offline, the Jev guardrails pass without asking (B.42), so they report no verdict. The game never shows a pass that was never made.
+  - Local guardrails ("Too short") have no verdict and keep the warning box.
+- **The UI** shows a "Judge" row of chips under the meter: lime ✓ for a pass, amber ✗ for a fail. When one fails, the row adds "All must pass to win."
+  - The row names no guardrail itself. It shows whatever verdicts the configured guardrails return.
+  - The free opening Check (B.45) judges the passage as written, so it shows no row.
+  - The amber reason box now shows only failures without a verdict.
+- **No scorer, task or Worker change.** Same calls, same results; only what is shown changed.
+- **Checked** with the guardrail unit tests, which now cover verdicts, and their absence offline. Also checked in headless Chrome against the local Worker:
+  - Under Haiku, dropping one adjective from a flagged phrase showed "Judge ✓ Meaning kept ✓ Grammar correct".
+  - A Check under Offline showed no row.
+
+## B.50 `pnpm pangram`: the judges compared with Pangram (2026-10-19)
+
+At the user's request, a script compares both judges with Pangram, a commercial AI detector (`scripts/comparePangram.ts`, client in `scripts/common.ts`). It talks to Pangram's async API directly: `POST /task`, then poll `GET /task/{id}`. It needs `PANGRAM_API_KEY` in `worker/.dev.vars`. The game and the Worker never call Pangram.
+
+- **Texts.** The script uses the harness's sets: `data/passages.json` and `data/human_corpus.json` by default, with `--bank`, `--human` and `--limit` to change them. Every detector sees each text on its own. At first, human texts were judged as edits of their AI originals, as the harness then did (B.40). The user pointed out that this isn't valid for a human text, which is no edit of anything, so since B.51 the judges always score the text alone.
+- **Judges.** It compares every scorer in `web/src/config.ts` except the offline one (`scorers.mock`, which is no detector), each at its own win line. `--scorers` names others.
+- **Pangram model.** The script pins a numbered model rather than `default`, so results don't change under it when Pangram moves its default. A free `GET /models` call first checks the key and the model.
+  - It first pinned `pangram-4`. At the user's request the default became `pangram-4.1`, the newest model that `GET /models` listed for the user's key on 2026-10-19 (after `default` and `pangram-4`).
+  - Pangram's public docs don't mention 4.1 yet, so its response format and price are assumed to match Pangram 4's. A first run with `--limit 1` checks the format for about 4 credits.
+- **Measures.** These are reported per detector, on the texts every detector scored:
+  - how many texts pass as human, by generator and by human source;
+  - AUC against the modern and against all human sources;
+  - each judge's agreement with Pangram's verdict;
+  - each judge's Spearman rank correlation with Pangram's score.
+- **Pangram's score and verdict.** Its score is the windows' `ai_assistance_score` (0 human, 1 AI), averaged by word count. It passes a text only when `prediction_short` is `"Human"`, so a `"Mixed"` verdict counts as AI.
+- **Cost.** Pangram 4 bills per started 100 words, at $0.05 per unit (realtime price on 2026-10-19), and 4.1 is assumed to bill the same.
+  - Default sets: 431 units, about $21.55. `ai_test.json` adds 781 units, about $39.
+  - Results are cached whole under `scripts/.cache/pangram/<model>`, so each text is paid for once per model.
+  - The script calls nothing if the uncached texts come to more than `--max-units` (default 500). `--max-units 0` prints the estimate only.
+  - A 401, 402 or 403 stops the run, since it would repeat on every text. Results finished before the stop stay cached.
+- **Tests.** Unit tests cover the client (request shape, polling, 429 backoff, failed and stuck tasks), the score and the rank correlation, all with a fake `fetch`. `pnpm test` and CI never call Pangram. An end-to-end run against a fake Pangram server checked the cost check, model check, polling, cache reruns without a key, and the report.
+- **Free-trial credits don't reach the API.** On 2026-10-19 the user's key was valid, but every `POST /task` returned 402 "Insufficient credits", with both `pangram-4` and `default`. The user's 20 trial credits look like the web app's Free-plan credits; the API uses prepaid Developer credits. Nothing was spent or cached.
+- **Spot checks by hand.** Until there are API credits, the user checks texts on Pangram's website with the free plan's 20 daily credits. Each verdict is recorded in `data/pangram_spot_checks.json` with Haiku's and Jev's scores, each text scored alone (B.51), and the task versions behind them. The score the game showed the user is kept separately (`gameShowed`), because Haiku's score varies between calls (B.33). Each entry also keeps the full text, because `pnpm generate` can replace the bank and reuse its ids.
+- **Results:** `pnpm pangram` not yet run; waiting for API credits.
+
+## B.51 Both judges score the text on its own (2026-10-19)
+
+At the user's request, the Haiku and Jev judges always score the current text alone, in the game and in every script. The user pointed out that scoring a human text as an edit of an AI original (B.40) is not valid, since a human text is no edit of anything, and that the Haiku judge has to be shown to recognize text a person actually wrote.
+
+- **`score-v1` version 4 (Haiku).**
+  - Its payload is `{ text }`. The prompt no longer mentions the game, a player, an AI origin or an original; it says nothing is known about who wrote the passage.
+  - It still judges grammar, which needs only the text. It no longer judges meaning, which needs the original, so `guardrails.meaning` (not in `config.ts`) is gone.
+  - Jev's meaning and grammar guardrails, the game's default (B.42), are unchanged.
+- **`score-jev`** also takes `{ text }`. It never read the original, so its scoring is unchanged and it stays version 7. The new payload gives it new cache keys anyway.
+- **`judge-jev` keeps both texts** (`{ original, current }`), since meaning is judged against the original. It now has its own payload check: it had borrowed score-v1's, which would have rejected both texts. Typecheck caught that; a test now covers it.
+- **Scripts.** `pnpm harness` and `pnpm pangram` score every text alone. `data/human_originals.json` and `pnpm originals` are no longer used, but are kept for now.
+- **Accuracy.** All 580 passages in `ai_eval` and `ai_test` against the 198 human texts, all scored fresh. Each judge is at its own win line: Haiku 5, Jev 3. "Before" is the old Haiku prompt from cache, with human texts given either as edits of AI originals (B.40) or as their own originals.
+
+  | | Haiku before, edit of AI original | Haiku before, own original | **Haiku v4, text alone** | **Jev, text alone** |
+  | --- | --- | --- | --- | --- |
+  | AUC against modern human texts | 0.9998 | 0.9958 | **0.9982** | **0.9928** |
+  | AUC against all human texts | 0.9990 | 0.9970 | **0.9987** | **0.9948** |
+  | Human texts that win | 188 (95%) | 161 (81%) | **180 (91%)** | **185 (93%)** |
+  | AI passages won before any edit | 1 | 1 | **2** | **4** |
+
+  - The first column flattered Haiku: the AI original sat next to each human text. Shown only the text, the old prompt passed 81% of human texts, since it told Haiku the passage began as AI text. The new prompt passes 91% and separates the two sets nearly as well.
+  - Jev is unchanged from B.40 (AUC 0.9932 and 0.9951, 184 wins, 4 AI), as expected.
+- **Haiku v4 by line:**
+
+  | Line | Human texts that win | AI passages won before any edit |
+  | --- | --- | --- |
+  | 2 | 71 (36%) | 0 |
+  | 3 | 115 (58%) | 0 |
+  | 4 | 156 (79%) | 1 |
+  | **5** | **180 (91%)** | **2** |
+  | 6 | 189 (95%) | 5 |
+  | 7 | 196 (99%) | 6 |
+
+  - The line stays 5 for now, pending the user's choice.
+  - At line 5, the human texts that win are Gutenberg 60 of 60, Stack Exchange 58 of 62, Wikipedia 30 of 35 and Wikivoyage 32 of 41. Haiku's weak spot is Wikivoyage's promotional travel prose.
+  - The two AI passages that win are laptop complaints, `gpt-4o-p0086` (4) and `claude-haiku-4-5-p0085` (4.4). Pangram's website called both 100% AI (B.50).
+- **The game bank** still starts above both lines. Haiku v4 scores every passage 7 or more (49 of 60 at 10), and Jev 4.1 or more.
+- **Deploy.** The Worker and the app must deploy together, since both scorers' payloads changed; CI deploys both on every push to `main`. A tab opened before the deploy sends the old payload and gets an error until it is reloaded.
+- **Spot checks.** Every entry in `data/pangram_spot_checks.json` was rescored with the text alone. `h0152`, which Pangram called 100% human, scores 7 with Haiku and 6.2 with Jev, so both judges would call it AI.
+
+## B.52 Hear the rhythm: a live sentence-length track with an on/off switch (2026-10-19)
+
+At the user's request, the first part of the rhythm idea discussed for step 3 of B.43 is in, behind a switch so it can be turned off. Measured on the 60 bank passages, every one lists "Uniform sentence length". The middle passage's sentence lengths vary by only 0.20 (coefficient of variation), where the tell starts to fade at 0.30 and is gone at 0.60. So the track starts nearly flat on every puzzle.
+
+- **The track** (`RhythmTrack` in `web/src/App.tsx`) sits under the editor: "♫ Hear the rhythm", with an on/off switch.
+  - When on, there is one block per sentence, as wide as the sentence is long. It updates as the player types: a full stop adds a block.
+  - Under two sentences it says "Write at least two sentences to hear a rhythm."
+  - A line explains it: "Each block is a sentence, as long as it sounds. AI writes them all about the same length; mix short and long."
+- **Same sentences as the judges.** `sentenceLengths` is now exported from `shared/scoreJev.ts`, and `measure` uses it too. It is the existing split, unchanged, so no score, task version or cache changes.
+- **▶ Play** sounds the passage out, one square-wave note per sentence (`beatNotes` in `web/src/feedback.ts`, `playBeat` in `web/src/effects.ts`).
+  - Each note is held 0.035 s per word (between 0.09 s and 1.4 s), and pitched lower the longer the sentence is, on a C pentatonic scale.
+  - Sentences of one length sound like a metronome; mixed lengths make a tune.
+  - The block for the note playing lights up, and the button turns into ■ Stop.
+  - It plays even when the header's sound is off, because the player pressed Play. Without Web Audio, only the lights play.
+- **The switch** starts on. The choice is kept in `localStorage` on that device, and a private window falls back to on. Turning it off folds the track to one line and stops any playback.
+- **Not in this part,** from the step 3 discussion:
+  - levels with names;
+  - the live cross-off of the "Uniform sentence length" tell;
+  - a hint;
+  - tapping a block to highlight its sentence;
+  - challenge mode.
+- **Checked** with unit tests for `sentenceLengths` and `beatNotes`. Also checked in headless Chrome at 1280 × 800 and 375 × 700:
+  - the switch started on;
+  - Play with sound off scheduled one note per sentence and lit each block in turn;
+  - adding "It works." added a 2-word block;
+  - switching off removed the blocks and the Play button;
+  - the choice survived a reload.
+
+## B.53 The look and voice of NONSLOP, this game's predecessor (2026-10-19)
+
+At the user's request, the screen now matches NONSLOP (nonslop.app, a Phaser game in the user's `dev/phaser/nonslop`) as closely as this game allows. The values come from its source (`src/config/design.js`, `textStyles.js`, `ButtonFactory.js`, `Preloader.js`, `DoneScene.js`). The palette images in its `assets/` are out of date.
+
+NONSLOP is a different game: the player writes their own answer while a small model predicts the next word, and LLM verdicts score the result. So only its look, voice and result moments carry over, not its rules.
+
+The user chose:
+- its hard-mode violet palette, over easy (ocean teal) and basic (navy);
+- IBM Plex Mono for the passage, over keeping the serif;
+- its overlord voice and its result headlines.
+
+They left out its streak banners and scene transitions. Not carried over at all: next-word prediction, the timer, the slow-down penalty, the leaderboard, usernames, badges and sharing (§2.1), the research consent pop-up, and Firebase. This supersedes parts of B.48: the scanlines, Press Start 2P, and the STAGE CLEAR and GAME OVER banners.
+
+- **Palette** (named colours in `web/src/index.css`):
+  - text `#ebfff7`, titles `#fbf056`, panels `#00060f` at 80%;
+  - box rim `#00e5ff`, accent `#7a0782`;
+  - buttons `#9e0e77`, with a `#b91255` top half;
+  - danger `#d71a27`, success `#009972`, warning `#f8ac3a`;
+  - its headline colours, `#33ff33` and `#ffaa00`.
+- **Background:** its "Intense Energy Field". It is a violet gradient (`#0c0020` → `#1a0045` → `#280068` → `#360088`), with glows and faint rays under a 40% black veil, breathing over 8 s (alpha 0.9 to 1, scale 1.03). The scanlines are gone; NONSLOP had none.
+- **Fonts:**
+  - IBM Plex Mono for all text, including the passage. Both editor layers share it, and the highlight copy was checked drawn in red, with no drift.
+  - VT323 for buttons, the Checks pill, score pops and error lines.
+  - Barcade 3D for the logo and titles.
+
+  IBM Plex Mono and VT323 are bundled from `@fontsource` (OFL), replacing `@fontsource/press-start-2p`. Barcade 3D is `web/src/barcade3d.ttf`, copied from NONSLOP.
+  - Barcade 3D is by Iconian Fonts, whose free fonts are usually licensed for personal use. The user already ships it on nonslop.app; commercial use would need a licence.
+  - Barcade draws every letter as a capital, and its capital E looks like a C. So titles are written in lower case ("(stage clear)"), which renders as clean capitals.
+- **Logo:** "(unslop)" in Barcade 3D, title yellow with a black drop shadow. It slides in from the left with a small bounce, and a shine sweeps across it every 3 s. Its parentheses render as capsule ends, as on NONSLOP's badges.
+- **Menu bar:** full width, with a 4 px cyan bottom border and a shadow. It holds the logo, a pill reading "CHECKS 7/10" ("7/10" on phones), and the sound button.
+  - The pill is accent at 80%, with a 2 px white rim at 50% and a soft glow. Its text pulses between alpha 1 and 0.8 over 1.5 s.
+- **Panels:**
+  - The prompt and score boxes use NONSLOP's prompt and output style: radius 40, a 4 px cyan rim, panel fill at 80%.
+  - The passage uses its input box: white at 85%, a 4 px accent rim, radius 40, and padding of 24 px so text clears the corners. The resize grip is gone, since it sat outside the curve.
+  - The tell list and the rhythm track use its stats-panel style: black at 70%, a 2 px white rim at 50%, radius 10.
+- **Buttons** (`.arcade-button` and `.arcade-button-quiet` in `web/src/index.css`):
+  - magenta, with a darker top half at 70% and a white shine on the top third;
+  - a 3 px white rim, radius 10, and an upper-case VT323 label;
+  - they grow on hover and squash on press;
+  - the quiet partner has a cyan rim on a dark panel.
+
+  NONSLOP had no disabled style; here a disabled button greys out. Its toggle (a flat bar and a round accent knob ringed in white) replaces the rhythm switch.
+- **Tooltips:** NONSLOP's style (black at 80%, a faint white rim, radius 8), shown on hover only.
+  - CHECK reads "Escalate to supervisory oversight", NONSLOP's own copy for its DONE button. NEW PASSAGE reads "Request a new specimen".
+  - The tooltip text is decorative CSS content (`content: attr(data-tip) / ""`). The first try put it in the button's accessible name while hovered ("Check Escalate to supervisory oversight").
+- **Overlord voice:**
+  - a PROMPT box that types itself out at 8 ms a character: "This passage was written by a machine. Rewrite it until I can no longer tell. Keep the meaning. Deviations will be recorded." plus the topic;
+  - "Retrieving specimen…" while a passage loads;
+  - "ASSESSING…" on the button, and "Assessing your feeble attempt…" in the score box, while a Check runs;
+  - "Baseline assessment complete. Edit the passage, then Check." after the opening Check;
+  - "SYSTEM ERROR: Check failed. No Check used.";
+  - "Assessment" heading the verdicts;
+  - a page description and preview title, "UNSLOP - Would you like to play a game?".
+- **Result headlines** (`headlineFor` in `web/src/feedback.ts`, `ResultHeadline` in `App.tsx`) show at the top of the score box after each Check that does not end the puzzle:
+  - **A drop of 1.5 or more:** "NOT BAD, HUMAN", green, glowing and growing over a green wash that fades after 5 s.
+  - **A smaller drop:** "NOT QUITE", typed in amber at 80 ms a character after an amber flash, then flickering with `.#@*`.
+  - **No drop:** two of NONSLOP's four error lines, turning with each Check: "ERROR: AI DETECTION TRIGGERED", "WARNING: HUMAN TEXT COEFFICIENT LOW", "SYSTEM FAILURE: CREATIVITY NOT FOUND", "CRITICAL: TOO PREDICTABLE". They type in red at 30 ms a character with `@#%` glitches, while the box flashes red five times and three corruption bars fall.
+  - **Blocked by a verdict:** "ERROR: MEANING CHANGED" or "ERROR: GRAMMAR NOT CORRECT", then "CRITICAL: ALL VERDICTS MUST PASS".
+  - **A refusal such as "Too short":** "ERROR: CHECK REFUSED", "NO CHECK USED".
+
+  Players who ask for reduced motion get the text at once, without effects.
+- **End of a puzzle:** "(stage clear)" in title yellow, or "(game over)" in red, in Barcade 3D, popping to 1.3× and back. Below it is a line in NONSLOP's voice ("Reluctant approval granted." or "Utterly disappointing.", from its unused celebration code), and a NEXT or PLAY AGAIN button.
+- **Meter and chips:**
+  - the meter fill is success at or under the goal, warning yellow within 2 of it, and danger above;
+  - the goal tick and label are cyan, and the label keeps clear of "human" and "AI" on phones;
+  - verdicts and trail chips use success, danger and warning;
+  - confetti uses NONSLOP's hard-mode gold, with its yellow, magenta and cyan.
+- **No engine, scorer or Worker change.**
+- **Checked** with unit tests for `headlineFor`, and a production build that bundles all three fonts (only the Latin files load). Also checked in headless Chrome at 1280 × 800 and 375 × 700:
+  - the fonts loaded;
+  - the header fit at 375 px and nothing scrolled sideways;
+  - under Haiku, Checks showed the error lines, NOT QUITE, and "ERROR: GRAMMAR NOT CORRECT";
+  - an Offline win showed "(stage clear)" across 295 of 375 px.

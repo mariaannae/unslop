@@ -1,5 +1,5 @@
 import { scoreJevTask, systemOne, type JevQuestion } from "./scoreJev";
-import { scoreV1Task, type ScoreV1Payload } from "./scoreV1";
+import { validateTexts } from "./scoreV1";
 import { ProviderError, TaskError, type CallTask } from "./types";
 
 /**
@@ -9,6 +9,12 @@ import { ProviderError, TaskError, type CallTask } from "./types";
  * The verdicts have score-v1's field names, so a guardrail reads either alike.
  * Bump `version` when a question or the threshold changes.
  */
+
+/**
+ * Both texts, since meaning is judged against the original. The scorers take the
+ * current text alone (spec B.51); this guardrail task is the exception.
+ */
+export type JudgeJevPayload = { original: string; current: string };
 
 /** A verdict passes when Jev's probability for it is at least this. */
 const PASS = 0.5;
@@ -60,12 +66,12 @@ function probability(answers: Record<string, number>, id: string): number {
   return value;
 }
 
-export const judgeJevTask: CallTask<ScoreV1Payload, JudgeJevResult> = {
+export const judgeJevTask: CallTask<JudgeJevPayload, JudgeJevResult> = {
   id: "judge-jev",
   version: 1,
   model: scoreJevTask.model,
 
-  validatePayload: (input) => scoreV1Task.validatePayload(input),
+  validatePayload: (input) => validateTexts(input, ["original", "current"]),
 
   async call(payload, { typesafeApiKey }): Promise<JudgeJevRaw> {
     if (!typesafeApiKey) {
