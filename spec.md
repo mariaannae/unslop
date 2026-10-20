@@ -2306,7 +2306,7 @@ They left out its streak banners and scene transitions. Not carried over at all:
   - The pill is accent at 80%, with a 2 px white rim at 50% and a soft glow. Its text pulses between alpha 1 and 0.8 over 1.5 s.
 - **Panels:**
   - The prompt and score boxes use NONSLOP's prompt and output style: radius 40, a 4 px cyan rim, panel fill at 80%.
-  - The passage uses its input box: white at 85%, a 4 px accent rim, radius 40, and padding of 24 px so text clears the corners. The resize grip is gone, since it sat outside the curve.
+  - The passage uses its input box: white at 85%, a 4 px accent rim, radius 40. The text box sits 12 px inside that frame with square edges, so its scrollbar and resize grip are never clipped by the corners. The first version made the text box itself round and dropped the grip; the user missed resizing, and the clipped scrollbar was hard to use.
   - The tell list and the rhythm track use its stats-panel style: black at 70%, a 2 px white rim at 50%, radius 10.
 - **Buttons** (`.arcade-button` and `.arcade-button-quiet` in `web/src/index.css`):
   - magenta, with a darker top half at 70% and a white shine on the top third;
@@ -2340,9 +2340,121 @@ They left out its streak banners and scene transitions. Not carried over at all:
   - the goal tick and label are cyan, and the label keeps clear of "human" and "AI" on phones;
   - verdicts and trail chips use success, danger and warning;
   - confetti uses NONSLOP's hard-mode gold, with its yellow, magenta and cyan.
+- **Sizes, reduced the same day at the user's request** ("taking up a lot more space"). Monospace letters are about 20% wider than the old system font at the same size, so sizes stepped down:
+  - body text from 14 to 13 px, small text from 12 to 11 px;
+  - pixel-font labels, headlines, the logo (20 px, 28 px on wider screens) and end titles (28 px, 34 px) each one step;
+  - buttons from 48 to 44 px tall;
+  - box padding and line height tighter.
+
+  The passage is 15 px from 640 px wide, but stays 16 px on phones, with letter spacing tightened by 0.02 em: iOS Safari zooms the page when a text field under 16 px gets focus. The judge menu also stays 16 px for that reason. On a 375 px phone the passage still takes about a third more lines than the old serif did.
 - **No engine, scorer or Worker change.**
 - **Checked** with unit tests for `headlineFor`, and a production build that bundles all three fonts (only the Latin files load). Also checked in headless Chrome at 1280 × 800 and 375 × 700:
   - the fonts loaded;
   - the header fit at 375 px and nothing scrolled sideways;
   - under Haiku, Checks showed the error lines, NOT QUITE, and "ERROR: GRAMMAR NOT CORRECT";
   - an Offline win showed "(stage clear)" across 295 of 375 px.
+
+## B.54 Desktop: two columns, everything on one screen (2026-10-20)
+
+At the user's request, on a laptop the game now fits the window, where before it was a narrow column about 1,300 px tall. The aim was everything in view on a standard 14" laptop: a viewport of about 1280×650 (Windows at 150%) up to 1512×860 (MacBook Pro 14").
+
+The user chose:
+- two columns, over three;
+- "Show original" as a tab beside the tells, on every screen size, over keeping the fold-out.
+
+Phones and tablets (under 1024 px) keep the single column.
+
+- **From 1024 px (`lg`), the screen is one window tall.**
+  - The page is `lg:h-dvh` and main is a grid inside `max-w-7xl`: a left column at 1.45 parts and a right column at 1.
+  - **Left column:** the prompt, the passage, rhythm, and the CHECK and NEW PASSAGE buttons.
+  - **Right column:** the score panel, then the tabs.
+  - There is no page `overflow-hidden`, because `scrollIntoView` also scrolls hidden-overflow ancestors and would leave the page shifted with no scrollbar.
+- **One set of markup for both layouts.** Two wrapper divs are `display: contents` below `lg`, so their children stay items of the single column, and `order` keeps the phone order: prompt, passage, caption, rhythm, tabs, score, action bar.
+  - On phones, keyboard and screen-reader order follows the DOM, so the score comes before the tabs. That trade-off was accepted.
+  - The action bar is a direct child of main. On phones it stays sticky at the bottom. On `lg` it is a plain row under the left column, outside the left column's scroll, so it never scrolls away.
+- **The passage fills its column and stays resizable.** It is sized with flex (`flex: 1 0 auto` on the frame and the textarea), not a calc, so a height set with the resize grip becomes its base size. Dragging it taller makes the left column scroll, while the buttons stay in view.
+- **The judge menu moved into the prompt box's top row** on every screen size, beside "PROMPT:" and the topic; the separate row is gone. On phones the topic drops to its own line, and the "Judge" label is kept for screen readers only.
+  - The instruction types out over an invisible full copy, so the box keeps its height while it types.
+- **The rhythm track** is one row on `lg`: label, beat, Play, switch. Its hint becomes the row's tooltip there.
+- **Tabs: TELLS and ORIGINAL** (`TellPanel`) replace the "Show original" fold-out, on every screen size.
+  - **The tab is derived, not set by an effect.** ORIGINAL holds until the next Check or passage. With no tells to show (a win), only ORIGINAL is left, under a plain heading.
+  - **ARIA:** a labelled tablist, with roving tab focus. Left, Right, Home and End move between the tabs. The panel is focusable, so it scrolls by keyboard.
+  - **The count** ("2 of 9 worked on") moved from the old heading into the panel.
+- **Scrolling on `lg`.**
+  - The score panel and the tab panel scroll side by side in the right column, never nested.
+  - When the cursor enters a highlighted phrase, its row is brought into view with `scrollIntoView({ block: "nearest" })`, which moves only the tab panel.
+  - From 640 to 1023 px the page still scrolls the row above the sticky bar, as in B.46.
+- **No engine, scorer or Worker change.**
+- **Checked** in headless Chrome against the local Worker.
+  - **At 1280×650, 1440×760, 1512×860, 1024×600 and 1024×768:**
+    - the page doesn't scroll and nothing scrolls sideways;
+    - CHECK, NEW PASSAGE, the passage box, the top of the score panel, the tab strip and rhythm are all in view;
+    - the highlight layer's box equals the textarea's, and the prompt keeps its height while typing.
+  - **The passage box** is 295 px at 1280×650, with 10 px of that passage out of view; 405 px at 1440×760; and 505 px at 1512×860.
+  - **At 1280×650:**
+    - **Reveal:** putting the cursor in the last tell's phrase scrolled only the tells panel (0 to 223 px) and showed its row.
+    - **Grip:** dragging grew the box to 445 px with the layer, the column scrolled, and CHECK stayed in view.
+    - **Tabs:** ORIGINAL showed the passage, and the arrow keys, Home and End worked.
+    - **A Haiku Check** with ORIGINAL picked returned to TELLS, and the page still fit.
+    - **An Offline win** left only ORIGINAL, with confetti, and the page still fit.
+  - **At 375×667, 390×844, 768×1024 and 1023×800:**
+    - the order is prompt, passage, rhythm, tabs, score;
+    - the bar sits at the bottom while scrolling and ends flush with the page;
+    - nothing scrolls sideways, the passage and judge menu are 16 px on phones, and the prompt's top row fits.
+
+## B.55 Wider on desktop, and bigger on roomy screens (2026-10-20)
+
+At the user's request ("still a bit narrow … more space, bigger fonts"), the two-column layout of B.54 now uses more of the window, and its sizes grow on screens with room to spare.
+
+- **Wider.** Main and the header's inner box are `lg:max-w-[96rem]` (from `max-w-7xl`, 1280 px), with `lg:px-8`. A 14" MacBook window (about 1512 px) is now used edge to edge, less the padding.
+- **One knob for size.** Every fixed pixel size in `web/src/App.tsx` is now in rem: text, the 40 px and 10 px corner radii, the logo and titles. The button corners and tooltip text in `web/src/index.css` are too.
+- **The root font size then steps up on `lg` screens with room**, set in `web/src/index.css`. Media-query rem is the browser's 16 px, so the steps don't feed back on themselves.
+
+  | Window, at least | Base size |
+  | --- | --- |
+  | 1024 × 720 px | 17 px |
+  | 1280 × 800 px | 18 px |
+  | 1600 × 960 px | 20 px |
+
+  - Text, padding, gaps and button heights all scale together.
+  - Height counts, so a short window such as 1280 × 650 (a Windows 14" at 150%) stays at 16 px and keeps room for the passage.
+  - Phones and tablets stay at 16 px: iOS zooms text fields under 16 px, and the single column was already right.
+- **No engine, scorer or Worker change.**
+- **Checked** in headless Chrome. At every size the page didn't scroll, nothing scrolled sideways, CHECK, NEW PASSAGE, the passage, the score panel, the tabs and rhythm were all in view, and the highlight layer matched the textarea.
+
+  | Window | Base size | Passage box | Passage out of view |
+  | --- | --- | --- | --- |
+  | 1280 × 650 | 16 px | 295 px | none |
+  | 1440 × 760 | 17 px | 384 px | none |
+  | 1512 × 860 | 18 px | 464 px | none |
+  | 1728 × 1000 | 20 px | 562 px | none |
+  | 1920 × 1080 | 20 px | 642 px | none |
+  | 1024 × 768 | 17 px | 364 px | 31 px |
+
+  At 375 × 667 the layout, order and 16 px sizes were unchanged.
+
+## B.56 One type scale, and a bigger logo (2026-10-20)
+
+At the user's request, text sizes are now uniform. Before, the user found them "a bit chaotic": about nine sizes across three fonts, with VT323 labels at 18, 20 and 24 px next to monospace text at 11, 13, 15 and 16 px. The logo is also bigger.
+
+- **Six sizes**, as Tailwind theme tokens in `web/src/index.css`. Every text size in `web/src/App.tsx` is one of them; only the logo stands apart.
+
+  | Token | Size | Used for |
+  | --- | --- | --- |
+  | `text-fine` | 12 px | chips, hints, meter labels, the legend |
+  | `text-ui` | 14 px | body text, lists, section labels, verdicts |
+  | `text-passage` | 16 px | the passage on every screen size, and the judge menu (iOS zooms below 16 px) |
+  | `text-pixel` | 22 px | every VT323 label: buttons, tabs, the Checks pill, PROMPT, Play, score pops |
+  | `text-head` | 20 px | every result headline |
+  | `text-display` | 32 px | the end titles, at one size on every screen |
+
+  - VT323 draws small for its size, so a 22 px label reads about like 14 px body text.
+  - Desktop screens still scale all of these with the root size (B.55).
+- **Headlines in one style.** NONSLOP's red error lines now use the same bold monospace as "NOT BAD, HUMAN" and "NOT QUITE", in place of VT323. Their typing, glitches, red flashes and corruption bars are unchanged.
+- **Logo:** 28 px on phones and 40 px from 640 px wide, up from 20 and 28. The header holds it at 375 px (127 px wide) and at 1512 px (204 px wide, a 67 px bar).
+- **No engine, scorer or Worker change.**
+- **Checked** in headless Chrome.
+  - At 1280 × 650, 1512 × 860 and 1920 × 1080 the page didn't scroll, and the whole passage stayed in view (passage boxes of 288, 456 and 634 px).
+  - At 1024 × 768 about four lines of the passage scroll inside its box, up from two: the passage there is now 16 px, where it was 15.
+  - At 375 × 667 and 390 × 844 the order, the sticky bar and the 16 px fields were unchanged, and nothing scrolled sideways.
+  - A Haiku Check showed the error headline in the new style, with the page still fitting.
